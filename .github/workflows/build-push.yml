@@ -1,0 +1,95 @@
+name: Build and Push Extension Images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'extensions/**'
+      - '.github/workflows/build-push.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'extensions/**'
+  workflow_dispatch:
+    inputs:
+      pg_version:
+        description: 'PostgreSQL major version (blank = all)'
+        required: false
+      extension:
+        description: 'Extension name (blank = all)'
+        required: false
+
+env:
+  REGISTRY: ghcr.io
+  PREFIX: pgx
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      include: ${{ steps.set.outputs.include }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build matrix
+        id: set
+        run: |
+          pg_filter="${{ github.event.inputs.pg_version }}"
+          ext_filter="${{ github.event.inputs.extension }}"
+          matrix="[]"
+          for ext_dir in extensions/*/; do
+            ext="$(basename "$ext_dir")"
+            [ -n "$ext_filter" ] && [ "$ext" != "$ext_filter" ] && continue
+            source "$ext_dir/extension.conf"
+            for pg in 17 18; do
+              [ -n "$pg_filter" ] && [ "$pg" != "$pg_filter" ] && continue
+              ver_var="VERSION_${pg}"
+              ver="${!ver_var}"
+              [ -z "$ver" ] && continue
+              matrix=$(echo "$matrix" | jq -c \
+                --arg ext "$ext" \
+                --arg pg "$pg" \
+                --arg ver "$ver" \
+                --arg desc "$DESCRIPTION" \
+                '. + [{"extension": $ext, "pg": $pg, "version": $ver, "description": $desc}]')
+            done
+          done
+          echo "include=$matrix" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: matrix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.matrix.outputs.include) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.extension }} (PG ${{ matrix.pg }})
+        uses: docker/build-push-action@v6
+        with:
+          context: extensions/${{ matrix.extension }}
+          file: extensions/${{ matrix.extension }}/Dockerfile
+          build-args: |
+            PG_MAJOR=${{ matrix.pg }}
+            EXT_VERSION=${{ matrix.version }}
+          push: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}-${{ matrix.version }}
+          cache-from: type=gha,scope=${{ matrix.extension }}-${{ matrix.pg }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.extension }}-${{ matrix.pg }}

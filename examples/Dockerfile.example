@@ -1,0 +1,31 @@
+# Example: Custom PostgreSQL 17 with pgvector, pg_cron, and PostGIS
+#
+# Build:  docker build -t my-postgres:17 .
+# Run:    docker run -d -e POSTGRES_PASSWORD=secret my-postgres:17
+#
+# Each COPY --from line pulls a pre-built extension layer from the
+# registry and overlays it onto the official postgres image.  No
+# compilation happens here -- it's just copying binaries.
+
+FROM postgres:17
+
+# Vector similarity search
+COPY --from=ghcr.io/OWNER/pgx-pgvector:17  / /
+
+# Job scheduler
+COPY --from=ghcr.io/OWNER/pgx-pg_cron:17   / /
+
+# Geospatial (runtime libs are bundled in the image)
+COPY --from=ghcr.io/OWNER/pgx-postgis:17   / /
+
+# Extensions that need shared_preload_libraries must be configured.
+# This appends to the default postgresql.conf.
+RUN echo "shared_preload_libraries = 'pg_cron'" \
+    >> /usr/share/postgresql/postgresql.conf.sample
+
+# Optional: auto-create extensions on database initialization
+COPY <<'EOF' /docker-entrypoint-initdb.d/10-extensions.sql
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+CREATE EXTENSION IF NOT EXISTS postgis;
+EOF
