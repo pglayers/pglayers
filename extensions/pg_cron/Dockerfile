@@ -2,7 +2,7 @@ ARG PG_MAJOR=17
 
 FROM postgres:${PG_MAJOR} AS builder
 ARG PG_MAJOR
-ARG EXT_VERSION=v1.6.5
+ARG EXT_VERSION=v1.6.7
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential git ca-certificates \

@@ -7,6 +7,7 @@ ARG EXT_VERSION=17.0
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential git ca-certificates \
     postgresql-server-dev-${PG_MAJOR} \
+    libkrb5-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN git clone --branch ${EXT_VERSION} --depth 1 \

@@ -2,26 +2,27 @@ ARG PG_MAJOR=17
 
 FROM postgres:${PG_MAJOR} AS builder
 ARG PG_MAJOR
-ARG EXT_VERSION=3.5.2
+ARG EXT_VERSION=3.6.4
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git ca-certificates \
+    build-essential ca-certificates curl \
     postgresql-server-dev-${PG_MAJOR} \
     libgeos-dev libproj-dev libjson-c-dev libxml2-dev \
     libprotobuf-c-dev protobuf-c-compiler \
-    autoconf automake libtool pkg-config \
-    dpkg-dev \
+    pkg-config dpkg-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN git clone --branch ${EXT_VERSION} --depth 1 \
-    https://github.com/postgis/postgis.git /tmp/ext
+# Use the release tarball (includes pre-generated configure script,
+# no autotools needed).
+RUN curl -fsSL "https://download.osgeo.org/postgis/source/postgis-${EXT_VERSION}.tar.gz" \
+    | tar xz -C /tmp \
+    && mv /tmp/postgis-${EXT_VERSION} /tmp/ext
 
 WORKDIR /tmp/ext
 
 # Build without raster (avoids the massive GDAL dependency).
 # Topology and MVT (protobuf) support are included.
-RUN ./autogen.sh \
-    && ./configure --without-raster --without-sfcgal \
+RUN ./configure --without-raster --without-sfcgal \
     && make -j"$(nproc)" \
     && make install DESTDIR=/output
 
