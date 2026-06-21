@@ -204,6 +204,9 @@ declare -A EXT_SQL_NAMES=(
     [age]="age"
     [anon]="anon"
     [pg_durable]="pg_durable"
+    [pg_roaringbitmap]="roaringbitmap"
+    [pg_uuidv7]="pg_uuidv7"
+    [plpgsql_check]="plpgsql_check"
     [pgvector]="vector"
     [pg_cron]="pg_cron"
     [postgis]="postgis"
@@ -300,6 +303,14 @@ smoke_test "anon loaded" \
     "SELECT count(*) FROM pg_extension WHERE extname = 'anon';"
 smoke_test "pg_durable loaded" \
     "SELECT count(*) FROM pg_extension WHERE extname = 'pg_durable';"
+smoke_test "rum index" \
+    "SELECT 1 FROM pg_available_extensions WHERE name = 'rum';"
+smoke_test "pg_roaringbitmap ops" \
+    "SELECT rb_cardinality(rb_build(ARRAY[1,2,3]::int[]));"
+smoke_test "plpgsql_check lint" \
+    "SELECT count(*) FROM pg_proc WHERE proname = 'plpgsql_check_function';"
+smoke_test "pg_uuidv7 generate" \
+    "SELECT uuid_generate_v7();"
 echo
 
 # ============================================================

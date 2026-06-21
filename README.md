@@ -58,6 +58,10 @@ layers from the registry and overlays them onto the official image.
 | [age](https://github.com/apache/age) | 17, 18 | Graph database with openCypher query language (Apache AGE) |
 | [anon](https://gitlab.com/dalibo/postgresql_anonymizer) | 17, 18 | Data anonymization and masking |
 | [pg_durable](https://github.com/microsoft/pg_durable) | 17, 18 | In-database durable execution (fault-tolerant workflows) |
+| [rum](https://github.com/postgrespro/rum) | 17, 18 | GIN-like index with ordering for full text search |
+| [pg_roaringbitmap](https://github.com/ChenHuajun/pg_roaringbitmap) | 17, 18 | Roaring bitmap data type for fast set operations |
+| [plpgsql_check](https://github.com/okbob/plpgsql_check) | 17, 18 | PL/pgSQL linter and validator |
+| [pg_uuidv7](https://github.com/fboulnois/pg_uuidv7) | 17, 18 | UUIDv7 generation (time-sortable unique identifiers) |
 
 ### Image tags
 
