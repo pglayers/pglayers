@@ -6,12 +6,13 @@ EXTENSIONS := $(sort $(notdir $(patsubst %/,%,$(wildcard extensions/*/))))
 # Default PG version for single-extension targets
 PG ?= 17
 
-.PHONY: help list build build-all push push-all dockerfile clean clean-all test
+.PHONY: help list build build-all image push push-all dockerfile clean clean-all test
 
 help: ## Show this help
 	@printf "Usage:\n"
 	@printf "  make build EXT=pgvector [PG=17]   Build one extension image\n"
 	@printf "  make build-all [PG=17]            Build all extensions for a PG version\n"
+	@printf "  make image [PG=17]                Build combined image with all extensions\n"
 	@printf "  make push  EXT=pgvector [PG=17]   Push one extension image\n"
 	@printf "  make push-all [PG=17]             Push all extensions for a PG version\n"
 	@printf "  make dockerfile EXT=pgvector      Print generated Dockerfile to stdout\n"
@@ -92,6 +93,28 @@ info: _check-ext ## Show details for an extension
 		done; \
 		[ -n "$$SHARED_PRELOAD" ] && echo "shared_preload_libraries: $$SHARED_PRELOAD"; \
 		[ -n "$$NOTES" ] && echo "Notes: $$NOTES"'
+
+IMAGE_NAME ?= postgres-extender
+
+image: ## Build a combined image with all extensions
+	@echo "Building combined image $(IMAGE_NAME):$(PG) with all extensions..."
+	@TMPFILE=$$(mktemp); \
+	{ \
+		echo "FROM postgres:$(PG)"; \
+		for ext in $(EXTENSIONS); do \
+			ver=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo $${VERSION_'"$(PG)"'}'); \
+			[ -n "$$ver" ] && echo "COPY --from=$(REGISTRY)/$(PREFIX)-$$ext:$(PG) / /"; \
+		done; \
+		preloads=""; \
+		for ext in $(EXTENSIONS); do \
+			spl=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$$SHARED_PRELOAD"'); \
+			[ -n "$$spl" ] && preloads="$${preloads:+$$preloads,}$$spl"; \
+		done; \
+		[ -n "$$preloads" ] && echo "RUN echo \"shared_preload_libraries = '$$preloads'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
+	} > "$$TMPFILE"; \
+	docker build -t $(IMAGE_NAME):$(PG) -f "$$TMPFILE" .; \
+	rm -f "$$TMPFILE"
+	@echo "Done: $(IMAGE_NAME):$(PG)"
 
 clean: _check-ext ## Remove built image for a single extension
 	@for pg in $(PG_VERSIONS); do \
