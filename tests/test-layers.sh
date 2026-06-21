@@ -151,7 +151,7 @@ FROM postgres:${PG}
 $(for ext in "${EXTENSIONS[@]}"; do
     echo "COPY --from=${REGISTRY}/${PREFIX}-${ext}:${PG} / /"
 done)
-RUN echo "shared_preload_libraries = 'pg_cron,pgaudit,pg_partman_bgw,pg_hint_plan,pg_squeeze'" \
+RUN echo "shared_preload_libraries = 'pg_cron,pgaudit,pg_partman_bgw,pg_hint_plan,pg_squeeze,credcheck,pg_failover_slots'" \
     >> /usr/share/postgresql/postgresql.conf.sample
 EOF
 
@@ -220,6 +220,7 @@ declare -A EXT_SQL_NAMES=(
 # Extensions that are NOT loadable via CREATE EXTENSION
 declare -A SKIP_CREATE_EXT=(
     [wal2json]=1
+    [pg_failover_slots]=1
 )
 
 for ext in "${EXTENSIONS[@]}"; do
@@ -286,6 +287,10 @@ smoke_test "pg_ivm functions" \
     "SELECT count(*) FROM pg_proc WHERE proname = 'create_immv';"
 smoke_test "wal2json plugin exists" \
     "SELECT count(*) FROM pg_proc WHERE proname = 'pg_logical_slot_get_changes';"
+smoke_test "credcheck loaded" \
+    "SHOW credcheck.password_min_length;"
+smoke_test "pg_failover_slots loaded" \
+    "SELECT count(*) FROM pg_proc WHERE proname LIKE 'pg_failover_slot%';"
 
 # Cleanup
 docker rm -f pgx-func-test >/dev/null 2>&1

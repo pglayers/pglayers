@@ -4,6 +4,29 @@
 
 Composable PostgreSQL extension Docker layers on top of official images.
 
+## Licensing Policy
+
+This project only ships extensions with **permissive open-source
+licenses** (PostgreSQL, MIT, BSD, Apache 2.0, ISC). Before adding any
+extension:
+
+1. **Audit the license** -- Check the extension's LICENSE/COPYING file
+   in its repository. Reject anything that is:
+   - Proprietary or source-available (e.g., BSL, SSPL, FSL, ELv2)
+   - Copyleft that would infect the combined image (e.g., AGPL)
+   - Requires proprietary runtime dependencies (e.g., Oracle client)
+
+2. **Document the license** -- Add a `LICENSE` field to `extension.conf`
+   (e.g., `LICENSE="PostgreSQL"` or `LICENSE="MIT"`).
+
+3. **When in doubt, skip it** -- If an extension's license is ambiguous
+   or has changed recently (e.g., TimescaleDB moved to TSL for some
+   features), do not include it until the licensing is verified.
+
+Extensions we explicitly exclude:
+- **oracle_fdw** -- requires proprietary Oracle Instant Client
+- Any extension under BSL/SSPL/FSL/ELv2 or similar delayed-open licenses
+
 ## Testing Requirements
 
 When adding new extensions or modifying existing ones, **always run the
