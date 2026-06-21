@@ -6,7 +6,7 @@ EXTENSIONS := $(sort $(notdir $(patsubst %/,%,$(wildcard extensions/*/))))
 # Default PG version for single-extension targets
 PG ?= 17
 
-.PHONY: help list build build-all push push-all dockerfile clean
+.PHONY: help list build build-all push push-all dockerfile clean clean-all test
 
 help: ## Show this help
 	@printf "Usage:\n"
@@ -16,7 +16,8 @@ help: ## Show this help
 	@printf "  make push-all [PG=17]             Push all extensions for a PG version\n"
 	@printf "  make dockerfile EXT=pgvector      Print generated Dockerfile to stdout\n"
 	@printf "  make list                         List available extensions\n"
-	@printf "  make clean                        Remove generated files\n"
+	@printf "  make clean EXT=pgvector            Remove built image for one extension\n"
+	@printf "  make clean-all                     Remove all built extension images\n"
 	@printf "\nVariables:\n"
 	@printf "  REGISTRY=%s\n" "$(REGISTRY)"
 	@printf "  PREFIX=%s\n"   "$(PREFIX)"
@@ -91,9 +92,29 @@ info: _check-ext ## Show details for an extension
 		[ -n "$$SHARED_PRELOAD" ] && echo "shared_preload_libraries: $$SHARED_PRELOAD"; \
 		[ -n "$$NOTES" ] && echo "Notes: $$NOTES"'
 
-clean: ## Remove generated files
-	@echo "Nothing to clean (artifacts are Docker images)."
-	@echo "Use 'docker image prune' to remove unused images."
+clean: _check-ext ## Remove built image for a single extension
+	@for pg in $(PG_VERSIONS); do \
+		img="$(REGISTRY)/$(PREFIX)-$(EXT):$$pg"; \
+		if docker image inspect "$$img" >/dev/null 2>&1; then \
+			docker rmi "$$img" && echo "Removed $$img"; \
+		fi; \
+		ver=$$(bash -c 'source extensions/$(EXT)/extension.conf && echo $${VERSION_'"$$pg"'}'); \
+		img_ver="$(REGISTRY)/$(PREFIX)-$(EXT):$$pg-$$ver"; \
+		if docker image inspect "$$img_ver" >/dev/null 2>&1; then \
+			docker rmi "$$img_ver" && echo "Removed $$img_ver"; \
+		fi; \
+	done
+
+clean-all: ## Remove all built extension images
+	@for pg in $(PG_VERSIONS); do \
+		for ext in $(EXTENSIONS); do \
+			img="$(REGISTRY)/$(PREFIX)-$$ext:$$pg"; \
+			docker rmi "$$img" 2>/dev/null && echo "Removed $$img" || true; \
+			ver=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo $${VERSION_'"$$pg"'}'); \
+			docker rmi "$(REGISTRY)/$(PREFIX)-$$ext:$$pg-$$ver" 2>/dev/null || true; \
+		done; \
+	done
+	@echo "Done. Run 'docker image prune' to reclaim disk space."
 
 test: ## Run layer collision and functional tests
 	@./tests/test-layers.sh $(REGISTRY) $(PG)
