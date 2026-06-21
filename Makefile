@@ -95,6 +95,9 @@ clean: ## Remove generated files
 	@echo "Nothing to clean (artifacts are Docker images)."
 	@echo "Use 'docker image prune' to remove unused images."
 
+test: ## Run layer collision and functional tests
+	@./tests/test-layers.sh $(REGISTRY) $(PG)
+
 _check-ext:
 	@test -n "$(EXT)" || { echo "Error: EXT is required. Usage: make build EXT=pgvector [PG=17]"; exit 1; }
 	@test -d "extensions/$(EXT)" || { echo "Error: unknown extension '$(EXT)'. Run 'make list' to see available extensions."; exit 1; }
