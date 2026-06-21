@@ -51,3 +51,32 @@ This test suite validates:
 - Extensions that install CLI tools with generic names in `/usr/local/bin`
 - LLVM bitcode index files in `/usr/lib/postgresql/XX/lib/bitcode/`
 - Shared PROJ data files across geo extensions
+
+### Adding a new extension checklist
+
+Every new extension **must** have full test coverage before merging.
+This means updating `tests/test-layers.sh` to include:
+
+1. **Extension name mapping** -- Add an entry to `EXT_SQL_NAMES` if the
+   SQL extension name differs from the directory name (e.g.,
+   `[pgvector]="vector"`).
+
+2. **CREATE EXTENSION test** -- Automatically covered for all extensions
+   in the `EXTENSIONS` list. If the extension is not loadable via
+   `CREATE EXTENSION` (e.g., logical decoding output plugins like
+   wal2json), add it to `SKIP_CREATE_EXT` instead.
+
+3. **Functional smoke test** -- Add a `smoke_test` call that exercises
+   the extension's core functionality (not just loading). Examples:
+   - Data type creation/cast
+   - A function call that returns a result
+   - An operator or index operation
+   The smoke test must produce non-empty output on success.
+
+4. **shared_preload_libraries** -- If the extension requires preloading,
+   add it to the `shared_preload_libraries` line in the test Dockerfile
+   generator (Phase 5 of `test-layers.sh`).
+
+The collision, overwrite, and ldd checks are automatic for all
+extensions in the `extensions/` directory -- no manual update needed
+for those.
