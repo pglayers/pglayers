@@ -222,34 +222,42 @@ declare -A EXT_SQL_NAMES=(
     [pg_duckdb]="pg_duckdb"
     [pg_durable]="pg_durable"
     [pg_graphql]="pg_graphql"
+    [pg_hashids]="pg_hashids"
     [pg_hint_plan]="pg_hint_plan"
     [pg_ivm]="pg_ivm"
     [pg_jsonschema]="pg_jsonschema"
     [pg_net]="pg_net"
     [pg_partman]="pg_partman"
+    [pg_qualstats]="pg_qualstats"
     [pg_repack]="pg_repack"
     [pg_roaringbitmap]="roaringbitmap"
     [pg_similarity]="pg_similarity"
     [pg_squeeze]="pg_squeeze"
     [pg_stat_monitor]="pg_stat_monitor"
     [pg_uuidv7]="pg_uuidv7"
+    [pg_wait_sampling]="pg_wait_sampling"
     [pgaudit]="pgaudit"
     [pgjwt]="pgjwt"
     [pglogical]="pglogical"
     [pgrouting]="pgrouting"
     [pgsodium]="pgsodium"
     [pgtap]="pgtap"
+    [pgtt]="pgtt"
     [pgvector]="vector"
     [plpgsql_check]="plpgsql_check"
+    [plprofiler]="plprofiler"
     [plv8]="plv8"
     [postgis]="postgis"
     [postgres_protobuf]="postgres_protobuf"
     [prefix]="prefix"
+    [rum]="rum"
     [semver]="semver"
     [tdigest]="tdigest"
     [tds_fdw]="tds_fdw"
     [temporal_tables]="temporal_tables"
     [timescaledb]="timescaledb"
+    [wal2json]="wal2json"
+    [wrappers]="wrappers"
 )
 
 # Extensions that are NOT loadable via CREATE EXTENSION
@@ -320,6 +328,8 @@ has_ext pg_durable && smoke_test "pg_durable loaded" \
     "SELECT count(*) FROM pg_extension WHERE extname = 'pg_durable';"
 has_ext pg_graphql && smoke_test "pg_graphql schema" \
     "SELECT count(*) FROM pg_namespace WHERE nspname = 'graphql';"
+has_ext pg_hashids && smoke_test "pg_hashids encode" \
+    "SELECT id_encode(123);"
 has_ext pg_failover_slots && smoke_test "pg_failover_slots loaded" \
     "SELECT count(*) FROM pg_proc WHERE proname LIKE 'pg_failover_slot%';"
 has_ext pg_hint_plan && smoke_test "pg_hint_plan loaded" \
@@ -330,6 +340,8 @@ has_ext pg_jsonschema && smoke_test "pg_jsonschema validate" \
     "SELECT json_matches_schema('{\"type\":\"object\"}'::json, '{}'::json);"
 has_ext pg_net && smoke_test "pg_net schema" \
     "SELECT count(*) FROM pg_namespace WHERE nspname = 'net';"
+has_ext pg_qualstats && smoke_test "pg_qualstats view" \
+    "SELECT count(*) FROM pg_qualstats();"
 has_ext pg_partman && smoke_test "pg_partman config table" \
     "SELECT count(*) FROM public.part_config;"
 has_ext pg_repack && smoke_test "pg_repack version" \
@@ -344,12 +356,16 @@ has_ext pgsodium && smoke_test "pgsodium random" \
     "SELECT length(pgsodium.randombytes_buf(16));"
 has_ext pgtap && smoke_test "pgtap version" \
     "SELECT pgtap_version();"
+has_ext pgtt && smoke_test "pgtt loaded" \
+    "SELECT count(*) FROM pg_proc WHERE proname = 'pgtt_is_global_temporary';"
 has_ext pg_squeeze && smoke_test "pg_squeeze schema" \
     "SELECT count(*) FROM squeeze.tables;"
 has_ext pg_stat_monitor && smoke_test "pg_stat_monitor view" \
     "SELECT count(*) FROM pg_stat_monitor;"
 has_ext pg_uuidv7 && smoke_test "pg_uuidv7 generate" \
     "SELECT uuid_generate_v7();"
+has_ext pg_wait_sampling && smoke_test "pg_wait_sampling profile" \
+    "SELECT count(*) FROM pg_wait_sampling_profile;"
 has_ext pgaudit && smoke_test "pgaudit active" \
     "SHOW pgaudit.log;"
 has_ext pgjwt && smoke_test "pgjwt sign" \
@@ -358,8 +374,12 @@ has_ext pglogical && smoke_test "pglogical version" \
     "SELECT pglogical.pglogical_version();"
 has_ext pgvector && smoke_test "pgvector similarity" \
     "SELECT '[1,2,3]'::vector <-> '[4,5,6]'::vector;"
+has_ext pgfincore && smoke_test "pgfincore loaded" \
+    "SELECT count(*) FROM pg_proc WHERE proname = 'pgfincore';"
 has_ext plpgsql_check && smoke_test "plpgsql_check lint" \
     "SELECT count(*) FROM pg_proc WHERE proname = 'plpgsql_check_function';"
+has_ext plprofiler && smoke_test "plprofiler loaded" \
+    "SELECT count(*) FROM pg_proc WHERE proname = 'pl_profiler_get_source';"
 has_ext plv8 && smoke_test "plv8 javascript" \
     "SELECT plv8_version();"
 has_ext postgis && smoke_test "PostGIS geometry" \
@@ -382,6 +402,8 @@ has_ext timescaledb && smoke_test "timescaledb available" \
     "SELECT count(*) FROM pg_available_extensions WHERE name = 'timescaledb';"
 has_ext wal2json && smoke_test "wal2json plugin exists" \
     "SELECT count(*) FROM pg_proc WHERE proname = 'pg_logical_slot_get_changes';"
+has_ext wrappers && smoke_test "wrappers loaded" \
+    "SELECT count(*) FROM pg_extension WHERE extname = 'wrappers';"
 echo
 
 # ============================================================

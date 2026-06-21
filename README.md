@@ -53,11 +53,13 @@ layers from the registry and overlays them onto the official image.
 | [pg_durable](https://github.com/microsoft/pg_durable) | 17, 18 | In-database durable execution (fault-tolerant workflows) |
 | [pg_failover_slots](https://github.com/EnterpriseDB/pg_failover_slots) | 17, 18 | Logical replication slot manager for failover |
 | [pg_graphql](https://github.com/supabase/pg_graphql) | 17, 18 | GraphQL support for PostgreSQL |
+| [pg_hashids](https://github.com/iCyberon/pg_hashids) | 17, 18, 19 | Short unique hash IDs from integers |
 | [pg_hint_plan](https://github.com/ossc-db/pg_hint_plan) | 17, 18 | Tweak execution plans using hints in SQL comments |
 | [pg_ivm](https://github.com/sraoss/pg_ivm) | 17, 18 | Incremental View Maintenance for materialized views |
 | [pg_jsonschema](https://github.com/supabase/pg_jsonschema) | 17, 18 | JSON Schema validation |
 | [pg_net](https://github.com/supabase/pg_net) | 17, 18, 19 | Async non-blocking HTTP/HTTPS requests |
 | [pg_partman](https://github.com/pgpartman/pg_partman) | 17, 18, 19 | Automated table partition management |
+| [pg_qualstats](https://github.com/powa-team/pg_qualstats) | 17, 18, 19 | Statistics collector for WHERE clause predicates |
 | [pg_repack](https://github.com/reorg/pg_repack) | 17, 18, 19 | Online table reorganization without heavy locks |
 | [pg_roaringbitmap](https://github.com/ChenHuajun/pg_roaringbitmap) | 17, 18 | Roaring bitmap data type for fast set operations |
 | [pg_similarity](https://github.com/eulerto/pg_similarity) | 17, 18, 19 | Similarity functions (Levenshtein, Jaro-Winkler, Cosine, Jaccard) |
@@ -66,14 +68,18 @@ layers from the registry and overlays them onto the official image.
 | [pg_squeeze](https://github.com/cybertec-postgresql/pg_squeeze) | 17, 18, 19 | Remove unused space from tables without heavy locks |
 | [pg_stat_monitor](https://github.com/percona/pg_stat_monitor) | 17, 18 | Enhanced query statistics with histograms and buckets |
 | [pg_uuidv7](https://github.com/fboulnois/pg_uuidv7) | 17, 18, 19 | UUIDv7 generation (time-sortable unique identifiers) |
+| [pg_wait_sampling](https://github.com/postgrespro/pg_wait_sampling) | 17, 18, 19 | Sampling-based statistics of wait events |
 | [pgvector](https://github.com/pgvector/pgvector) | 17, 18, 19 | Vector similarity search for AI/embeddings |
 | [pgjwt](https://github.com/michelp/pgjwt) | 17, 18, 19 | JSON Web Token (JWT) generation and validation |
 | [pgtap](https://github.com/theory/pgtap) | 17, 18, 19 | Unit testing framework for PostgreSQL |
+| [pgtt](https://github.com/darold/pgtt) | 17, 18, 19 | Oracle-style Global Temporary Tables |
 | [plpgsql_check](https://github.com/okbob/plpgsql_check) | 17, 18, 19 | PL/pgSQL linter and validator |
+| [plprofiler](https://github.com/bigsql/plprofiler) | 17, 18 | Performance profiler for PL/pgSQL functions |
 | [plv8](https://github.com/plv8/plv8) | 17, 18 | JavaScript (V8) procedural language |
 | [PostGIS](https://github.com/postgis/postgis) | 17, 18, 19 | Geospatial extensions (geometry, geography, raster, MVT) |
 | [postgres_protobuf](https://github.com/mpartel/postgres-protobuf) | 17, 18, 19 | Protocol Buffer support (query, convert to/from JSON) |
 | [prefix](https://github.com/dimitri/prefix) | 17, 18, 19 | Prefix range data type for phone routing lookups |
+| [pgfincore](https://github.com/klando/pgfincore) | 17, 18, 19 | Inspect and manage OS page cache for data files |
 | [rum](https://github.com/postgrespro/rum) | 17, 18 | GIN-like index with ordering for full text search |
 | [semver](https://github.com/theory/pg-semver) | 17, 18, 19 | Semantic version data type |
 | [tdigest](https://github.com/tvondra/tdigest) | 17, 18, 19 | T-digest for quantile and percentile estimation |
@@ -81,6 +87,7 @@ layers from the registry and overlays them onto the official image.
 | [temporal_tables](https://github.com/arkhipov/temporal_tables) | 17, 18 | System-period temporal tables |
 | [timescaledb](https://github.com/timescale/timescaledb) | 17, 18 | Time-series hypertables, compression, continuous aggregates |
 | [wal2json](https://github.com/eulerto/wal2json) | 17, 18 | JSON output plugin for logical replication / CDC |
+| [wrappers](https://github.com/supabase/wrappers) | 17, 18 | Foreign Data Wrapper framework (Stripe, S3, Firebase, etc.) |
 
 ### Image tags
 
@@ -119,11 +126,15 @@ Extensions that need this:
 | pg_hint_plan | `pg_hint_plan` |
 | pg_net | `pg_net` |
 | pg_partman | `pg_partman_bgw` |
+| pg_qualstats | `pg_qualstats` |
 | pg_squeeze | `pg_squeeze` |
 | pg_stat_monitor | `pg_stat_monitor` |
+| pg_wait_sampling | `pg_wait_sampling` |
 | pgaudit | `pgaudit` |
 | pglogical | `pglogical` |
 | pgsodium | `pgsodium` |
+| pgtt | `pgtt` |
+| plprofiler | `plprofiler` |
 | timescaledb | `timescaledb` |
 
 ### CREATE EXTENSION
