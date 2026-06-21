@@ -151,7 +151,7 @@ FROM postgres:${PG}
 $(for ext in "${EXTENSIONS[@]}"; do
     echo "COPY --from=${REGISTRY}/${PREFIX}-${ext}:${PG} / /"
 done)
-RUN echo "shared_preload_libraries = 'age,anon,pg_cron,pg_durable,pgaudit,pg_partman_bgw,pg_hint_plan,pg_squeeze,credcheck,pg_failover_slots'" \
+RUN echo "shared_preload_libraries = 'age,anon,pg_cron,pg_durable,pg_stat_monitor,pgaudit,pg_partman_bgw,pg_hint_plan,pg_squeeze,credcheck,pg_failover_slots'" \
     >> /usr/share/postgresql/postgresql.conf.sample
 RUN echo "pg_durable.database = 'postgres'" >> /usr/share/postgresql/postgresql.conf.sample \
     && echo "pg_durable.worker_role = 'postgres'" >> /usr/share/postgresql/postgresql.conf.sample \
@@ -204,7 +204,9 @@ declare -A EXT_SQL_NAMES=(
     [age]="age"
     [anon]="anon"
     [pg_durable]="pg_durable"
+    [pg_bigm]="pg_bigm"
     [pg_roaringbitmap]="roaringbitmap"
+    [pg_stat_monitor]="pg_stat_monitor"
     [pg_uuidv7]="pg_uuidv7"
     [plpgsql_check]="plpgsql_check"
     [pgvector]="vector"
@@ -311,6 +313,10 @@ smoke_test "plpgsql_check lint" \
     "SELECT count(*) FROM pg_proc WHERE proname = 'plpgsql_check_function';"
 smoke_test "pg_uuidv7 generate" \
     "SELECT uuid_generate_v7();"
+smoke_test "pg_bigm search" \
+    "SELECT bigm_similarity('hello', 'helo');"
+smoke_test "pg_stat_monitor view" \
+    "SELECT count(*) FROM pg_stat_monitor;"
 echo
 
 # ============================================================

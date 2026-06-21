@@ -62,6 +62,8 @@ layers from the registry and overlays them onto the official image.
 | [pg_roaringbitmap](https://github.com/ChenHuajun/pg_roaringbitmap) | 17, 18 | Roaring bitmap data type for fast set operations |
 | [plpgsql_check](https://github.com/okbob/plpgsql_check) | 17, 18 | PL/pgSQL linter and validator |
 | [pg_uuidv7](https://github.com/fboulnois/pg_uuidv7) | 17, 18 | UUIDv7 generation (time-sortable unique identifiers) |
+| [pg_bigm](https://github.com/pgbigm/pg_bigm) | 17, 18 | 2-gram full text search (better for CJK languages) |
+| [pg_stat_monitor](https://github.com/percona/pg_stat_monitor) | 17, 18 | Enhanced query statistics with histograms and buckets |
 
 ### Image tags
 
@@ -98,6 +100,7 @@ Extensions that need this:
 | age | `age` |
 | anon | `anon` |
 | pg_durable | `pg_durable` |
+| pg_stat_monitor | `pg_stat_monitor` |
 
 ### CREATE EXTENSION
 
