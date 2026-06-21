@@ -1,17 +1,19 @@
+# syntax=docker/dockerfile:1
 ARG PG_MAJOR=17
 
 FROM postgres:${PG_MAJOR} AS builder
 ARG PG_MAJOR
 ARG EXT_VERSION=3.6.4
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     build-essential ca-certificates curl \
     postgresql-server-dev-${PG_MAJOR} \
     libgeos-dev libproj-dev libjson-c-dev libxml2-dev \
     libprotobuf-c-dev protobuf-c-compiler \
     libtiff-dev libcurl4-gnutls-dev \
-    pkg-config dpkg-dev \
-    && rm -rf /var/lib/apt/lists/*
+    pkg-config dpkg-dev
 
 # Use the release tarball (includes pre-generated configure script,
 # no autotools needed).
@@ -25,7 +27,8 @@ WORKDIR /tmp/ext
 # Topology and MVT (protobuf) support are included.
 RUN ./configure --without-raster --without-sfcgal \
     && make -j"$(nproc)" \
-    && make install DESTDIR=/output
+    && make install DESTDIR=/output \
+    && find /output -name '*.so' -exec strip --strip-unneeded {} \;
 
 # Snapshot the base postgres image's shared libraries so we can diff later.
 FROM postgres:${PG_MAJOR} AS base

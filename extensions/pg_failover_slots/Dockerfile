@@ -1,21 +1,24 @@
+# syntax=docker/dockerfile:1
 ARG PG_MAJOR=17
 
 FROM postgres:${PG_MAJOR} AS builder
 ARG PG_MAJOR
 ARG EXT_VERSION=v1.2.1
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     build-essential git ca-certificates \
     postgresql-server-dev-${PG_MAJOR} \
-    libkrb5-dev \
-    && rm -rf /var/lib/apt/lists/*
+    libkrb5-dev
 
 RUN git clone --branch ${EXT_VERSION} --depth 1 \
     https://github.com/EnterpriseDB/pg_failover_slots.git /tmp/ext
 
 WORKDIR /tmp/ext
 
-RUN make -j"$(nproc)" && make install DESTDIR=/output
+RUN make -j"$(nproc)" && make install DESTDIR=/output \
+    && find /output -name '*.so' -exec strip --strip-unneeded {} \;
 
 FROM scratch
 COPY --from=builder /output/ /
