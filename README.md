@@ -56,6 +56,8 @@ layers from the registry and overlays them onto the official image.
 | [credcheck](https://github.com/HexaCluster/credcheck) | 17, 18 | Credential checks on user creation / password change |
 | [pg_failover_slots](https://github.com/EnterpriseDB/pg_failover_slots) | 17, 18 | Logical replication slot manager for failover |
 | [age](https://github.com/apache/age) | 17, 18 | Graph database with openCypher query language (Apache AGE) |
+| [anon](https://gitlab.com/dalibo/postgresql_anonymizer) | 17, 18 | Data anonymization and masking |
+| [pg_durable](https://github.com/microsoft/pg_durable) | 17, 18 | In-database durable execution (fault-tolerant workflows) |
 
 ### Image tags
 
@@ -90,6 +92,8 @@ Extensions that need this:
 | credcheck | `credcheck` |
 | pg_failover_slots | `pg_failover_slots` |
 | age | `age` |
+| anon | `anon` |
+| pg_durable | `pg_durable` |
 
 ### CREATE EXTENSION
 

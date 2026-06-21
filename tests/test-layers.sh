@@ -151,8 +151,11 @@ FROM postgres:${PG}
 $(for ext in "${EXTENSIONS[@]}"; do
     echo "COPY --from=${REGISTRY}/${PREFIX}-${ext}:${PG} / /"
 done)
-RUN echo "shared_preload_libraries = 'age,pg_cron,pgaudit,pg_partman_bgw,pg_hint_plan,pg_squeeze,credcheck,pg_failover_slots'" \
+RUN echo "shared_preload_libraries = 'age,anon,pg_cron,pg_durable,pgaudit,pg_partman_bgw,pg_hint_plan,pg_squeeze,credcheck,pg_failover_slots'" \
     >> /usr/share/postgresql/postgresql.conf.sample
+RUN echo "pg_durable.database = 'postgres'" >> /usr/share/postgresql/postgresql.conf.sample \
+    && echo "pg_durable.worker_role = 'postgres'" >> /usr/share/postgresql/postgresql.conf.sample \
+    && echo "pg_durable.enable_superuser_instances = on" >> /usr/share/postgresql/postgresql.conf.sample
 EOF
 
 docker build -t "${IMAGE_TAG}" -f "${TMPDIR}/Dockerfile" "${TMPDIR}" >/dev/null 2>&1
@@ -186,7 +189,7 @@ docker run -d --name pgx-func-test \
     "${IMAGE_TAG}" >/dev/null 2>&1
 
 # Wait for postgres to be ready
-for i in $(seq 1 30); do
+for i in $(seq 1 60); do
     if docker exec pgx-func-test pg_isready -U postgres >/dev/null 2>&1; then
         break
     fi
@@ -199,6 +202,8 @@ done
 # plugins) should be listed in SKIP_CREATE_EXT.
 declare -A EXT_SQL_NAMES=(
     [age]="age"
+    [anon]="anon"
+    [pg_durable]="pg_durable"
     [pgvector]="vector"
     [pg_cron]="pg_cron"
     [postgis]="postgis"
@@ -291,6 +296,10 @@ smoke_test "pg_failover_slots loaded" \
     "SELECT count(*) FROM pg_proc WHERE proname LIKE 'pg_failover_slot%';"
 smoke_test "age graph" \
     "LOAD 'age'; SET search_path = ag_catalog; SELECT create_graph('smoke_g'); SELECT drop_graph('smoke_g', true);"
+smoke_test "anon loaded" \
+    "SELECT count(*) FROM pg_extension WHERE extname = 'anon';"
+smoke_test "pg_durable loaded" \
+    "SELECT count(*) FROM pg_extension WHERE extname = 'pg_durable';"
 echo
 
 # ============================================================
