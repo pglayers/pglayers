@@ -69,6 +69,7 @@ layers from the registry and overlays them onto the official image.
 | [pg_duckdb](https://github.com/duckdb/pg_duckdb) | 17, 18 | DuckDB columnar analytics engine embedded in Postgres |
 | [tds_fdw](https://github.com/tds-fdw/tds_fdw) | 17, 18 | Foreign data wrapper for SQL Server and Sybase |
 | [pgrouting](https://github.com/pgRouting/pgrouting) | 17, 18 | Geospatial routing and network analysis on PostGIS |
+| [plv8](https://github.com/plv8/plv8) | 17, 18 | JavaScript (V8) procedural language |
 
 ### Image tags
 
