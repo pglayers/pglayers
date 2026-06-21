@@ -165,6 +165,12 @@ make build EXT=pgvector PG=17 REGISTRY=ghcr.io/myorg
 
 # Print the Dockerfile for an extension (useful for debugging)
 make dockerfile EXT=pgvector
+
+# Remove built image for a single extension
+make clean EXT=pgvector
+
+# Remove all built extension images (reclaim disk space)
+make clean-all
 ```
 
 ### Running the test suite
