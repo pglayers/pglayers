@@ -195,3 +195,17 @@ must be updated in the same commit**:
 
 Do not merge a PR that adds an extension to `extensions/` without
 updating the README table and tests. Stale documentation is a bug.
+
+### Ordering convention
+
+All lists of extensions **must be sorted alphabetically** wherever they
+appear:
+
+- `README.md` "Available extensions" table
+- `README.md` `shared_preload_libraries` table
+- `tests/test-layers.sh` `EXT_SQL_NAMES` array
+- `tests/test-layers.sh` `SKIP_CREATE_EXT` array
+- `tests/test-layers.sh` smoke test calls
+
+This ensures consistency, makes diffs readable, and avoids merge
+conflicts when multiple extensions are added in parallel.

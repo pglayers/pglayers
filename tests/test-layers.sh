@@ -211,43 +211,43 @@ done
 declare -A EXT_SQL_NAMES=(
     [age]="age"
     [anon]="anon"
-    [pg_durable]="pg_durable"
-    [pg_bigm]="pg_bigm"
-    [pg_roaringbitmap]="roaringbitmap"
-    [pg_stat_monitor]="pg_stat_monitor"
     [h3_pg]="h3"
-    [pg_duckdb]="pg_duckdb"
-    [timescaledb]="timescaledb"
-    [tds_fdw]="tds_fdw"
-    [plv8]="plv8"
-    [pgrouting]="pgrouting"
-    [pg_uuidv7]="pg_uuidv7"
-    [plpgsql_check]="plpgsql_check"
-    [pgvector]="vector"
-    [pg_cron]="pg_cron"
-    [postgis]="postgis"
-    [pg_repack]="pg_repack"
-    [pgaudit]="pgaudit"
-    [pg_partman]="pg_partman"
-    [pg_hint_plan]="pg_hint_plan"
-    [pg_ivm]="pg_ivm"
-    [pg_squeeze]="pg_squeeze"
     [hll]="hll"
     [hypopg]="hypopg"
     [ip4r]="ip4r"
     [orafce]="orafce"
+    [pg_bigm]="pg_bigm"
+    [pg_cron]="pg_cron"
+    [pg_duckdb]="pg_duckdb"
+    [pg_durable]="pg_durable"
+    [pg_hint_plan]="pg_hint_plan"
+    [pg_ivm]="pg_ivm"
+    [pg_partman]="pg_partman"
+    [pg_repack]="pg_repack"
+    [pg_roaringbitmap]="roaringbitmap"
+    [pg_squeeze]="pg_squeeze"
+    [pg_stat_monitor]="pg_stat_monitor"
+    [pg_uuidv7]="pg_uuidv7"
+    [pgaudit]="pgaudit"
+    [pgrouting]="pgrouting"
+    [pgvector]="vector"
+    [plpgsql_check]="plpgsql_check"
+    [plv8]="plv8"
+    [postgis]="postgis"
     [semver]="semver"
     [tdigest]="tdigest"
+    [tds_fdw]="tds_fdw"
     [temporal_tables]="temporal_tables"
+    [timescaledb]="timescaledb"
 )
 
 # Extensions that are NOT loadable via CREATE EXTENSION
 # (or conflict with other extensions in the combined test image)
 declare -A SKIP_CREATE_EXT=(
-    [wal2json]=1
     [pg_failover_slots]=1
-    [timescaledb]=1
     [pgrouting]=1
+    [timescaledb]=1
+    [wal2json]=1
 )
 
 for ext in "${EXTENSIONS[@]}"; do
@@ -281,74 +281,74 @@ smoke_test() {
 # Helper: only run smoke test if extension is in the EXTENSIONS list
 has_ext() { printf '%s\n' "${EXTENSIONS[@]}" | grep -qx "$1"; }
 
-has_ext pgvector && smoke_test "pgvector similarity" \
-    "SELECT '[1,2,3]'::vector <-> '[4,5,6]'::vector;"
-has_ext postgis && smoke_test "PostGIS geometry" \
-    "SELECT ST_AsText(ST_Point(1, 2));"
-has_ext pg_cron && smoke_test "pg_cron schedule" \
-    "SELECT cron.schedule('test_job', '* * * * *', 'SELECT 1');"
-has_ext pg_repack && smoke_test "pg_repack version" \
-    "SELECT repack.version();"
-has_ext pg_partman && smoke_test "pg_partman config table" \
-    "SELECT count(*) FROM public.part_config;"
-has_ext pgaudit && smoke_test "pgaudit active" \
-    "SHOW pgaudit.log;"
-has_ext pg_hint_plan && smoke_test "pg_hint_plan loaded" \
-    "SHOW pg_hint_plan.enable_hint;"
-has_ext hypopg && smoke_test "hypopg create index" \
-    "SELECT indexrelid FROM hypopg_create_index('CREATE INDEX ON public.part_config (parent_table)');"
-has_ext hll && smoke_test "hll aggregate" \
-    "SELECT hll_cardinality(hll_add_agg(hll_hash_integer(g))) FROM generate_series(1,100) g;"
-has_ext orafce && smoke_test "orafce nvl" \
-    "SELECT oracle.nvl(NULL::text, 'fallback');"
-has_ext tdigest && smoke_test "tdigest percentile" \
-    "SELECT tdigest_percentile(x, 100, 0.5) FROM generate_series(1,100) x;"
-has_ext ip4r && smoke_test "ip4r range" \
-    "SELECT '192.168.1.0/24'::ip4r;"
-has_ext semver && smoke_test "semver comparison" \
-    "SELECT '1.2.3'::semver > '1.2.2'::semver;"
-has_ext temporal_tables && smoke_test "temporal_tables loaded" \
-    "SELECT proname FROM pg_proc WHERE proname = 'versioning';"
-has_ext pg_squeeze && smoke_test "pg_squeeze schema" \
-    "SELECT count(*) FROM squeeze.tables;"
-has_ext pg_ivm && smoke_test "pg_ivm functions" \
-    "SELECT count(*) FROM pg_proc WHERE proname = 'create_immv';"
-has_ext wal2json && smoke_test "wal2json plugin exists" \
-    "SELECT count(*) FROM pg_proc WHERE proname = 'pg_logical_slot_get_changes';"
-has_ext credcheck && smoke_test "credcheck loaded" \
-    "SHOW credcheck.password_min_length;"
-has_ext pg_failover_slots && smoke_test "pg_failover_slots loaded" \
-    "SELECT count(*) FROM pg_proc WHERE proname LIKE 'pg_failover_slot%';"
 has_ext age && smoke_test "age graph" \
     "LOAD 'age'; SET search_path = ag_catalog; SELECT create_graph('smoke_g'); SELECT drop_graph('smoke_g', true);"
 has_ext anon && smoke_test "anon loaded" \
     "SELECT count(*) FROM pg_extension WHERE extname = 'anon';"
-has_ext pg_durable && smoke_test "pg_durable loaded" \
-    "SELECT count(*) FROM pg_extension WHERE extname = 'pg_durable';"
-has_ext rum && smoke_test "rum index" \
-    "SELECT 1 FROM pg_available_extensions WHERE name = 'rum';"
-has_ext pg_roaringbitmap && smoke_test "pg_roaringbitmap ops" \
-    "SELECT rb_cardinality(rb_build(ARRAY[1,2,3]::int[]));"
-has_ext plpgsql_check && smoke_test "plpgsql_check lint" \
-    "SELECT count(*) FROM pg_proc WHERE proname = 'plpgsql_check_function';"
-has_ext pg_uuidv7 && smoke_test "pg_uuidv7 generate" \
-    "SELECT uuid_generate_v7();"
-has_ext pg_bigm && smoke_test "pg_bigm search" \
-    "SELECT bigm_similarity('hello', 'helo');"
-has_ext pg_stat_monitor && smoke_test "pg_stat_monitor view" \
-    "SELECT count(*) FROM pg_stat_monitor;"
+has_ext credcheck && smoke_test "credcheck loaded" \
+    "SHOW credcheck.password_min_length;"
 has_ext h3_pg && smoke_test "h3 cell" \
     "SELECT h3_lat_lng_to_cell('(0,0)'::point, 5);"
-has_ext timescaledb && smoke_test "timescaledb available" \
-    "SELECT count(*) FROM pg_available_extensions WHERE name = 'timescaledb';"
+has_ext hll && smoke_test "hll aggregate" \
+    "SELECT hll_cardinality(hll_add_agg(hll_hash_integer(g))) FROM generate_series(1,100) g;"
+has_ext hypopg && smoke_test "hypopg create index" \
+    "SELECT indexrelid FROM hypopg_create_index('CREATE INDEX ON public.part_config (parent_table)');"
+has_ext ip4r && smoke_test "ip4r range" \
+    "SELECT '192.168.1.0/24'::ip4r;"
+has_ext orafce && smoke_test "orafce nvl" \
+    "SELECT oracle.nvl(NULL::text, 'fallback');"
+has_ext pg_bigm && smoke_test "pg_bigm search" \
+    "SELECT bigm_similarity('hello', 'helo');"
+has_ext pg_cron && smoke_test "pg_cron schedule" \
+    "SELECT cron.schedule('test_job', '* * * * *', 'SELECT 1');"
 has_ext pg_duckdb && smoke_test "pg_duckdb loaded" \
     "SELECT count(*) FROM pg_extension WHERE extname = 'pg_duckdb';"
-has_ext tds_fdw && smoke_test "tds_fdw wrapper" \
-    "SELECT count(*) FROM pg_foreign_data_wrapper WHERE fdwname = 'tds_fdw';"
+has_ext pg_durable && smoke_test "pg_durable loaded" \
+    "SELECT count(*) FROM pg_extension WHERE extname = 'pg_durable';"
+has_ext pg_failover_slots && smoke_test "pg_failover_slots loaded" \
+    "SELECT count(*) FROM pg_proc WHERE proname LIKE 'pg_failover_slot%';"
+has_ext pg_hint_plan && smoke_test "pg_hint_plan loaded" \
+    "SHOW pg_hint_plan.enable_hint;"
+has_ext pg_ivm && smoke_test "pg_ivm functions" \
+    "SELECT count(*) FROM pg_proc WHERE proname = 'create_immv';"
+has_ext pg_partman && smoke_test "pg_partman config table" \
+    "SELECT count(*) FROM public.part_config;"
+has_ext pg_repack && smoke_test "pg_repack version" \
+    "SELECT repack.version();"
+has_ext pg_roaringbitmap && smoke_test "pg_roaringbitmap ops" \
+    "SELECT rb_cardinality(rb_build(ARRAY[1,2,3]::int[]));"
 has_ext pgrouting && smoke_test "pgrouting dijkstra" \
     "SELECT count(*) FROM pg_proc WHERE proname = 'pgr_dijkstra';"
+has_ext pg_squeeze && smoke_test "pg_squeeze schema" \
+    "SELECT count(*) FROM squeeze.tables;"
+has_ext pg_stat_monitor && smoke_test "pg_stat_monitor view" \
+    "SELECT count(*) FROM pg_stat_monitor;"
+has_ext pg_uuidv7 && smoke_test "pg_uuidv7 generate" \
+    "SELECT uuid_generate_v7();"
+has_ext pgaudit && smoke_test "pgaudit active" \
+    "SHOW pgaudit.log;"
+has_ext pgvector && smoke_test "pgvector similarity" \
+    "SELECT '[1,2,3]'::vector <-> '[4,5,6]'::vector;"
+has_ext plpgsql_check && smoke_test "plpgsql_check lint" \
+    "SELECT count(*) FROM pg_proc WHERE proname = 'plpgsql_check_function';"
 has_ext plv8 && smoke_test "plv8 javascript" \
     "SELECT plv8_version();"
+has_ext postgis && smoke_test "PostGIS geometry" \
+    "SELECT ST_AsText(ST_Point(1, 2));"
+has_ext rum && smoke_test "rum index" \
+    "SELECT 1 FROM pg_available_extensions WHERE name = 'rum';"
+has_ext semver && smoke_test "semver comparison" \
+    "SELECT '1.2.3'::semver > '1.2.2'::semver;"
+has_ext tdigest && smoke_test "tdigest percentile" \
+    "SELECT tdigest_percentile(x, 100, 0.5) FROM generate_series(1,100) x;"
+has_ext tds_fdw && smoke_test "tds_fdw wrapper" \
+    "SELECT count(*) FROM pg_foreign_data_wrapper WHERE fdwname = 'tds_fdw';"
+has_ext temporal_tables && smoke_test "temporal_tables loaded" \
+    "SELECT proname FROM pg_proc WHERE proname = 'versioning';"
+has_ext timescaledb && smoke_test "timescaledb available" \
+    "SELECT count(*) FROM pg_available_extensions WHERE name = 'timescaledb';"
+has_ext wal2json && smoke_test "wal2json plugin exists" \
+    "SELECT count(*) FROM pg_proc WHERE proname = 'pg_logical_slot_get_changes';"
 echo
 
 # ============================================================

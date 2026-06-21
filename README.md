@@ -36,40 +36,40 @@ layers from the registry and overlays them onto the official image.
 
 | Extension | PG versions | Description |
 |-----------|-------------|-------------|
-| [pgvector](https://github.com/pgvector/pgvector) | 17, 18, 19 | Vector similarity search for AI/embeddings |
-| [pg_cron](https://github.com/citusdata/pg_cron) | 17, 18 | Job scheduler (periodic jobs inside the database) |
-| [PostGIS](https://github.com/postgis/postgis) | 17, 18, 19 | Geospatial extensions (geometry, geography, MVT) |
-| [pg_repack](https://github.com/reorg/pg_repack) | 17, 18, 19 | Online table reorganization without heavy locks |
-| [pgaudit](https://github.com/pgaudit/pgaudit) | 17, 18 | Audit logging (session and object-level) |
-| [pg_partman](https://github.com/pgpartman/pg_partman) | 17, 18, 19 | Automated table partition management |
-| [wal2json](https://github.com/eulerto/wal2json) | 17, 18 | JSON output plugin for logical replication / CDC |
-| [pg_hint_plan](https://github.com/ossc-db/pg_hint_plan) | 17, 18 | Tweak execution plans using hints in SQL comments |
-| [hypopg](https://github.com/HypoPG/hypopg) | 17, 18, 19 | Hypothetical indexes for what-if analysis |
-| [hll](https://github.com/citusdata/postgresql-hll) | 17, 18 | HyperLogLog probabilistic distinct counting |
-| [orafce](https://github.com/orafce/orafce) | 17, 18, 19 | Oracle compatibility functions and packages |
-| [tdigest](https://github.com/tvondra/tdigest) | 17, 18, 19 | T-digest for quantile and percentile estimation |
-| [ip4r](https://github.com/RhodiumToad/ip4r) | 17, 18, 19 | IPv4/IPv6 range data types with GiST indexing |
-| [semver](https://github.com/theory/pg-semver) | 17, 18, 19 | Semantic version data type |
-| [temporal_tables](https://github.com/arkhipov/temporal_tables) | 17, 18 | System-period temporal tables |
-| [pg_squeeze](https://github.com/cybertec-postgresql/pg_squeeze) | 17, 18, 19 | Remove unused space from tables without heavy locks |
-| [pg_ivm](https://github.com/sraoss/pg_ivm) | 17, 18 | Incremental View Maintenance for materialized views |
-| [credcheck](https://github.com/HexaCluster/credcheck) | 17, 18, 19 | Credential checks on user creation / password change |
-| [pg_failover_slots](https://github.com/EnterpriseDB/pg_failover_slots) | 17, 18 | Logical replication slot manager for failover |
 | [age](https://github.com/apache/age) | 17, 18 | Graph database with openCypher query language (Apache AGE) |
 | [anon](https://gitlab.com/dalibo/postgresql_anonymizer) | 17, 18 | Data anonymization and masking |
-| [pg_durable](https://github.com/microsoft/pg_durable) | 17, 18 | In-database durable execution (fault-tolerant workflows) |
-| [rum](https://github.com/postgrespro/rum) | 17, 18 | GIN-like index with ordering for full text search |
-| [pg_roaringbitmap](https://github.com/ChenHuajun/pg_roaringbitmap) | 17, 18 | Roaring bitmap data type for fast set operations |
-| [plpgsql_check](https://github.com/okbob/plpgsql_check) | 17, 18, 19 | PL/pgSQL linter and validator |
-| [pg_uuidv7](https://github.com/fboulnois/pg_uuidv7) | 17, 18, 19 | UUIDv7 generation (time-sortable unique identifiers) |
-| [pg_bigm](https://github.com/pgbigm/pg_bigm) | 17, 18 | 2-gram full text search (better for CJK languages) |
-| [pg_stat_monitor](https://github.com/percona/pg_stat_monitor) | 17, 18 | Enhanced query statistics with histograms and buckets |
+| [credcheck](https://github.com/HexaCluster/credcheck) | 17, 18, 19 | Credential checks on user creation / password change |
 | [h3-pg](https://github.com/zachasme/h3-pg) | 17, 18, 19 | Uber H3 hexagonal geospatial indexing |
-| [timescaledb](https://github.com/timescale/timescaledb) | 17, 18 | Time-series hypertables, compression, continuous aggregates |
+| [hll](https://github.com/citusdata/postgresql-hll) | 17, 18 | HyperLogLog probabilistic distinct counting |
+| [hypopg](https://github.com/HypoPG/hypopg) | 17, 18, 19 | Hypothetical indexes for what-if analysis |
+| [ip4r](https://github.com/RhodiumToad/ip4r) | 17, 18, 19 | IPv4/IPv6 range data types with GiST indexing |
+| [orafce](https://github.com/orafce/orafce) | 17, 18, 19 | Oracle compatibility functions and packages |
+| [pgaudit](https://github.com/pgaudit/pgaudit) | 17, 18 | Audit logging (session and object-level) |
+| [pg_bigm](https://github.com/pgbigm/pg_bigm) | 17, 18 | 2-gram full text search (better for CJK languages) |
+| [pg_cron](https://github.com/citusdata/pg_cron) | 17, 18 | Job scheduler (periodic jobs inside the database) |
 | [pg_duckdb](https://github.com/duckdb/pg_duckdb) | 17, 18 | DuckDB columnar analytics engine embedded in Postgres |
-| [tds_fdw](https://github.com/tds-fdw/tds_fdw) | 17, 18 | Foreign data wrapper for SQL Server and Sybase |
+| [pg_durable](https://github.com/microsoft/pg_durable) | 17, 18 | In-database durable execution (fault-tolerant workflows) |
+| [pg_failover_slots](https://github.com/EnterpriseDB/pg_failover_slots) | 17, 18 | Logical replication slot manager for failover |
+| [pg_hint_plan](https://github.com/ossc-db/pg_hint_plan) | 17, 18 | Tweak execution plans using hints in SQL comments |
+| [pg_ivm](https://github.com/sraoss/pg_ivm) | 17, 18 | Incremental View Maintenance for materialized views |
+| [pg_partman](https://github.com/pgpartman/pg_partman) | 17, 18, 19 | Automated table partition management |
+| [pg_repack](https://github.com/reorg/pg_repack) | 17, 18, 19 | Online table reorganization without heavy locks |
+| [pg_roaringbitmap](https://github.com/ChenHuajun/pg_roaringbitmap) | 17, 18 | Roaring bitmap data type for fast set operations |
 | [pgrouting](https://github.com/pgRouting/pgrouting) | 17, 18 | Geospatial routing and network analysis on PostGIS |
+| [pg_squeeze](https://github.com/cybertec-postgresql/pg_squeeze) | 17, 18, 19 | Remove unused space from tables without heavy locks |
+| [pg_stat_monitor](https://github.com/percona/pg_stat_monitor) | 17, 18 | Enhanced query statistics with histograms and buckets |
+| [pg_uuidv7](https://github.com/fboulnois/pg_uuidv7) | 17, 18, 19 | UUIDv7 generation (time-sortable unique identifiers) |
+| [pgvector](https://github.com/pgvector/pgvector) | 17, 18, 19 | Vector similarity search for AI/embeddings |
+| [plpgsql_check](https://github.com/okbob/plpgsql_check) | 17, 18, 19 | PL/pgSQL linter and validator |
 | [plv8](https://github.com/plv8/plv8) | 17, 18 | JavaScript (V8) procedural language |
+| [PostGIS](https://github.com/postgis/postgis) | 17, 18, 19 | Geospatial extensions (geometry, geography, MVT) |
+| [rum](https://github.com/postgrespro/rum) | 17, 18 | GIN-like index with ordering for full text search |
+| [semver](https://github.com/theory/pg-semver) | 17, 18, 19 | Semantic version data type |
+| [tdigest](https://github.com/tvondra/tdigest) | 17, 18, 19 | T-digest for quantile and percentile estimation |
+| [tds_fdw](https://github.com/tds-fdw/tds_fdw) | 17, 18 | Foreign data wrapper for SQL Server and Sybase |
+| [temporal_tables](https://github.com/arkhipov/temporal_tables) | 17, 18 | System-period temporal tables |
+| [timescaledb](https://github.com/timescale/timescaledb) | 17, 18 | Time-series hypertables, compression, continuous aggregates |
+| [wal2json](https://github.com/eulerto/wal2json) | 17, 18 | JSON output plugin for logical replication / CDC |
 
 ### Image tags
 
@@ -96,19 +96,19 @@ Extensions that need this:
 
 | Extension | Library name |
 |-----------|-------------|
-| pg_cron | `pg_cron` |
-| pgaudit | `pgaudit` |
-| pg_partman | `pg_partman_bgw` |
-| pg_hint_plan | `pg_hint_plan` |
-| pg_squeeze | `pg_squeeze` |
-| credcheck | `credcheck` |
-| pg_failover_slots | `pg_failover_slots` |
 | age | `age` |
 | anon | `anon` |
-| pg_durable | `pg_durable` |
-| pg_stat_monitor | `pg_stat_monitor` |
-| timescaledb | `timescaledb` |
+| credcheck | `credcheck` |
+| pg_cron | `pg_cron` |
 | pg_duckdb | `pg_duckdb` |
+| pg_durable | `pg_durable` |
+| pg_failover_slots | `pg_failover_slots` |
+| pg_hint_plan | `pg_hint_plan` |
+| pg_partman | `pg_partman_bgw` |
+| pg_squeeze | `pg_squeeze` |
+| pg_stat_monitor | `pg_stat_monitor` |
+| pgaudit | `pgaudit` |
+| timescaledb | `timescaledb` |
 
 ### CREATE EXTENSION
 
