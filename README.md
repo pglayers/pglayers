@@ -36,35 +36,35 @@ layers from the registry and overlays them onto the official image.
 
 | Extension | PG versions | Description |
 |-----------|-------------|-------------|
-| [pgvector](https://github.com/pgvector/pgvector) | 17, 18 | Vector similarity search for AI/embeddings |
+| [pgvector](https://github.com/pgvector/pgvector) | 17, 18, 19 | Vector similarity search for AI/embeddings |
 | [pg_cron](https://github.com/citusdata/pg_cron) | 17, 18 | Job scheduler (periodic jobs inside the database) |
-| [PostGIS](https://github.com/postgis/postgis) | 17, 18 | Geospatial extensions (geometry, geography, MVT) |
-| [pg_repack](https://github.com/reorg/pg_repack) | 17, 18 | Online table reorganization without heavy locks |
+| [PostGIS](https://github.com/postgis/postgis) | 17, 18, 19 | Geospatial extensions (geometry, geography, MVT) |
+| [pg_repack](https://github.com/reorg/pg_repack) | 17, 18, 19 | Online table reorganization without heavy locks |
 | [pgaudit](https://github.com/pgaudit/pgaudit) | 17, 18 | Audit logging (session and object-level) |
-| [pg_partman](https://github.com/pgpartman/pg_partman) | 17, 18 | Automated table partition management |
+| [pg_partman](https://github.com/pgpartman/pg_partman) | 17, 18, 19 | Automated table partition management |
 | [wal2json](https://github.com/eulerto/wal2json) | 17, 18 | JSON output plugin for logical replication / CDC |
 | [pg_hint_plan](https://github.com/ossc-db/pg_hint_plan) | 17, 18 | Tweak execution plans using hints in SQL comments |
-| [hypopg](https://github.com/HypoPG/hypopg) | 17, 18 | Hypothetical indexes for what-if analysis |
+| [hypopg](https://github.com/HypoPG/hypopg) | 17, 18, 19 | Hypothetical indexes for what-if analysis |
 | [hll](https://github.com/citusdata/postgresql-hll) | 17, 18 | HyperLogLog probabilistic distinct counting |
-| [orafce](https://github.com/orafce/orafce) | 17, 18 | Oracle compatibility functions and packages |
-| [tdigest](https://github.com/tvondra/tdigest) | 17, 18 | T-digest for quantile and percentile estimation |
-| [ip4r](https://github.com/RhodiumToad/ip4r) | 17, 18 | IPv4/IPv6 range data types with GiST indexing |
-| [semver](https://github.com/theory/pg-semver) | 17, 18 | Semantic version data type |
+| [orafce](https://github.com/orafce/orafce) | 17, 18, 19 | Oracle compatibility functions and packages |
+| [tdigest](https://github.com/tvondra/tdigest) | 17, 18, 19 | T-digest for quantile and percentile estimation |
+| [ip4r](https://github.com/RhodiumToad/ip4r) | 17, 18, 19 | IPv4/IPv6 range data types with GiST indexing |
+| [semver](https://github.com/theory/pg-semver) | 17, 18, 19 | Semantic version data type |
 | [temporal_tables](https://github.com/arkhipov/temporal_tables) | 17, 18 | System-period temporal tables |
-| [pg_squeeze](https://github.com/cybertec-postgresql/pg_squeeze) | 17, 18 | Remove unused space from tables without heavy locks |
+| [pg_squeeze](https://github.com/cybertec-postgresql/pg_squeeze) | 17, 18, 19 | Remove unused space from tables without heavy locks |
 | [pg_ivm](https://github.com/sraoss/pg_ivm) | 17, 18 | Incremental View Maintenance for materialized views |
-| [credcheck](https://github.com/HexaCluster/credcheck) | 17, 18 | Credential checks on user creation / password change |
+| [credcheck](https://github.com/HexaCluster/credcheck) | 17, 18, 19 | Credential checks on user creation / password change |
 | [pg_failover_slots](https://github.com/EnterpriseDB/pg_failover_slots) | 17, 18 | Logical replication slot manager for failover |
 | [age](https://github.com/apache/age) | 17, 18 | Graph database with openCypher query language (Apache AGE) |
 | [anon](https://gitlab.com/dalibo/postgresql_anonymizer) | 17, 18 | Data anonymization and masking |
 | [pg_durable](https://github.com/microsoft/pg_durable) | 17, 18 | In-database durable execution (fault-tolerant workflows) |
 | [rum](https://github.com/postgrespro/rum) | 17, 18 | GIN-like index with ordering for full text search |
 | [pg_roaringbitmap](https://github.com/ChenHuajun/pg_roaringbitmap) | 17, 18 | Roaring bitmap data type for fast set operations |
-| [plpgsql_check](https://github.com/okbob/plpgsql_check) | 17, 18 | PL/pgSQL linter and validator |
-| [pg_uuidv7](https://github.com/fboulnois/pg_uuidv7) | 17, 18 | UUIDv7 generation (time-sortable unique identifiers) |
+| [plpgsql_check](https://github.com/okbob/plpgsql_check) | 17, 18, 19 | PL/pgSQL linter and validator |
+| [pg_uuidv7](https://github.com/fboulnois/pg_uuidv7) | 17, 18, 19 | UUIDv7 generation (time-sortable unique identifiers) |
 | [pg_bigm](https://github.com/pgbigm/pg_bigm) | 17, 18 | 2-gram full text search (better for CJK languages) |
 | [pg_stat_monitor](https://github.com/percona/pg_stat_monitor) | 17, 18 | Enhanced query statistics with histograms and buckets |
-| [h3-pg](https://github.com/zachasme/h3-pg) | 17, 18 | Uber H3 hexagonal geospatial indexing |
+| [h3-pg](https://github.com/zachasme/h3-pg) | 17, 18, 19 | Uber H3 hexagonal geospatial indexing |
 | [timescaledb](https://github.com/timescale/timescaledb) | 17, 18 | Time-series hypertables, compression, continuous aggregates |
 | [pg_duckdb](https://github.com/duckdb/pg_duckdb) | 17, 18 | DuckDB columnar analytics engine embedded in Postgres |
 | [tds_fdw](https://github.com/tds-fdw/tds_fdw) | 17, 18 | Foreign data wrapper for SQL Server and Sybase |
@@ -200,18 +200,21 @@ make clean EXT=pgvector
 make clean-all
 ```
 
-### Running the test suite
-
-The test suite validates that all extensions can coexist without
-conflicts. **Always run tests before submitting changes:**
+### Running tests
 
 ```bash
-# Run the full test suite (builds all extensions, checks collisions,
-# validates shared libraries, runs functional tests)
+# Full test suite: collisions, ldd, CREATE EXTENSION, smoke tests,
+# integration tests (builds all extensions first)
 make test REGISTRY=local PG=17
+
+# Quick integration tests against an already-built combined image
+make image PG=17 REGISTRY=local
+make test-image PG=17
 ```
 
-The tests check:
+Tests must pass for all supported PG versions (17, 18, 19).
+
+The `make test` suite checks:
 
 1. **No file collisions** -- Every pair of extensions is compared for
    overlapping files. If two extensions install a file at the same path,
@@ -230,12 +233,14 @@ The tests check:
 5. **Functional smoke tests** -- Each extension is exercised with a
    real query (not just loaded) to verify runtime behavior.
 
+6. **Integration tests** -- Each extension's `test.sql` file runs
+   multi-step validation with PASS/FAIL assertions.
+
 Example output:
 
 ```
 ---- Phase 3: Checking for file collisions between extensions...
 PASS pgvector <-> postgis: no collisions
-PASS pgvector <-> pg_cron: no collisions
 ...
 PASS No file collisions detected between any extension pair
 
@@ -246,8 +251,13 @@ PASS All shared library dependencies resolve
 PASS CREATE EXTENSION vector
 PASS smoke: pgvector similarity
 ...
+
+---- Phase 7: Integration tests (extensions/*/test.sql)...
+PASS integration pgvector (3 checks)
+PASS integration postgis (4 checks)
+...
 ========================================
-Results: 252 passed, 0 failed, 0 warnings
+Results: 699 passed, 0 failed, 0 warnings
 ========================================
 ```
 
@@ -255,11 +265,12 @@ Results: 252 passed, 0 failed, 0 warnings
 
 ### Before you start
 
-1. **Check the license.** We only ship extensions with permissive
-   open-source licenses (PostgreSQL, MIT, BSD, Apache 2.0, ISC).
-   Copyleft (GPL, AGPL) and source-available (BSL, SSPL, ELv2) are
-   not accepted. Extensions requiring proprietary runtime dependencies
-   (e.g., Oracle Instant Client) are also excluded.
+1. **Check the license.** We ship extensions with permissive licenses
+   (PostgreSQL, MIT, BSD, Apache 2.0, ISC, MPL-2.0) and GPL-2.0
+   extensions loaded via PostgreSQL's dynamic extension mechanism.
+   GPL-3.0, AGPL, and source-available licenses (BSL, SSPL, ELv2)
+   are not accepted. Extensions requiring proprietary runtime
+   dependencies (e.g., Oracle Instant Client) are also excluded.
 
 2. **Check for conflicts.** If your extension bundles runtime shared
    libraries, verify they don't overlap with existing extensions
@@ -379,17 +390,21 @@ postgres-extender/
 ├── Makefile                          Build interface
 ├── Dockerfile                        Combined image (all extensions)
 ├── AGENTS.md                         Agent/CI instructions
-├── .github/workflows/build-push.yml  CI: builds all extensions, pushes to GHCR
+├── .github/workflows/
+│   ├── build-push.yml                CI: builds all extensions, pushes to GHCR
+│   └── test.yml                      CI: runs full test suite (PG 17, 18, 19)
 ├── extensions/
 │   ├── pgvector/
 │   │   ├── Dockerfile                Multi-stage build -> artifact image
-│   │   └── extension.conf            Metadata and version mapping
+│   │   ├── extension.conf            Metadata and version mapping
+│   │   └── test.sql                  Integration tests (PASS/FAIL assertions)
 │   ├── pg_cron/
 │   ├── postgis/                      (complex: bundles runtime libs)
-│   ├── ... (20 extensions total)
+│   ├── ... (34 extensions total)
 │   └── wal2json/
 ├── tests/
-│   └── test-layers.sh                Collision + functional test suite
+│   ├── test-layers.sh                Full test suite (collisions + functional)
+│   └── test-image.sh                 Quick integration tests against combined image
 └── examples/
     └── Dockerfile.example            End-user reference
 ```
