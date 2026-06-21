@@ -288,6 +288,31 @@ smoke_test "credcheck loaded" \
     "SHOW credcheck.password_min_length;"
 smoke_test "pg_failover_slots loaded" \
     "SELECT count(*) FROM pg_proc WHERE proname LIKE 'pg_failover_slot%';"
+echo
+
+# ============================================================
+# Phase 7: Integration tests (per-extension test.sql files)
+# ============================================================
+info "Phase 7: Integration tests (extensions/*/test.sql)..."
+
+for ext in "${EXTENSIONS[@]}"; do
+    test_file="extensions/${ext}/test.sql"
+    if [ ! -f "$test_file" ]; then
+        warn "${ext}: no test.sql found"
+        continue
+    fi
+    output="$(docker exec -i pgx-func-test psql -U postgres -tA -v ON_ERROR_STOP=0 < "$test_file" 2>&1)"
+    failures="$(echo "$output" | grep '^FAIL' || true)"
+    passes="$(echo "$output" | grep -c '^PASS' || true)"
+    if [ -n "$failures" ]; then
+        fail "integration ${ext}:"
+        echo "$failures" | sed 's/^/       /'
+    elif [ "$passes" -gt 0 ]; then
+        pass "integration ${ext} (${passes} checks)"
+    else
+        warn "${ext}: test.sql produced no PASS/FAIL output"
+    fi
+done
 
 # Cleanup
 docker rm -f pgx-func-test >/dev/null 2>&1

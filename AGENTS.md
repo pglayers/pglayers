@@ -112,6 +112,22 @@ This means updating `tests/test-layers.sh` to include:
    add it to the `shared_preload_libraries` line in the test Dockerfile
    generator (Phase 5 of `test-layers.sh`).
 
+5. **Integration test file** -- Create `extensions/<name>/test.sql` with
+   multi-step validation. Each test outputs a line starting with `PASS`
+   or `FAIL`. Format:
+   ```sql
+   SELECT CASE
+       WHEN <condition>
+       THEN 'PASS <ext_name>: <description>'
+       ELSE 'FAIL <ext_name>: <description>'
+   END;
+   ```
+   Tests must be self-contained (create own tables, clean up after).
+   Aim for 2-4 checks per extension covering:
+   - Core data type or function works
+   - Index or operator behavior
+   - Integration with other PG features (e.g., triggers, aggregates)
+
 The collision, overwrite, and ldd checks are automatic for all
 extensions in the `extensions/` directory -- no manual update needed
 for those.
