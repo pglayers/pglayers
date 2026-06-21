@@ -6,6 +6,11 @@ EXTENSIONS := $(sort $(notdir $(patsubst %/,%,$(wildcard extensions/*/))))
 # Default PG version for single-extension targets
 PG ?= 17
 
+# Platform(s) for multi-arch builds.  Override with:
+#   make build EXT=pgvector PLATFORM=linux/amd64,linux/arm64
+# Default: native architecture only (fast local builds).
+PLATFORM ?=
+
 .PHONY: help list build build-all image push push-all dockerfile clean clean-all test test-image
 
 help: ## Show this help
@@ -25,6 +30,7 @@ help: ## Show this help
 	@printf "  REGISTRY=%s\n" "$(REGISTRY)"
 	@printf "  PREFIX=%s\n"   "$(PREFIX)"
 	@printf "  PG=%s\n"       "$(PG)"
+	@printf "  PLATFORM=%s (set to linux/amd64,linux/arm64 for multi-arch)\n" "$(or $(PLATFORM),<native>)"
 
 list: ## List available extensions
 	@printf "%-15s %-6s %s\n" "EXTENSION" "PG" "DESCRIPTION"
@@ -44,12 +50,14 @@ build: _check-ext ## Build a single extension image
 	$(eval EXT_VERSION := $(shell bash -c 'source extensions/$(EXT)/extension.conf && echo $${VERSION_$(PG)}'))
 	@test -n "$(EXT_VERSION)" || { echo "Error: $(EXT) has no version defined for PG $(PG)"; exit 1; }
 	@echo "Building $(PREFIX)-$(EXT):$(PG) (extension $(EXT_VERSION))..."
-	docker build \
+	docker buildx build \
+		$(if $(PLATFORM),--platform $(PLATFORM)) \
 		--build-arg PG_MAJOR=$(PG) \
 		--build-arg EXT_VERSION=$(EXT_VERSION) \
 		-t $(REGISTRY)/$(PREFIX)-$(EXT):$(PG) \
 		-t $(REGISTRY)/$(PREFIX)-$(EXT):$(PG)-$(EXT_VERSION) \
 		-f extensions/$(EXT)/Dockerfile \
+		$(if $(PLATFORM),--push,--load) \
 		extensions/$(EXT)
 
 build-all: ## Build all extensions for PG version(s)
