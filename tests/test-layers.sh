@@ -229,6 +229,7 @@ declare -A EXT_SQL_NAMES=(
     [pg_stat_monitor]="pg_stat_monitor"
     [pg_uuidv7]="pg_uuidv7"
     [pgaudit]="pgaudit"
+    [pglogical]="pglogical"
     [pgrouting]="pgrouting"
     [pgvector]="vector"
     [plpgsql_check]="plpgsql_check"
@@ -327,6 +328,8 @@ has_ext pg_uuidv7 && smoke_test "pg_uuidv7 generate" \
     "SELECT uuid_generate_v7();"
 has_ext pgaudit && smoke_test "pgaudit active" \
     "SHOW pgaudit.log;"
+has_ext pglogical && smoke_test "pglogical version" \
+    "SELECT pglogical.pglogical_version();"
 has_ext pgvector && smoke_test "pgvector similarity" \
     "SELECT '[1,2,3]'::vector <-> '[4,5,6]'::vector;"
 has_ext plpgsql_check && smoke_test "plpgsql_check lint" \

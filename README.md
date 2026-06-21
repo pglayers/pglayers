@@ -46,6 +46,7 @@ layers from the registry and overlays them onto the official image.
 | [orafce](https://github.com/orafce/orafce) | 17, 18, 19 | Oracle compatibility functions and packages |
 | [pgaudit](https://github.com/pgaudit/pgaudit) | 17, 18 | Audit logging (session and object-level) |
 | [pg_bigm](https://github.com/pgbigm/pg_bigm) | 17, 18 | 2-gram full text search (better for CJK languages) |
+| [pglogical](https://github.com/2ndQuadrant/pglogical) | 17, 18, 19 | Logical streaming replication using publish/subscribe model |
 | [pg_cron](https://github.com/citusdata/pg_cron) | 17, 18 | Job scheduler (periodic jobs inside the database) |
 | [pg_duckdb](https://github.com/duckdb/pg_duckdb) | 17, 18 | DuckDB columnar analytics engine embedded in Postgres |
 | [pg_durable](https://github.com/microsoft/pg_durable) | 17, 18 | In-database durable execution (fault-tolerant workflows) |
@@ -108,6 +109,7 @@ Extensions that need this:
 | pg_squeeze | `pg_squeeze` |
 | pg_stat_monitor | `pg_stat_monitor` |
 | pgaudit | `pgaudit` |
+| pglogical | `pglogical` |
 | timescaledb | `timescaledb` |
 
 ### CREATE EXTENSION
