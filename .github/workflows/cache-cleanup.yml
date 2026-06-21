@@ -1,0 +1,50 @@
+name: Cache Cleanup
+
+on:
+  pull_request:
+    types: [closed]
+  schedule:
+    # Weekly on Sundays at 06:00 UTC
+    - cron: '0 6 * * 0'
+
+jobs:
+  cleanup-branch-caches:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete caches for closed PR branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          BRANCH: refs/heads/${{ github.head_ref }}
+        run: |
+          echo "Deleting caches for branch: $BRANCH"
+          gh actions-cache list -R "$REPO" -B "$BRANCH" -L 100 \
+            --sort created-at | cut -f1 | while read -r key; do
+            [ -z "$key" ] && continue
+            echo "  Deleting: $key"
+            gh actions-cache delete "$key" -R "$REPO" -B "$BRANCH" --confirm || true
+          done
+
+  cleanup-stale-caches:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete caches older than 14 days
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          cutoff=$(date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+            || date -u -v-14d +%Y-%m-%dT%H:%M:%SZ)
+          echo "Deleting caches last used before: $cutoff"
+          gh api "repos/$REPO/actions/caches" --paginate \
+            --jq ".actions_caches[] | select(.last_accessed_at < \"$cutoff\") | .id" | \
+            while read -r id; do
+              echo "  Deleting cache id: $id"
+              gh api -X DELETE "repos/$REPO/actions/caches/$id" || true
+            done
