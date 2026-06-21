@@ -51,8 +51,10 @@ layers from the registry and overlays them onto the official image.
 | [pg_duckdb](https://github.com/duckdb/pg_duckdb) | 17, 18 | DuckDB columnar analytics engine embedded in Postgres |
 | [pg_durable](https://github.com/microsoft/pg_durable) | 17, 18 | In-database durable execution (fault-tolerant workflows) |
 | [pg_failover_slots](https://github.com/EnterpriseDB/pg_failover_slots) | 17, 18 | Logical replication slot manager for failover |
+| [pg_graphql](https://github.com/supabase/pg_graphql) | 17, 18 | GraphQL support for PostgreSQL |
 | [pg_hint_plan](https://github.com/ossc-db/pg_hint_plan) | 17, 18 | Tweak execution plans using hints in SQL comments |
 | [pg_ivm](https://github.com/sraoss/pg_ivm) | 17, 18 | Incremental View Maintenance for materialized views |
+| [pg_jsonschema](https://github.com/supabase/pg_jsonschema) | 17, 18 | JSON Schema validation |
 | [pg_partman](https://github.com/pgpartman/pg_partman) | 17, 18, 19 | Automated table partition management |
 | [pg_repack](https://github.com/reorg/pg_repack) | 17, 18, 19 | Online table reorganization without heavy locks |
 | [pg_roaringbitmap](https://github.com/ChenHuajun/pg_roaringbitmap) | 17, 18 | Roaring bitmap data type for fast set operations |
@@ -61,9 +63,13 @@ layers from the registry and overlays them onto the official image.
 | [pg_stat_monitor](https://github.com/percona/pg_stat_monitor) | 17, 18 | Enhanced query statistics with histograms and buckets |
 | [pg_uuidv7](https://github.com/fboulnois/pg_uuidv7) | 17, 18, 19 | UUIDv7 generation (time-sortable unique identifiers) |
 | [pgvector](https://github.com/pgvector/pgvector) | 17, 18, 19 | Vector similarity search for AI/embeddings |
+| [pgjwt](https://github.com/michelp/pgjwt) | 17, 18, 19 | JSON Web Token (JWT) generation and validation |
+| [pgtap](https://github.com/theory/pgtap) | 17, 18, 19 | Unit testing framework for PostgreSQL |
 | [plpgsql_check](https://github.com/okbob/plpgsql_check) | 17, 18, 19 | PL/pgSQL linter and validator |
 | [plv8](https://github.com/plv8/plv8) | 17, 18 | JavaScript (V8) procedural language |
-| [PostGIS](https://github.com/postgis/postgis) | 17, 18, 19 | Geospatial extensions (geometry, geography, MVT) |
+| [PostGIS](https://github.com/postgis/postgis) | 17, 18, 19 | Geospatial extensions (geometry, geography, raster, MVT) |
+| [postgres_protobuf](https://github.com/mpartel/postgres-protobuf) | 17, 18, 19 | Protocol Buffer support (query, convert to/from JSON) |
+| [prefix](https://github.com/dimitri/prefix) | 17, 18, 19 | Prefix range data type for phone routing lookups |
 | [rum](https://github.com/postgrespro/rum) | 17, 18 | GIN-like index with ordering for full text search |
 | [semver](https://github.com/theory/pg-semver) | 17, 18, 19 | Semantic version data type |
 | [tdigest](https://github.com/tvondra/tdigest) | 17, 18, 19 | T-digest for quantile and percentile estimation |

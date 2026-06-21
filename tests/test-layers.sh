@@ -220,8 +220,10 @@ declare -A EXT_SQL_NAMES=(
     [pg_cron]="pg_cron"
     [pg_duckdb]="pg_duckdb"
     [pg_durable]="pg_durable"
+    [pg_graphql]="pg_graphql"
     [pg_hint_plan]="pg_hint_plan"
     [pg_ivm]="pg_ivm"
+    [pg_jsonschema]="pg_jsonschema"
     [pg_partman]="pg_partman"
     [pg_repack]="pg_repack"
     [pg_roaringbitmap]="roaringbitmap"
@@ -229,12 +231,16 @@ declare -A EXT_SQL_NAMES=(
     [pg_stat_monitor]="pg_stat_monitor"
     [pg_uuidv7]="pg_uuidv7"
     [pgaudit]="pgaudit"
+    [pgjwt]="pgjwt"
     [pglogical]="pglogical"
     [pgrouting]="pgrouting"
+    [pgtap]="pgtap"
     [pgvector]="vector"
     [plpgsql_check]="plpgsql_check"
     [plv8]="plv8"
     [postgis]="postgis"
+    [postgres_protobuf]="postgres_protobuf"
+    [prefix]="prefix"
     [semver]="semver"
     [tdigest]="tdigest"
     [tds_fdw]="tds_fdw"
@@ -306,12 +312,16 @@ has_ext pg_duckdb && smoke_test "pg_duckdb loaded" \
     "SELECT count(*) FROM pg_extension WHERE extname = 'pg_duckdb';"
 has_ext pg_durable && smoke_test "pg_durable loaded" \
     "SELECT count(*) FROM pg_extension WHERE extname = 'pg_durable';"
+has_ext pg_graphql && smoke_test "pg_graphql schema" \
+    "SELECT count(*) FROM pg_namespace WHERE nspname = 'graphql';"
 has_ext pg_failover_slots && smoke_test "pg_failover_slots loaded" \
     "SELECT count(*) FROM pg_proc WHERE proname LIKE 'pg_failover_slot%';"
 has_ext pg_hint_plan && smoke_test "pg_hint_plan loaded" \
     "SHOW pg_hint_plan.enable_hint;"
 has_ext pg_ivm && smoke_test "pg_ivm functions" \
     "SELECT count(*) FROM pg_proc WHERE proname = 'create_immv';"
+has_ext pg_jsonschema && smoke_test "pg_jsonschema validate" \
+    "SELECT json_matches_schema('{\"type\":\"object\"}'::json, '{}'::json);"
 has_ext pg_partman && smoke_test "pg_partman config table" \
     "SELECT count(*) FROM public.part_config;"
 has_ext pg_repack && smoke_test "pg_repack version" \
@@ -320,6 +330,8 @@ has_ext pg_roaringbitmap && smoke_test "pg_roaringbitmap ops" \
     "SELECT rb_cardinality(rb_build(ARRAY[1,2,3]::int[]));"
 has_ext pgrouting && smoke_test "pgrouting dijkstra" \
     "SELECT count(*) FROM pg_proc WHERE proname = 'pgr_dijkstra';"
+has_ext pgtap && smoke_test "pgtap version" \
+    "SELECT pgtap_version();"
 has_ext pg_squeeze && smoke_test "pg_squeeze schema" \
     "SELECT count(*) FROM squeeze.tables;"
 has_ext pg_stat_monitor && smoke_test "pg_stat_monitor view" \
@@ -328,6 +340,8 @@ has_ext pg_uuidv7 && smoke_test "pg_uuidv7 generate" \
     "SELECT uuid_generate_v7();"
 has_ext pgaudit && smoke_test "pgaudit active" \
     "SHOW pgaudit.log;"
+has_ext pgjwt && smoke_test "pgjwt sign" \
+    "SELECT sign('{\"sub\":\"test\"}'::json, 'secret');"
 has_ext pglogical && smoke_test "pglogical version" \
     "SELECT pglogical.pglogical_version();"
 has_ext pgvector && smoke_test "pgvector similarity" \
@@ -338,6 +352,10 @@ has_ext plv8 && smoke_test "plv8 javascript" \
     "SELECT plv8_version();"
 has_ext postgis && smoke_test "PostGIS geometry" \
     "SELECT ST_AsText(ST_Point(1, 2));"
+has_ext postgres_protobuf && smoke_test "postgres_protobuf loaded" \
+    "SELECT count(*) FROM pg_proc WHERE proname = 'protobuf_decode';"
+has_ext prefix && smoke_test "prefix range" \
+    "SELECT '123'::prefix_range @> '1234567890';"
 has_ext rum && smoke_test "rum index" \
     "SELECT 1 FROM pg_available_extensions WHERE name = 'rum';"
 has_ext semver && smoke_test "semver comparison" \
