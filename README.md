@@ -369,33 +369,25 @@ licenses** (PostgreSQL, MIT, BSD, Apache 2.0, ISC).
 
 ### Why no GPL/copyleft extensions?
 
-You might notice that some managed PostgreSQL services (like Azure
-Database for PostgreSQL) offer GPL-licensed extensions such as
-`login_hook` or `session_variable`. We deliberately exclude these.
-The reason is that our legal situation is different from a cloud
-provider's:
+Some popular PostgreSQL extensions (like `login_hook` or
+`session_variable`) are licensed under GPL-3.0. We deliberately
+exclude these because distributing compiled binaries via Docker images
+triggers the GPL's copyleft obligations:
 
-- **Cloud services (SaaS)** run GPL code on their own servers. Users
-  access it over a network but never receive a copy of the binary.
-  Under the GPL, this does not count as "distribution," so the
-  copyleft source-sharing obligation is never triggered.
+- When you pull or `COPY --from` an extension layer, you receive a
+  compiled `.so` file. This counts as **distribution** under the GPL.
+- Whether a dynamically-loaded PostgreSQL extension constitutes a
+  "combined work" with other extensions in the same image is legally
+  ambiguous.
+- Users who compose a GPL extension layer with proprietary code or
+  other non-GPL-compatible extensions may unknowingly create
+  compliance issues.
 
-- **Docker images (us)** are distributed to users. When you pull or
-  `COPY --from` an extension layer, you receive a compiled `.so` file.
-  This IS distribution under the GPL, which means:
-  - The GPL license terms apply to anyone who receives the binary.
-  - Whether a dynamically-loaded PostgreSQL extension constitutes a
-    "combined work" with other extensions in the same image is legally
-    ambiguous.
-  - Users who compose a GPL extension layer with proprietary code or
-    other non-GPL-compatible extensions may unknowingly create
-    compliance issues.
-
-We take a conservative approach to protect end users: by shipping only
-permissively-licensed extensions, you can freely compose any combination
-of layers without worrying about license interactions. You can use the
-resulting image in proprietary projects, embed it in commercial products,
-or distribute it to customers -- no copyleft obligations attached.
+By shipping only permissively-licensed extensions, you can freely
+compose any combination of layers without worrying about license
+interactions. You can use the resulting image in proprietary projects,
+embed it in commercial products, or distribute it to customers -- no
+copyleft obligations attached.
 
 ### What this means in practice
 
