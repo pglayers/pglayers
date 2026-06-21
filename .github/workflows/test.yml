@@ -26,7 +26,7 @@ jobs:
         pg: ${{ fromJson(github.event.inputs.pg_version && format('["{0}"]', github.event.inputs.pg_version) || '["17", "18", "19"]') }}
     name: Test PG ${{ matrix.pg }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Free disk space
         run: |

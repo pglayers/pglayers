@@ -79,7 +79,9 @@ Each extension is published with two tag formats:
 - `pgx-<extension>:<pg_major>` -- latest build (e.g. `pgx-pgvector:17`)
 - `pgx-<extension>:<pg_major>-<version>` -- pinned version (e.g. `pgx-pgvector:17-v0.8.3`)
 
-All images are hosted on GHCR at `ghcr.io/iemejia/pgx-*`.
+All images are multi-architecture (`linux/amd64` and `linux/arm64`) and
+hosted on GHCR at `ghcr.io/iemejia/pgx-*`. Docker automatically pulls
+the correct architecture for your platform.
 
 ## Configuration notes
 

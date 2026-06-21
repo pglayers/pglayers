@@ -174,6 +174,13 @@ Every extension Dockerfile **must** follow these practices:
    containing only the extension artifacts. No build tools, no source
    code, no package manager state.
 
+5. **Architecture-neutral** -- Dockerfiles must work on both `linux/amd64`
+   and `linux/arm64` without modification. Do NOT hardcode architecture-
+   specific paths like `/usr/lib/x86_64-linux-gnu/`. Use
+   `dpkg-architecture -q DEB_HOST_MULTIARCH` if you need the multiarch
+   tuple. All source builds (git clone + make) are inherently portable;
+   only pre-built binary downloads need `TARGETARCH` handling.
+
 ### Keeping documentation in sync
 
 When adding, removing, or modifying extensions, **all of the following
@@ -209,3 +216,55 @@ appear:
 
 This ensures consistency, makes diffs readable, and avoids merge
 conflicts when multiple extensions are added in parallel.
+
+### Multi-architecture support
+
+All extension images **must** support both `linux/amd64` and
+`linux/arm64`. CI builds multi-arch manifest lists via QEMU emulation.
+
+Rules:
+
+1. **No hardcoded architecture paths** -- Never use
+   `/usr/lib/x86_64-linux-gnu/` directly. Use
+   `dpkg-architecture -q DEB_HOST_MULTIARCH` or let PGXS resolve paths
+   via `pg_config`.
+
+2. **Source builds are portable** -- `git clone` + `make` compiles
+   natively for both architectures without modification.
+
+3. **Binary downloads must use TARGETARCH** -- If an extension downloads
+   a pre-built binary (rare), use the `TARGETARCH` build arg:
+   ```dockerfile
+   ARG TARGETARCH
+   RUN curl -fsSL "https://example.com/bin-${TARGETARCH}.tar.gz" | tar xz
+   ```
+
+4. **Test on both architectures** when feasible -- At minimum, CI builds
+   for both. The test suite runs on amd64; arm64 correctness is verified
+   by the successful build + `ldd` check.
+
+### GitHub Actions version policy
+
+Always use the **latest major version** of all GitHub Actions in CI
+workflows. Stale action versions are a bug (they miss security fixes,
+performance improvements, and eventually break when GitHub deprecates
+old Node.js runtimes).
+
+Current minimum versions:
+
+| Action | Version |
+|--------|---------|
+| `actions/checkout` | `@v7` |
+| `docker/setup-qemu-action` | `@v4` |
+| `docker/setup-buildx-action` | `@v4` |
+| `docker/login-action` | `@v4` |
+| `docker/build-push-action` | `@v7` |
+
+When updating action versions:
+
+1. Check the action's releases page for the latest major tag.
+2. Update **all** workflow files that reference the action.
+3. Verify CI passes after the update.
+
+Do not pin to patch versions (e.g., `@v4.1.0`). Use the major tag
+(e.g., `@v4`) which floats to the latest compatible release.
