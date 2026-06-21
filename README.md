@@ -64,6 +64,8 @@ layers from the registry and overlays them onto the official image.
 | [pg_uuidv7](https://github.com/fboulnois/pg_uuidv7) | 17, 18 | UUIDv7 generation (time-sortable unique identifiers) |
 | [pg_bigm](https://github.com/pgbigm/pg_bigm) | 17, 18 | 2-gram full text search (better for CJK languages) |
 | [pg_stat_monitor](https://github.com/percona/pg_stat_monitor) | 17, 18 | Enhanced query statistics with histograms and buckets |
+| [h3-pg](https://github.com/zachasme/h3-pg) | 17, 18 | Uber H3 hexagonal geospatial indexing |
+| [timescaledb](https://github.com/timescale/timescaledb) | 17, 18 | Time-series hypertables, compression, continuous aggregates |
 
 ### Image tags
 
@@ -101,6 +103,7 @@ Extensions that need this:
 | anon | `anon` |
 | pg_durable | `pg_durable` |
 | pg_stat_monitor | `pg_stat_monitor` |
+| timescaledb | `timescaledb` |
 
 ### CREATE EXTENSION
 
