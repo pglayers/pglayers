@@ -227,6 +227,7 @@ declare -A EXT_SQL_NAMES=(
     [pg_partman]="pg_partman"
     [pg_repack]="pg_repack"
     [pg_roaringbitmap]="roaringbitmap"
+    [pg_similarity]="pg_similarity"
     [pg_squeeze]="pg_squeeze"
     [pg_stat_monitor]="pg_stat_monitor"
     [pg_uuidv7]="pg_uuidv7"
@@ -328,6 +329,8 @@ has_ext pg_repack && smoke_test "pg_repack version" \
     "SELECT repack.version();"
 has_ext pg_roaringbitmap && smoke_test "pg_roaringbitmap ops" \
     "SELECT rb_cardinality(rb_build(ARRAY[1,2,3]::int[]));"
+has_ext pg_similarity && smoke_test "pg_similarity levenshtein" \
+    "SELECT lev('hello', 'hallo');"
 has_ext pgrouting && smoke_test "pgrouting dijkstra" \
     "SELECT count(*) FROM pg_proc WHERE proname = 'pgr_dijkstra';"
 has_ext pgtap && smoke_test "pgtap version" \

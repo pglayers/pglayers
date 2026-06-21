@@ -58,6 +58,7 @@ layers from the registry and overlays them onto the official image.
 | [pg_partman](https://github.com/pgpartman/pg_partman) | 17, 18, 19 | Automated table partition management |
 | [pg_repack](https://github.com/reorg/pg_repack) | 17, 18, 19 | Online table reorganization without heavy locks |
 | [pg_roaringbitmap](https://github.com/ChenHuajun/pg_roaringbitmap) | 17, 18 | Roaring bitmap data type for fast set operations |
+| [pg_similarity](https://github.com/eulerto/pg_similarity) | 17, 18, 19 | Similarity functions (Levenshtein, Jaro-Winkler, Cosine, Jaccard) |
 | [pgrouting](https://github.com/pgRouting/pgrouting) | 17, 18 | Geospatial routing and network analysis on PostGIS |
 | [pg_squeeze](https://github.com/cybertec-postgresql/pg_squeeze) | 17, 18, 19 | Remove unused space from tables without heavy locks |
 | [pg_stat_monitor](https://github.com/percona/pg_stat_monitor) | 17, 18 | Enhanced query statistics with histograms and buckets |
