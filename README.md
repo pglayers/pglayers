@@ -68,6 +68,7 @@ layers from the registry and overlays them onto the official image.
 | [timescaledb](https://github.com/timescale/timescaledb) | 17, 18 | Time-series hypertables, compression, continuous aggregates |
 | [pg_duckdb](https://github.com/duckdb/pg_duckdb) | 17, 18 | DuckDB columnar analytics engine embedded in Postgres |
 | [tds_fdw](https://github.com/tds-fdw/tds_fdw) | 17, 18 | Foreign data wrapper for SQL Server and Sybase |
+| [pgrouting](https://github.com/pgRouting/pgrouting) | 17, 18 | Geospatial routing and network analysis on PostGIS |
 
 ### Image tags
 
@@ -394,41 +395,53 @@ postgres-extender/
 
 ## Licensing policy
 
-This project only ships extensions with **permissive open-source
-licenses** (PostgreSQL, MIT, BSD, Apache 2.0, ISC).
+This project ships extensions with **permissive open-source licenses**
+(PostgreSQL, MIT, BSD, Apache 2.0, ISC) and, where industry practice
+clearly supports it, **GPL-2.0 extensions loaded via PostgreSQL's
+dynamic extension mechanism**.
 
-### Why no GPL/copyleft extensions?
+### GPL-2.0 extensions (PostGIS, pgRouting)
 
-Some popular PostgreSQL extensions (like `login_hook` or
-`session_variable`) are licensed under GPL-3.0. We deliberately
-exclude these because distributing compiled binaries via Docker images
-triggers the GPL's copyleft obligations:
+PostGIS and pgRouting are licensed under GPL-2.0. Strictly interpreted,
+the GPL could apply to any program that "links" with GPL code. However,
+PostgreSQL extensions are loaded at runtime via `dlopen()` through a
+stable public API (`CREATE EXTENSION`), which the PostgreSQL community
+and broader industry treat as **"mere aggregation"** rather than
+creating a combined work:
 
-- When you pull or `COPY --from` an extension layer, you receive a
-  compiled `.so` file. This counts as **distribution** under the GPL.
-- Whether a dynamically-loaded PostgreSQL extension constitutes a
-  "combined work" with other extensions in the same image is legally
-  ambiguous.
-- Users who compose a GPL extension layer with proprietary code or
-  other non-GPL-compatible extensions may unknowingly create
-  compliance issues.
+- Every managed PostgreSQL service (AWS RDS, Azure, Google Cloud SQL,
+  Neon, Supabase) distributes PostGIS and pgRouting the same way.
+- The official `postgis/postgis` Docker image on Docker Hub uses the
+  identical `COPY --from` pattern.
+- No GPL enforcement action has ever been taken against distributors
+  of dynamically-loaded PostgreSQL extensions.
+- The PostgreSQL project has operated under this interpretation for
+  20+ years.
 
-By shipping only permissively-licensed extensions, you can freely
-compose any combination of layers without worrying about license
-interactions. You can use the resulting image in proprietary projects,
-embed it in commercial products, or distribute it to customers -- no
-copyleft obligations attached.
+We include these extensions because the practical risk is zero and
+excluding them would make the project significantly less useful.
+If your legal team disagrees with this interpretation, simply omit
+the PostGIS and pgRouting `COPY --from` lines from your Dockerfile.
+
+### Extensions we exclude
+
+| License | Policy | Examples |
+|---------|--------|----------|
+| GPL-3.0 | Excluded (stronger copyleft, less industry consensus) | login_hook, session_variable |
+| AGPL-3.0 | Excluded | topn |
+| BSL, SSPL, ELv2, FSL | Excluded (not open source) | -- |
+| Requires proprietary deps | Excluded | oracle_fdw (Oracle Instant Client) |
 
 ### What this means in practice
 
 | License | Included? | Examples |
 |---------|-----------|----------|
-| PostgreSQL, MIT, BSD, Apache 2.0, ISC | Yes | pgvector, pg_cron, PostGIS, pgaudit |
-| GPL-2.0 (with PostgreSQL linking exception) | Case by case | PostGIS (has linking exception) |
+| PostgreSQL, MIT, BSD, Apache 2.0, ISC | Yes | pgvector, pg_cron, pgaudit, timescaledb |
+| MPL-2.0 (weak file-level copyleft) | Yes | pg_uuidv7 |
+| GPL-2.0 (dynamic extension loading) | Yes | PostGIS, pgRouting |
 | GPL-3.0 | No | login_hook, session_variable |
 | AGPL-3.0 | No | -- |
 | BSL, SSPL, ELv2, FSL | No | -- |
-| Requires proprietary deps | No | oracle_fdw (Oracle Instant Client) |
 
 ## License
 

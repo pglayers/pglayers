@@ -219,6 +219,7 @@ declare -A EXT_SQL_NAMES=(
     [pg_duckdb]="pg_duckdb"
     [timescaledb]="timescaledb"
     [tds_fdw]="tds_fdw"
+    [pgrouting]="pgrouting"
     [pg_uuidv7]="pg_uuidv7"
     [plpgsql_check]="plpgsql_check"
     [pgvector]="vector"
@@ -245,6 +246,7 @@ declare -A SKIP_CREATE_EXT=(
     [wal2json]=1
     [pg_failover_slots]=1
     [timescaledb]=1
+    [pgrouting]=1
 )
 
 for ext in "${EXTENSIONS[@]}"; do
@@ -342,6 +344,8 @@ has_ext pg_duckdb && smoke_test "pg_duckdb loaded" \
     "SELECT count(*) FROM pg_extension WHERE extname = 'pg_duckdb';"
 has_ext tds_fdw && smoke_test "tds_fdw wrapper" \
     "SELECT count(*) FROM pg_foreign_data_wrapper WHERE fdwname = 'tds_fdw';"
+has_ext pgrouting && smoke_test "pgrouting dijkstra" \
+    "SELECT count(*) FROM pg_proc WHERE proname = 'pgr_dijkstra';"
 echo
 
 # ============================================================
