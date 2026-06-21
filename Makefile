@@ -1,6 +1,6 @@
 REGISTRY   ?= ghcr.io/$(or $(shell git remote get-url origin 2>/dev/null | sed -n 's|.*github\.com[:/]\([^/]*\)/.*|\1|p' | tr '[:upper:]' '[:lower:]'),local)
 PREFIX     ?= pgx
-PG_VERSIONS ?= 17 18
+PG_VERSIONS ?= 17 18 19
 EXTENSIONS := $(sort $(notdir $(patsubst %/,%,$(wildcard extensions/*/))))
 
 # Default PG version for single-extension targets

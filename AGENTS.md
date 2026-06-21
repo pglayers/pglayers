@@ -81,12 +81,13 @@ This test suite validates:
 - When adding a new extension
 - When changing the base PG version
 
-Tests **must pass for all supported PostgreSQL versions** (currently 17
-and 18). Run:
+Tests **must pass for all supported PostgreSQL versions** (currently 17,
+18, and 19). Run:
 
 ```bash
 make test REGISTRY=local PG=17
 make test REGISTRY=local PG=18
+make test REGISTRY=local PG=19
 ```
 
 Both must pass before merging. An extension that builds on PG 17 but
