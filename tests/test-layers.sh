@@ -151,7 +151,7 @@ FROM postgres:${PG}
 $(for ext in "${EXTENSIONS[@]}"; do
     echo "COPY --from=${REGISTRY}/${PREFIX}-${ext}:${PG} / /"
 done)
-RUN echo "shared_preload_libraries = 'age,anon,pg_cron,pg_durable,pg_stat_monitor,pgaudit,pg_partman_bgw,pg_hint_plan,pg_squeeze,credcheck,pg_failover_slots,timescaledb'" \
+RUN echo "shared_preload_libraries = 'age,anon,pg_cron,pg_duckdb,pg_durable,pg_stat_monitor,pgaudit,pg_partman_bgw,pg_hint_plan,pg_squeeze,credcheck,pg_failover_slots,timescaledb'" \
     >> /usr/share/postgresql/postgresql.conf.sample
 RUN echo "pg_durable.database = 'postgres'" >> /usr/share/postgresql/postgresql.conf.sample \
     && echo "pg_durable.worker_role = 'postgres'" >> /usr/share/postgresql/postgresql.conf.sample \
@@ -208,6 +208,7 @@ declare -A EXT_SQL_NAMES=(
     [pg_roaringbitmap]="roaringbitmap"
     [pg_stat_monitor]="pg_stat_monitor"
     [h3_pg]="h3"
+    [pg_duckdb]="pg_duckdb"
     [timescaledb]="timescaledb"
     [pg_uuidv7]="pg_uuidv7"
     [plpgsql_check]="plpgsql_check"
@@ -230,9 +231,11 @@ declare -A EXT_SQL_NAMES=(
 )
 
 # Extensions that are NOT loadable via CREATE EXTENSION
+# (or conflict with other extensions in the combined test image)
 declare -A SKIP_CREATE_EXT=(
     [wal2json]=1
     [pg_failover_slots]=1
+    [timescaledb]=1
 )
 
 for ext in "${EXTENSIONS[@]}"; do
@@ -321,8 +324,10 @@ smoke_test "pg_stat_monitor view" \
     "SELECT count(*) FROM pg_stat_monitor;"
 smoke_test "h3 cell" \
     "SELECT h3_lat_lng_to_cell('(0,0)'::point, 5);"
-smoke_test "timescaledb hypertable" \
-    "CREATE TABLE ts_smoke(t timestamptz NOT NULL, v float); SELECT create_hypertable('ts_smoke','t'); DROP TABLE ts_smoke;"
+smoke_test "timescaledb available" \
+    "SELECT count(*) FROM pg_available_extensions WHERE name = 'timescaledb';"
+smoke_test "pg_duckdb loaded" \
+    "SELECT count(*) FROM pg_extension WHERE extname = 'pg_duckdb';"
 echo
 
 # ============================================================

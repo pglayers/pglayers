@@ -66,6 +66,7 @@ layers from the registry and overlays them onto the official image.
 | [pg_stat_monitor](https://github.com/percona/pg_stat_monitor) | 17, 18 | Enhanced query statistics with histograms and buckets |
 | [h3-pg](https://github.com/zachasme/h3-pg) | 17, 18 | Uber H3 hexagonal geospatial indexing |
 | [timescaledb](https://github.com/timescale/timescaledb) | 17, 18 | Time-series hypertables, compression, continuous aggregates |
+| [pg_duckdb](https://github.com/duckdb/pg_duckdb) | 17, 18 | DuckDB columnar analytics engine embedded in Postgres |
 
 ### Image tags
 
@@ -104,6 +105,7 @@ Extensions that need this:
 | pg_durable | `pg_durable` |
 | pg_stat_monitor | `pg_stat_monitor` |
 | timescaledb | `timescaledb` |
+| pg_duckdb | `pg_duckdb` |
 
 ### CREATE EXTENSION
 
