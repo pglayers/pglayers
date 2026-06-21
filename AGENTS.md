@@ -116,6 +116,33 @@ The collision, overwrite, and ldd checks are automatic for all
 extensions in the `extensions/` directory -- no manual update needed
 for those.
 
+### Dockerfile requirements
+
+Every extension Dockerfile **must** follow these practices:
+
+1. **BuildKit syntax** -- Start with `# syntax=docker/dockerfile:1`.
+
+2. **APT cache mounts** -- Use `--mount=type=cache` for APT to avoid
+   re-downloading packages on rebuilds:
+   ```dockerfile
+   RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+       --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+       apt-get update && apt-get install -y --no-install-recommends ...
+   ```
+   Do NOT add `rm -rf /var/lib/apt/lists/*` (unnecessary with cache
+   mounts and it defeats the caching).
+
+3. **Strip debug symbols** -- Always strip `.so` files after
+   `make install` to reduce image size (50-80% reduction):
+   ```dockerfile
+   RUN make -j"$(nproc)" && make install DESTDIR=/output \
+       && find /output -name '*.so' -exec strip --strip-unneeded {} \;
+   ```
+
+4. **Minimal final image** -- The final stage must be `FROM scratch`
+   containing only the extension artifacts. No build tools, no source
+   code, no package manager state.
+
 ### Keeping documentation in sync
 
 When adding, removing, or modifying extensions, **all of the following

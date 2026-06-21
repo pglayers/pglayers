@@ -151,6 +151,12 @@ make build EXT=pgvector PG=17
 # Build all extensions for a PG version
 make build-all PG=17
 
+# Build a combined image with ALL extensions included
+make image PG=17 REGISTRY=local
+
+# Custom image name
+make image PG=18 REGISTRY=local IMAGE_NAME=my-postgres
+
 # Show detailed info for an extension (versions, notes, preload reqs)
 make info EXT=pg_cron
 
