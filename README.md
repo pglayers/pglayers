@@ -131,10 +131,19 @@ is initialized).
 ### PostGIS
 
 The PostGIS extension image bundles its runtime shared libraries (libgeos,
-libproj, libjson-c, libprotobuf-c, and PROJ data files), so
-`COPY --from` is fully self-contained. It is built **without raster
-support** to avoid the large GDAL dependency. Geometry, geography,
-topology, and MVT (Mapbox Vector Tiles) are all included.
+libproj, libgdal, libjson-c, libprotobuf-c, and PROJ/GDAL data files), so
+`COPY --from` is fully self-contained. Geometry, geography, topology,
+raster, and MVT (Mapbox Vector Tiles) are all included.
+
+To enable GDAL raster format drivers (GeoTIFF, PNG, etc.), set the
+environment variable:
+
+```dockerfile
+ENV POSTGIS_GDAL_ENABLED_DRIVERS=ENABLE_ALL
+```
+
+By default, GDAL drivers are disabled for security (same as the official
+PostGIS Docker image).
 
 ## How it works
 

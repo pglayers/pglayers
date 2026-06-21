@@ -10,7 +10,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
     build-essential ca-certificates curl \
     postgresql-server-dev-${PG_MAJOR} \
-    libgeos-dev libproj-dev libjson-c-dev libxml2-dev \
+    libgeos-dev libproj-dev libgdal-dev \
+    libjson-c-dev libxml2-dev \
     libprotobuf-c-dev protobuf-c-compiler \
     libtiff-dev libcurl4-gnutls-dev \
     pkg-config dpkg-dev
@@ -23,9 +24,9 @@ RUN curl -fsSL "https://download.osgeo.org/postgis/source/postgis-${EXT_VERSION}
 
 WORKDIR /tmp/ext
 
-# Build without raster (avoids the massive GDAL dependency).
+# Build with raster support (uses distro GDAL).
 # Topology and MVT (protobuf) support are included.
-RUN ./configure --without-raster --without-sfcgal \
+RUN ./configure --without-sfcgal \
     && make -j"$(nproc)" \
     && make install DESTDIR=/output \
     && find /output -name '*.so' -exec strip --strip-unneeded {} \;
@@ -43,43 +44,56 @@ ARG PG_MAJOR
 COPY --from=base /tmp/base-libs.txt /tmp/base-libs.txt
 RUN set -eux; \
     mkdir -p /runtime; \
-    # Find every shared lib our .so files link against (resolve symlinks
-    # so we always get /usr/lib/... paths, never /lib/... which is a
-    # symlink on modern Debian and would conflict with the base image).
+    # Collect all ldd-reported paths from PostGIS .so files
     find /output/usr/lib/postgresql/${PG_MAJOR}/lib -name '*.so' -exec ldd {} + 2>/dev/null \
-        | awk '/=>/ && /\// {print $3}' | sort -u | while read -r lib; do \
+        | awk '/=>/ && /\// {print $3}' | sort -u > /tmp/all-ldd-paths.txt; \
+    # Build resolved base image set for comparison
+    while IFS= read -r lib; do \
+        readlink -f "$lib" 2>/dev/null; \
+    done < /tmp/base-libs.txt | sort -u > /tmp/base-resolved.txt; \
+    # Normalize a path: /lib/... -> /usr/lib/... (Debian compat)
+    norm() { echo "$1" | sed 's|^/lib/|/usr/lib/|'; }; \
+    # Copy each dep that's not already in the base image.
+    # Use the ldd-reported path (preserves alternatives symlink names
+    # like libblas.so.3) and dereference to get actual file content.
+    while IFS= read -r lib; do \
         canonical="$(readlink -f "$lib")"; \
-        echo "$canonical"; \
-    done | sort -u > /tmp/all-deps.txt; \
-    # Resolve base image lib paths the same way
-    sed 's|.*|readlink -f "&" 2>/dev/null|' /tmp/base-libs.txt | sh | sort -u > /tmp/base-resolved.txt; \
-    # Subtract libs already in the base image
-    comm -23 /tmp/all-deps.txt /tmp/base-resolved.txt > /tmp/new-deps.txt; \
-    # Copy each new lib and its symlink family to canonical paths
-    while read -r lib; do \
-        [ -f "$lib" ] || continue; \
-        dir="$(dirname "$lib")"; \
+        # Skip if the canonical target is in the base image
+        if grep -qxF "$canonical" /tmp/base-resolved.txt 2>/dev/null; then \
+            continue; \
+        fi; \
+        # Normalize path to avoid /lib vs /usr/lib conflicts
+        dest="$(norm "$lib")"; \
+        dir="$(dirname "$dest")"; \
         mkdir -p "/runtime${dir}"; \
-        base="$(echo "$lib" | sed 's/\.so.*/.so/')"; \
-        for f in "${base}"*; do \
-            [ -e "$f" ] || continue; \
-            target="$(readlink -f "$f")"; \
-            tdir="$(dirname "$target")"; \
-            mkdir -p "/runtime${tdir}"; \
-            cp -a "$target" "/runtime${target}" 2>/dev/null || true; \
-            # Recreate symlink if it was one
-            if [ -L "$f" ]; then \
-                fname="$(basename "$f")"; \
-                fdir="$(cd "$(dirname "$f")" && pwd -P)"; \
-                mkdir -p "/runtime${fdir}"; \
-                ln -sf "$(basename "$target")" "/runtime${fdir}/${fname}" 2>/dev/null || true; \
-            fi; \
-        done; \
-    done < /tmp/new-deps.txt; \
+        cp -L "$lib" "/runtime${dest}" 2>/dev/null || true; \
+    done < /tmp/all-ldd-paths.txt; \
+    # Second pass: also resolve deps of the libs we just bundled
+    # (catches transitive deps like libblas via libgdal).
+    find /runtime -name '*.so*' -type f -exec ldd {} + 2>/dev/null \
+        | awk '/=>/ && /\// {print $3}' | sort -u > /tmp/pass2-paths.txt; \
+    while IFS= read -r lib; do \
+        dest="$(norm "$lib")"; \
+        # Skip if already bundled
+        [ -f "/runtime${dest}" ] && continue; \
+        canonical="$(readlink -f "$lib")"; \
+        # Skip if in base image
+        if grep -qxF "$canonical" /tmp/base-resolved.txt 2>/dev/null; then \
+            continue; \
+        fi; \
+        dir="$(dirname "$dest")"; \
+        mkdir -p "/runtime${dir}"; \
+        cp -L "$lib" "/runtime${dest}" 2>/dev/null || true; \
+    done < /tmp/pass2-paths.txt; \
     # PROJ data files needed for coordinate reference system transforms
     if [ -d /usr/share/proj ]; then \
         mkdir -p /runtime/usr/share; \
         cp -r /usr/share/proj /runtime/usr/share/; \
+    fi; \
+    # GDAL data files needed for raster format detection and SRS
+    if [ -d /usr/share/gdal ]; then \
+        mkdir -p /runtime/usr/share; \
+        cp -r /usr/share/gdal /runtime/usr/share/; \
     fi
 
 FROM scratch
