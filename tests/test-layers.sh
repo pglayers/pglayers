@@ -151,7 +151,7 @@ FROM postgres:${PG}
 $(for ext in "${EXTENSIONS[@]}"; do
     echo "COPY --from=${REGISTRY}/${PREFIX}-${ext}:${PG} / /"
 done)
-RUN echo "shared_preload_libraries = 'pg_cron,pgaudit,pg_partman_bgw'" \
+RUN echo "shared_preload_libraries = 'pg_cron,pgaudit,pg_partman_bgw,pg_hint_plan,pg_squeeze'" \
     >> /usr/share/postgresql/postgresql.conf.sample
 EOF
 
@@ -194,6 +194,9 @@ for i in $(seq 1 30); do
 done
 
 # Test CREATE EXTENSION for each
+# Map directory names to SQL extension names where they differ.
+# Extensions that are NOT loadable via CREATE EXTENSION (e.g., output
+# plugins) should be listed in SKIP_CREATE_EXT.
 declare -A EXT_SQL_NAMES=(
     [pgvector]="vector"
     [pg_cron]="pg_cron"
@@ -201,9 +204,30 @@ declare -A EXT_SQL_NAMES=(
     [pg_repack]="pg_repack"
     [pgaudit]="pgaudit"
     [pg_partman]="pg_partman"
+    [pg_hint_plan]="pg_hint_plan"
+    [pg_ivm]="pg_ivm"
+    [pg_squeeze]="pg_squeeze"
+    [hll]="hll"
+    [hypopg]="hypopg"
+    [ip4r]="ip4r"
+    [orafce]="orafce"
+    [semver]="semver"
+    [tdigest]="tdigest"
+    [temporal_tables]="temporal_tables"
+    [topn]="topn"
+)
+
+# Extensions that are NOT loadable via CREATE EXTENSION
+declare -A SKIP_CREATE_EXT=(
+    [wal2json]=1
 )
 
 for ext in "${EXTENSIONS[@]}"; do
+    # Skip extensions that aren't CREATE EXTENSION-able
+    if [ -n "${SKIP_CREATE_EXT[$ext]:-}" ]; then
+        pass "SKIP ${ext} (not a CREATE EXTENSION type)"
+        continue
+    fi
     sql_name="${EXT_SQL_NAMES[$ext]:-$ext}"
     result="$(docker exec pgx-func-test psql -U postgres -tAc \
         "CREATE EXTENSION IF NOT EXISTS ${sql_name}; SELECT extname FROM pg_extension WHERE extname='${sql_name}';" 2>&1)" || true
@@ -236,6 +260,32 @@ smoke_test "pg_repack version" \
     "SELECT repack.version();"
 smoke_test "pg_partman config table" \
     "SELECT count(*) FROM public.part_config;"
+smoke_test "pgaudit active" \
+    "SHOW pgaudit.log;"
+smoke_test "pg_hint_plan loaded" \
+    "SHOW pg_hint_plan.enable_hint;"
+smoke_test "hypopg create index" \
+    "SELECT indexrelid FROM hypopg_create_index('CREATE INDEX ON public.part_config (parent_table)');"
+smoke_test "hll aggregate" \
+    "SELECT hll_cardinality(hll_add_agg(hll_hash_integer(g))) FROM generate_series(1,100) g;"
+smoke_test "orafce nvl" \
+    "SELECT oracle.nvl(NULL::text, 'fallback');"
+smoke_test "topn aggregate" \
+    "SELECT topn(topn_add(topn_add('{}'::jsonb, 'hello'), 'world'), 2);"
+smoke_test "tdigest percentile" \
+    "SELECT tdigest_percentile(x, 100, 0.5) FROM generate_series(1,100) x;"
+smoke_test "ip4r range" \
+    "SELECT '192.168.1.0/24'::ip4r;"
+smoke_test "semver comparison" \
+    "SELECT '1.2.3'::semver > '1.2.2'::semver;"
+smoke_test "temporal_tables loaded" \
+    "SELECT proname FROM pg_proc WHERE proname = 'versioning';"
+smoke_test "pg_squeeze schema" \
+    "SELECT count(*) FROM squeeze.tables;"
+smoke_test "pg_ivm functions" \
+    "SELECT count(*) FROM pg_proc WHERE proname = 'create_immv';"
+smoke_test "wal2json plugin exists" \
+    "SELECT count(*) FROM pg_proc WHERE proname = 'pg_logical_slot_get_changes';"
 
 # Cleanup
 docker rm -f pgx-func-test >/dev/null 2>&1
