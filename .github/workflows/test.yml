@@ -1,0 +1,40 @@
+name: Test Extensions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'extensions/**'
+      - 'tests/**'
+      - 'Makefile'
+      - '.github/workflows/test.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      pg_version:
+        description: 'PostgreSQL major version (blank = all)'
+        required: false
+        default: ''
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: ${{ fromJson(github.event.inputs.pg_version && format('["{0}"]', github.event.inputs.pg_version) || '["17", "18"]') }}
+    name: Test PG ${{ matrix.pg }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker
+
+      - name: Build all extensions (PG ${{ matrix.pg }})
+        run: make build-all PG=${{ matrix.pg }} REGISTRY=local
+
+      - name: Run test suite (PG ${{ matrix.pg }})
+        run: make test REGISTRY=local PG=${{ matrix.pg }}
