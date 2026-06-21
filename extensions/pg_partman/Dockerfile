@@ -3,7 +3,7 @@ ARG PG_MAJOR=17
 
 FROM postgres:${PG_MAJOR} AS builder
 ARG PG_MAJOR
-ARG EXT_VERSION=v5.2.4
+ARG EXT_VERSION=v5.4.3
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
