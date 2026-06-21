@@ -55,6 +55,7 @@ layers from the registry and overlays them onto the official image.
 | [pg_ivm](https://github.com/sraoss/pg_ivm) | 17, 18 | Incremental View Maintenance for materialized views |
 | [credcheck](https://github.com/HexaCluster/credcheck) | 17, 18 | Credential checks on user creation / password change |
 | [pg_failover_slots](https://github.com/EnterpriseDB/pg_failover_slots) | 17, 18 | Logical replication slot manager for failover |
+| [age](https://github.com/apache/age) | 17, 18 | Graph database with openCypher query language (Apache AGE) |
 
 ### Image tags
 
@@ -88,6 +89,7 @@ Extensions that need this:
 | pg_squeeze | `pg_squeeze` |
 | credcheck | `credcheck` |
 | pg_failover_slots | `pg_failover_slots` |
+| age | `age` |
 
 ### CREATE EXTENSION
 

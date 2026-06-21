@@ -151,7 +151,7 @@ FROM postgres:${PG}
 $(for ext in "${EXTENSIONS[@]}"; do
     echo "COPY --from=${REGISTRY}/${PREFIX}-${ext}:${PG} / /"
 done)
-RUN echo "shared_preload_libraries = 'pg_cron,pgaudit,pg_partman_bgw,pg_hint_plan,pg_squeeze,credcheck,pg_failover_slots'" \
+RUN echo "shared_preload_libraries = 'age,pg_cron,pgaudit,pg_partman_bgw,pg_hint_plan,pg_squeeze,credcheck,pg_failover_slots'" \
     >> /usr/share/postgresql/postgresql.conf.sample
 EOF
 
@@ -198,6 +198,7 @@ done
 # Extensions that are NOT loadable via CREATE EXTENSION (e.g., output
 # plugins) should be listed in SKIP_CREATE_EXT.
 declare -A EXT_SQL_NAMES=(
+    [age]="age"
     [pgvector]="vector"
     [pg_cron]="pg_cron"
     [postgis]="postgis"
@@ -288,6 +289,8 @@ smoke_test "credcheck loaded" \
     "SHOW credcheck.password_min_length;"
 smoke_test "pg_failover_slots loaded" \
     "SELECT count(*) FROM pg_proc WHERE proname LIKE 'pg_failover_slot%';"
+smoke_test "age graph" \
+    "LOAD 'age'; SET search_path = ag_catalog; SELECT create_graph('smoke_g'); SELECT drop_graph('smoke_g', true);"
 echo
 
 # ============================================================

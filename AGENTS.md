@@ -27,6 +27,20 @@ Extensions we explicitly exclude:
 - **oracle_fdw** -- requires proprietary Oracle Instant Client
 - Any extension under BSL/SSPL/FSL/ELv2 or similar delayed-open licenses
 
+## Version Policy
+
+Always use the **latest stable release** of each extension that is
+compatible with our supported PostgreSQL versions (currently 17 and 18).
+When a new upstream release is published:
+
+1. Update `VERSION_17` and `VERSION_18` in `extension.conf`.
+2. Update the `ARG EXT_VERSION` default in the Dockerfile.
+3. Run `make test REGISTRY=local PG=17` and `PG=18`.
+4. Update the README if the version appears in any examples.
+
+Do not pin to old versions unless the latest has a known incompatibility
+or license change. Stale versions are a bug.
+
 ## Testing Requirements
 
 When adding new extensions or modifying existing ones, **always run the
