@@ -67,6 +67,7 @@ layers from the registry and overlays them onto the official image.
 | [h3-pg](https://github.com/zachasme/h3-pg) | 17, 18 | Uber H3 hexagonal geospatial indexing |
 | [timescaledb](https://github.com/timescale/timescaledb) | 17, 18 | Time-series hypertables, compression, continuous aggregates |
 | [pg_duckdb](https://github.com/duckdb/pg_duckdb) | 17, 18 | DuckDB columnar analytics engine embedded in Postgres |
+| [tds_fdw](https://github.com/tds-fdw/tds_fdw) | 17, 18 | Foreign data wrapper for SQL Server and Sybase |
 
 ### Image tags
 
