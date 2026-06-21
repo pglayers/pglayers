@@ -67,6 +67,18 @@ This test suite validates:
 - When adding a new extension
 - When changing the base PG version
 
+Tests **must pass for all supported PostgreSQL versions** (currently 17
+and 18). Run:
+
+```bash
+make test REGISTRY=local PG=17
+make test REGISTRY=local PG=18
+```
+
+Both must pass before merging. An extension that builds on PG 17 but
+fails on PG 18 (or vice versa) is not acceptable -- either fix it for
+both versions or remove the unsupported version from `extension.conf`.
+
 ### Common collision scenarios to watch for
 
 - Two extensions bundling the same runtime shared library at different
