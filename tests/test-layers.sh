@@ -213,6 +213,7 @@ declare -A EXT_SQL_NAMES=(
     [anon]="anon"
     [h3_pg]="h3"
     [hll]="hll"
+    [http]="http"
     [hypopg]="hypopg"
     [ip4r]="ip4r"
     [orafce]="orafce"
@@ -224,6 +225,7 @@ declare -A EXT_SQL_NAMES=(
     [pg_hint_plan]="pg_hint_plan"
     [pg_ivm]="pg_ivm"
     [pg_jsonschema]="pg_jsonschema"
+    [pg_net]="pg_net"
     [pg_partman]="pg_partman"
     [pg_repack]="pg_repack"
     [pg_roaringbitmap]="roaringbitmap"
@@ -235,6 +237,7 @@ declare -A EXT_SQL_NAMES=(
     [pgjwt]="pgjwt"
     [pglogical]="pglogical"
     [pgrouting]="pgrouting"
+    [pgsodium]="pgsodium"
     [pgtap]="pgtap"
     [pgvector]="vector"
     [plpgsql_check]="plpgsql_check"
@@ -299,6 +302,8 @@ has_ext h3_pg && smoke_test "h3 cell" \
     "SELECT h3_lat_lng_to_cell('(0,0)'::point, 5);"
 has_ext hll && smoke_test "hll aggregate" \
     "SELECT hll_cardinality(hll_add_agg(hll_hash_integer(g))) FROM generate_series(1,100) g;"
+has_ext http && smoke_test "http functions" \
+    "SELECT count(*) FROM pg_proc WHERE proname = 'http_get';"
 has_ext hypopg && smoke_test "hypopg create index" \
     "SELECT indexrelid FROM hypopg_create_index('CREATE INDEX ON public.part_config (parent_table)');"
 has_ext ip4r && smoke_test "ip4r range" \
@@ -323,6 +328,8 @@ has_ext pg_ivm && smoke_test "pg_ivm functions" \
     "SELECT count(*) FROM pg_proc WHERE proname = 'create_immv';"
 has_ext pg_jsonschema && smoke_test "pg_jsonschema validate" \
     "SELECT json_matches_schema('{\"type\":\"object\"}'::json, '{}'::json);"
+has_ext pg_net && smoke_test "pg_net schema" \
+    "SELECT count(*) FROM pg_namespace WHERE nspname = 'net';"
 has_ext pg_partman && smoke_test "pg_partman config table" \
     "SELECT count(*) FROM public.part_config;"
 has_ext pg_repack && smoke_test "pg_repack version" \
@@ -333,6 +340,8 @@ has_ext pg_similarity && smoke_test "pg_similarity levenshtein" \
     "SELECT lev('hello', 'hallo');"
 has_ext pgrouting && smoke_test "pgrouting dijkstra" \
     "SELECT count(*) FROM pg_proc WHERE proname = 'pgr_dijkstra';"
+has_ext pgsodium && smoke_test "pgsodium random" \
+    "SELECT length(pgsodium.randombytes_buf(16));"
 has_ext pgtap && smoke_test "pgtap version" \
     "SELECT pgtap_version();"
 has_ext pg_squeeze && smoke_test "pg_squeeze schema" \
