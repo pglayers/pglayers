@@ -103,3 +103,25 @@ This means updating `tests/test-layers.sh` to include:
 The collision, overwrite, and ldd checks are automatic for all
 extensions in the `extensions/` directory -- no manual update needed
 for those.
+
+### Keeping documentation in sync
+
+When adding, removing, or modifying extensions, **all of the following
+must be updated in the same commit**:
+
+1. **`README.md` "Available extensions" table** -- Add a row with the
+   extension name (linked to its repo), PG versions, and description.
+   Also update the `shared_preload_libraries` table if applicable.
+
+2. **`make list` output** -- This is automatic (driven by
+   `extension.conf` files), but verify the description is concise and
+   the PG version columns are correct.
+
+3. **`tests/test-layers.sh`** -- As described above (name mapping,
+   smoke test, shared_preload entry).
+
+4. **`extension.conf` LICENSE field** -- Every extension must document
+   its license. Run `make list` and verify the new extension appears.
+
+Do not merge a PR that adds an extension to `extensions/` without
+updating the README table and tests. Stale documentation is a bug.
