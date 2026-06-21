@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: ${{ fromJson(github.event.inputs.pg_version && format('["{0}"]', github.event.inputs.pg_version) || '["17", "18"]') }}
+        pg: ${{ fromJson(github.event.inputs.pg_version && format('["{0}"]', github.event.inputs.pg_version) || '["17", "18", "19"]') }}
     name: Test PG ${{ matrix.pg }}
     steps:
       - uses: actions/checkout@v4
@@ -33,6 +33,15 @@ jobs:
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
           docker system prune -af
           df -h /
+
+      - name: Tag beta images as major version
+        run: |
+          # PG 19 is currently in beta; tag the beta image so our
+          # Dockerfiles (which use postgres:${PG_MAJOR}) can find it
+          if [ "${{ matrix.pg }}" = "19" ]; then
+            docker pull postgres:19beta1
+            docker tag postgres:19beta1 postgres:19
+          fi
 
       - name: Build all extensions (PG ${{ matrix.pg }})
         env:

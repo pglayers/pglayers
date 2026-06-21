@@ -40,7 +40,7 @@ jobs:
             ext="$(basename "$ext_dir")"
             [ -n "$ext_filter" ] && [ "$ext" != "$ext_filter" ] && continue
             source "$ext_dir/extension.conf"
-            for pg in 17 18; do
+            for pg in 17 18 19; do
               [ -n "$pg_filter" ] && [ "$pg" != "$pg_filter" ] && continue
               ver_var="VERSION_${pg}"
               ver="${!ver_var}"
