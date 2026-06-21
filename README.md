@@ -47,7 +47,6 @@ layers from the registry and overlays them onto the official image.
 | [hypopg](https://github.com/HypoPG/hypopg) | 17, 18 | Hypothetical indexes for what-if analysis |
 | [hll](https://github.com/citusdata/postgresql-hll) | 17, 18 | HyperLogLog probabilistic distinct counting |
 | [orafce](https://github.com/orafce/orafce) | 17, 18 | Oracle compatibility functions and packages |
-| [topn](https://github.com/citusdata/postgresql-topn) | 17, 18 | Top-N values aggregation |
 | [tdigest](https://github.com/tvondra/tdigest) | 17, 18 | T-digest for quantile and percentile estimation |
 | [ip4r](https://github.com/RhodiumToad/ip4r) | 17, 18 | IPv4/IPv6 range data types with GiST indexing |
 | [semver](https://github.com/theory/pg-semver) | 17, 18 | Semantic version data type |

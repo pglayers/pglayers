@@ -214,7 +214,6 @@ declare -A EXT_SQL_NAMES=(
     [semver]="semver"
     [tdigest]="tdigest"
     [temporal_tables]="temporal_tables"
-    [topn]="topn"
 )
 
 # Extensions that are NOT loadable via CREATE EXTENSION
@@ -271,8 +270,6 @@ smoke_test "hll aggregate" \
     "SELECT hll_cardinality(hll_add_agg(hll_hash_integer(g))) FROM generate_series(1,100) g;"
 smoke_test "orafce nvl" \
     "SELECT oracle.nvl(NULL::text, 'fallback');"
-smoke_test "topn aggregate" \
-    "SELECT topn(topn_add(topn_add('{}'::jsonb, 'hello'), 'world'), 2);"
 smoke_test "tdigest percentile" \
     "SELECT tdigest_percentile(x, 100, 0.5) FROM generate_series(1,100) x;"
 smoke_test "ip4r range" \
