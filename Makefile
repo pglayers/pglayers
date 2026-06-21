@@ -6,7 +6,7 @@ EXTENSIONS := $(sort $(notdir $(patsubst %/,%,$(wildcard extensions/*/))))
 # Default PG version for single-extension targets
 PG ?= 17
 
-.PHONY: help list build build-all image push push-all dockerfile clean clean-all test
+.PHONY: help list build build-all image push push-all dockerfile clean clean-all test test-image
 
 help: ## Show this help
 	@printf "Usage:\n"
@@ -18,6 +18,7 @@ help: ## Show this help
 	@printf "  make dockerfile EXT=pgvector      Print generated Dockerfile to stdout\n"
 	@printf "  make list                         List available extensions\n"
 	@printf "  make test [REGISTRY=local] [PG=17] Run collision and functional tests\n"
+	@printf "  make test-image [PG=17]            Run integration tests against combined image\n"
 	@printf "  make clean EXT=pgvector           Remove built image for one extension\n"
 	@printf "  make clean-all                    Remove all built extension images\n"
 	@printf "\nVariables:\n"
@@ -142,6 +143,9 @@ clean-all: ## Remove all built extension images
 
 test: ## Run layer collision and functional tests
 	@./tests/test-layers.sh $(REGISTRY) $(PG)
+
+test-image: ## Run integration tests against the combined image
+	@./tests/test-image.sh $(IMAGE_NAME):$(PG)
 
 _check-ext:
 	@test -n "$(EXT)" || { echo "Error: EXT is required. Usage: make build EXT=pgvector [PG=17]"; exit 1; }
