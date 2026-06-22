@@ -151,7 +151,8 @@ jobs:
       fail-fast: false
       matrix:
         profile: [azure, full]
-        pg: [17, 18, 19]
+        # PG 19 excluded: beta images are not pushed to the registry
+        pg: [17, 18]
     name: Profile ${{ matrix.profile }} (PG ${{ matrix.pg }})
     steps:
       - uses: actions/checkout@v7
