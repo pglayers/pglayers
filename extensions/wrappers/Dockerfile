@@ -31,7 +31,7 @@ ARG PG_MAJOR
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
-    build-essential pkg-config \
+    build-essential pkg-config ca-certificates \
     postgresql-server-dev-${PG_MAJOR} \
     libssl-dev libclang-dev
 
