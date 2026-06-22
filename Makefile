@@ -129,6 +129,7 @@ image: ## Build a combined image with all extensions
 	@echo "Building combined image $(IMAGE_NAME):$(PG)..."
 	@TMPFILE=$$(mktemp); \
 	skipped=""; \
+	included_list=""; \
 	included=0; \
 	total=0; \
 	{ \
@@ -140,6 +141,7 @@ image: ## Build a combined image with all extensions
 			if docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1; then \
 				echo "COPY --from=$(REGISTRY)/$(PREFIX)-$$ext:$(PG) / /"; \
 				included=$$((included + 1)); \
+				included_list="$${included_list:+$$included_list,}\"$$ext\""; \
 			else \
 				skipped="$${skipped:+$$skipped }$$ext"; \
 			fi; \
@@ -153,6 +155,22 @@ image: ## Build a combined image with all extensions
 			[ -n "$$spl" ] && preloads="$${preloads:+$$preloads,}$$spl"; \
 		done; \
 		[ -n "$$preloads" ] && echo "RUN echo \"shared_preload_libraries = '$$preloads'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
+		echo "RUN mkdir -p /etc/pglayers && echo '{' > /etc/pglayers/manifest.json \\"; \
+		echo "  && echo '  \"pg_version\": \"$(PG)\",' >> /etc/pglayers/manifest.json \\"; \
+		echo "  && echo '  \"profile\": \"$(or $(PROFILE),full)\",' >> /etc/pglayers/manifest.json \\"; \
+		echo "  && echo '  \"included\": [$$included_list],' >> /etc/pglayers/manifest.json \\"; \
+		if [ -n "$$skipped" ]; then \
+			skipped_json=$$(echo "$$skipped" | tr ' ' '\n' | sed 's/.*/"&"/' | paste -sd,); \
+			echo "  && echo '  \"missing\": [$$skipped_json]' >> /etc/pglayers/manifest.json \\"; \
+		else \
+			echo "  && echo '  \"missing\": []' >> /etc/pglayers/manifest.json \\"; \
+		fi; \
+		echo "  && echo '}' >> /etc/pglayers/manifest.json"; \
+		echo "LABEL org.pglayers.extensions.included=$$included"; \
+		echo "LABEL org.pglayers.extensions.total=$$total"; \
+		if [ -n "$$skipped" ]; then \
+			echo "LABEL org.pglayers.extensions.missing=\"$$skipped\""; \
+		fi; \
 	} > "$$TMPFILE"; \
 	if [ -n "$$skipped" ]; then \
 		echo "Included $$included/$$total extensions (missing: $$skipped)"; \
