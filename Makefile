@@ -65,6 +65,7 @@ build: _check-ext ## Build a single extension image
 	docker buildx build \
 		$(if $(PLATFORM),--platform $(PLATFORM)) \
 		--build-arg PG_MAJOR=$(PG) \
+		--build-arg PG_TAG=$(or $(PG_TAG),$(PG)) \
 		--build-arg EXT_VERSION=$(EXT_VERSION) \
 		-t $(REGISTRY)/$(PREFIX)-$(EXT):$(PG) \
 		-t $(REGISTRY)/$(PREFIX)-$(EXT):$(PG)-$(EXT_VERSION) \

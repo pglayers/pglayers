@@ -1,9 +1,10 @@
 # syntax=docker/dockerfile:1
 ARG PG_MAJOR=17
+ARG PG_TAG=${PG_MAJOR}
 
 # Build on Bookworm (older C++ stdlib compatible with V8 v6.4)
 # The resulting .so is still loadable on Trixie (libc is backward compatible)
-FROM postgres:${PG_MAJOR}-bookworm AS builder
+FROM postgres:${PG_TAG}-bookworm AS builder
 ARG PG_MAJOR
 ARG EXT_VERSION=v3.2.4
 

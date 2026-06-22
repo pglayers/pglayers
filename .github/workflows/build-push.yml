@@ -99,12 +99,12 @@ jobs:
       - name: Tag beta images as major version
         if: matrix.pg == '19'
         run: |
-          # PG 19 is in beta; tag so Dockerfiles (FROM postgres:${PG_MAJOR}) resolve locally
+          # PG 19 is in beta; tag so profile-images job can use it as base
           docker pull postgres:19beta1
           docker tag postgres:19beta1 postgres:19
 
       - name: Set up QEMU
-        if: github.event_name != 'pull_request' && matrix.pg != '19'
+        if: github.event_name != 'pull_request'
         uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
@@ -119,7 +119,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push ${{ matrix.extension }} (PG ${{ matrix.pg }})
-        if: matrix.pg != '19'
         uses: docker/build-push-action@v7
         with:
           context: extensions/${{ matrix.extension }}
@@ -128,6 +127,7 @@ jobs:
           platforms: ${{ github.event_name != 'pull_request' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
           build-args: |
             PG_MAJOR=${{ matrix.pg }}
+            PG_TAG=${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
             EXT_VERSION=${{ matrix.version }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
@@ -135,18 +135,6 @@ jobs:
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}-${{ matrix.version }}
           cache-from: type=gha,scope=${{ matrix.extension }}-${{ matrix.pg }}
           cache-to: type=gha,mode=min,scope=${{ matrix.extension }}-${{ matrix.pg }}
-
-      - name: Build and push ${{ matrix.extension }} (PG ${{ matrix.pg }} beta)
-        if: matrix.pg == '19'
-        run: |
-          # PG 19 beta: use make build (local docker daemon sees the tagged beta image)
-          # then push amd64-only. Once PG 19 is GA, remove this step and the pg!=19 condition above.
-          make build EXT=${{ matrix.extension }} PG=${{ matrix.pg }} \
-            REGISTRY=${{ env.REGISTRY }}/${{ github.repository_owner }}
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}
-            docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}-${{ matrix.version }} || true
-          fi
 
   profile-images:
     needs: build

@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 ARG PG_MAJOR=17
+ARG PG_TAG=${PG_MAJOR}
 
-FROM postgres:${PG_MAJOR} AS builder
+FROM postgres:${PG_TAG} AS builder
 ARG PG_MAJOR
 ARG EXT_VERSION=REL17_1_7_1
 
