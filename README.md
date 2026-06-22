@@ -1,18 +1,44 @@
 # pglayers
 
-Composable PostgreSQL extension layers for Docker. Pick the extensions you
-need, add a `COPY --from` line per extension, and get a ready-to-use image
-in seconds -- no compilation, no build tools, no waiting.
+The [official PostgreSQL Docker images](https://hub.docker.com/_/postgres)
+ship without extensions. Every time you need pgvector, PostGIS, or
+pg_cron, you're stuck compiling from source or settling for third-party
+images that only include a handful of extensions.
 
-Each extension is pre-built and published as a minimal Docker image
-containing only the extension binaries (`.so`, `.sql`, `.control` files).
-You compose them on top of the
-[official `postgres` image](https://hub.docker.com/_/postgres) using
-standard Docker multi-stage `COPY --from` instructions.
+pglayers fixes this. It's both a **ready-to-use PostgreSQL distribution
+with extensions pre-installed** and a **tool to build your own custom
+image** with exactly the extensions you need -- all on top of the
+official `postgres` Docker images. You don't need to figure out how to
+build extensions, chase dependencies, or maintain Dockerfiles.
+
+Each extension is published as a minimal Docker image layer containing
+only its binaries. You stack them on top of the official `postgres`
+image using `COPY --from` -- one line per extension, no compilation.
 
 ## Quick start
 
-Create a `Dockerfile`:
+### Option 1: Ready-to-use images
+
+Pre-built combined images with `shared_preload_libraries` already
+configured:
+
+```bash
+# All 52 extensions
+docker run -d -e POSTGRES_PASSWORD=secret ghcr.io/pglayers/pglayers-full:17
+
+# Azure Database for PostgreSQL compatible (28 extensions)
+docker run -d -e POSTGRES_PASSWORD=secret ghcr.io/pglayers/pglayers-azure:17
+```
+
+Available profiles: `full`, `azure`. Each is published for PG 17, 18,
+and 19. See [Profiles](#profiles) for details and how to create custom
+ones.
+
+### Option 2: Pick your own extensions
+
+Each extension is published as its own image layer. You stack them onto
+the official `postgres` image with `COPY --from` -- each line adds one
+extension to the final image:
 
 ```dockerfile
 FROM postgres:17
@@ -29,8 +55,23 @@ docker build -t my-postgres .
 docker run -d -e POSTGRES_PASSWORD=secret my-postgres
 ```
 
-That's it. No compilation happens -- Docker pulls the pre-built extension
+No compilation happens -- Docker pulls the pre-built extension
 layers from the registry and overlays them onto the official image.
+The result is a single image with exactly the extensions you chose,
+composed layer by layer.
+
+## Supported PostgreSQL versions
+
+| Version | Status |
+|---------|--------|
+| PostgreSQL 17 | Stable |
+| PostgreSQL 18 | Stable |
+| PostgreSQL 19 | Experimental (beta -- supported until officially released) |
+
+All extensions are built and tested against PG 17 and 18. Support for
+PG 19 is best-effort while it remains in beta; some extensions may not
+yet have upstream compatibility. Once PG 19 reaches GA, it will be
+promoted to stable.
 
 ## Available extensions
 

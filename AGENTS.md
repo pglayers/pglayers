@@ -223,14 +223,20 @@ must be updated in the same commit**:
    extension name (linked to its repo), PG versions, and description.
    Also update the `shared_preload_libraries` table if applicable.
 
-2. **`make list` output** -- This is automatic (driven by
+2. **`README.md` "Configuration notes" section** -- If the extension
+   requires any special configuration beyond `shared_preload_libraries`
+   (e.g., environment variables, GUC parameters, init scripts, or
+   runtime setup), document it in the README under "Configuration
+   notes" with a dedicated subsection.
+
+3. **`make list` output** -- This is automatic (driven by
    `extension.conf` files), but verify the description is concise and
    the PG version columns are correct.
 
-3. **`tests/test-layers.sh`** -- As described above (name mapping,
+4. **`tests/test-layers.sh`** -- As described above (name mapping,
    smoke test, shared_preload entry).
 
-4. **`extension.conf` LICENSE field** -- Every extension must document
+5. **`extension.conf` LICENSE field** -- Every extension must document
    its license. Run `make list` and verify the new extension appears.
 
 Do not merge a PR that adds an extension to `extensions/` without
