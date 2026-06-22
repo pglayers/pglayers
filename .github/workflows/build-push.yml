@@ -96,8 +96,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Tag beta images as major version
+        if: matrix.pg == '19'
+        run: |
+          # PG 19 is in beta; tag so Dockerfiles (FROM postgres:${PG_MAJOR}) resolve locally
+          docker pull postgres:19beta1
+          docker tag postgres:19beta1 postgres:19
+
       - name: Set up QEMU
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && matrix.pg != '19'
         uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
@@ -116,12 +123,15 @@ jobs:
         with:
           context: extensions/${{ matrix.extension }}
           file: extensions/${{ matrix.extension }}/Dockerfile
-          # Multi-arch on push/schedule/dispatch; amd64-only on PRs (saves ~50% time)
-          platforms: ${{ github.event_name != 'pull_request' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          # PG 19 (beta): amd64-only with --load (base image only available locally)
+          # PG 17/18: multi-arch on push/schedule/dispatch; amd64-only on PRs
+          platforms: ${{ matrix.pg != '19' && github.event_name != 'pull_request' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
           build-args: |
             PG_MAJOR=${{ matrix.pg }}
             EXT_VERSION=${{ matrix.version }}
-          push: ${{ github.event_name != 'pull_request' }}
+          # PG 19 beta: load locally only (can't push without multi-arch manifest)
+          load: ${{ matrix.pg == '19' }}
+          push: ${{ matrix.pg != '19' && github.event_name != 'pull_request' }}
           tags: |
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}-${{ matrix.version }}
