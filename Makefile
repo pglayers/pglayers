@@ -160,6 +160,8 @@ image: ## Build a combined image with all extensions
 		echo "RUN mkdir -p /etc/pglayers && echo '{' > /etc/pglayers/manifest.json \\"; \
 		echo "  && echo '  \"pg_version\": \"$(PG)\",' >> /etc/pglayers/manifest.json \\"; \
 		echo "  && echo '  \"profile\": \"$(or $(PROFILE),full)\",' >> /etc/pglayers/manifest.json \\"; \
+		echo "  && echo '  \"count\": '$$included',' >> /etc/pglayers/manifest.json \\"; \
+		echo "  && echo '  \"total\": '$$total',' >> /etc/pglayers/manifest.json \\"; \
 		echo "  && echo '  \"included\": [$$included_list],' >> /etc/pglayers/manifest.json \\"; \
 		if [ -n "$$skipped" ]; then \
 			skipped_json=$$(echo "$$skipped" | tr ' ' '\n' | sed 's/.*/"&"/' | paste -sd,); \
