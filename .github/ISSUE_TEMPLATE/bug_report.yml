@@ -1,0 +1,98 @@
+name: Bug Report
+description: Report a build failure, runtime error, or unexpected behavior
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - Extension build failure
+        - Runtime error (CREATE EXTENSION fails)
+        - Missing shared library (ldd failure)
+        - File collision between extensions
+        - Test suite failure
+        - CI/workflow issue
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: extension
+    attributes:
+      label: Extension(s) affected
+      description: Which extension(s) are involved?
+      placeholder: "e.g., pgvector, postgis"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: pg_version
+    attributes:
+      label: PostgreSQL version
+      multiple: true
+      options:
+        - "17"
+        - "18"
+        - "19"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: arch
+    attributes:
+      label: Architecture
+      options:
+        - linux/amd64
+        - linux/arm64
+        - Both
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect to happen?
+      placeholder: |
+        When I run `make build EXT=pgvector PG=17`, the build fails with...
+
+        Expected: successful build
+        Actual: error at step X
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to reproduce the issue.
+      placeholder: |
+        1. git clone ...
+        2. make build EXT=... PG=...
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or error output
+      description: Paste relevant build or runtime logs.
+      render: shell
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Docker version, host OS, and any relevant details.
+      placeholder: |
+        - Docker: 27.0.3
+        - Host OS: Ubuntu 24.04
+        - BuildKit: enabled
+      value: |
+        - Docker:
+        - Host OS:
+        - BuildKit: enabled
+    validations:
+      required: true

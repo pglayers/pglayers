@@ -1,0 +1,120 @@
+name: New Extension Request
+description: Request or propose adding a new PostgreSQL extension
+labels: ["extension-request"]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: Extension name
+      description: The name of the PostgreSQL extension.
+      placeholder: "e.g., pg_example"
+    validations:
+      required: true
+
+  - type: input
+    id: repo
+    attributes:
+      label: Repository URL
+      description: Link to the extension's source code repository.
+      placeholder: "https://github.com/org/pg_example"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: license
+    attributes:
+      label: License
+      description: >
+        The extension's license. We accept permissive licenses
+        (PostgreSQL, MIT, BSD, Apache 2.0, ISC, MPL-2.0) and GPL-2.0
+        for dynamically-loaded extensions. See the licensing policy in
+        the README.
+      options:
+        - PostgreSQL
+        - MIT
+        - BSD (2-clause or 3-clause)
+        - Apache 2.0
+        - ISC
+        - MPL-2.0
+        - GPL-2.0
+        - Other (specify below)
+    validations:
+      required: true
+
+  - type: input
+    id: license_other
+    attributes:
+      label: License (if Other)
+      description: Specify the license if you selected "Other" above.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: >
+        What does this extension do? Why is it useful to include in
+        pglayers?
+      placeholder: "pg_example provides ... and is commonly used for ..."
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: pg_versions
+    attributes:
+      label: PostgreSQL versions supported
+      options:
+        - label: PostgreSQL 17
+        - label: PostgreSQL 18
+        - label: PostgreSQL 19
+
+  - type: dropdown
+    id: preload
+    attributes:
+      label: Requires shared_preload_libraries?
+      options:
+        - "No"
+        - "Yes"
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Build or runtime dependencies
+      description: >
+        Does the extension require libraries not in the base postgres
+        image (e.g., libgeos, libprotobuf)? Does it need proprietary
+        runtime dependencies?
+      placeholder: "Requires libfoo-dev at build time, libfoo at runtime."
+
+  - type: checkboxes
+    id: managed_services
+    attributes:
+      label: Available in managed PostgreSQL services
+      description: Check if this extension is available in any of these services.
+      options:
+        - label: Azure Database for PostgreSQL
+        - label: AWS RDS / Aurora
+        - label: Google Cloud SQL
+        - label: None / Unknown
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission checklist
+      description: Confirm you have verified these before submitting.
+      options:
+        - label: I have verified the license is compatible with pglayers
+          required: true
+        - label: The extension does not require proprietary runtime dependencies
+          required: true
+        - label: I have checked that this extension is not already in pglayers
+          required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional notes
+      description: >
+        Anything else relevant -- special build requirements, known
+        conflicts with other extensions, non-standard tag format, etc.
