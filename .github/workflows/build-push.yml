@@ -130,7 +130,9 @@ jobs:
 
   profile-images:
     needs: build
-    if: github.event_name != 'pull_request'
+    # Run even if some extension builds failed (e.g., PG 19 beta).
+    # The profile image for PG 17 doesn't need PG 19 extensions to succeed.
+    if: always() && !cancelled() && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
