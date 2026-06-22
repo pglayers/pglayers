@@ -30,15 +30,35 @@ jobs:
       include: ${{ steps.set.outputs.include }}
     steps:
       - uses: actions/checkout@v7
-      - name: Build matrix
+        with:
+          fetch-depth: 2  # Need parent commit for diff
+
+      - name: Build matrix (only changed extensions)
         id: set
         run: |
           pg_filter="${{ github.event.inputs.pg_version }}"
           ext_filter="${{ github.event.inputs.extension }}"
+
+          # Detect which extensions changed (push/PR only)
+          changed_exts=""
+          if [ -z "$ext_filter" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            changed_exts=$(git diff --name-only HEAD~1 -- extensions/ \
+              | grep -oP 'extensions/\K[^/]+' | sort -u | tr '\n' ' ')
+            # If workflow file changed, rebuild everything
+            if git diff --name-only HEAD~1 | grep -q '.github/workflows/build-push.yml'; then
+              changed_exts=""
+            fi
+          fi
+
           matrix="[]"
           for ext_dir in extensions/*/; do
             ext="$(basename "$ext_dir")"
+            # Filter: workflow_dispatch with explicit extension
             [ -n "$ext_filter" ] && [ "$ext" != "$ext_filter" ] && continue
+            # Filter: only changed extensions (skip if we have a list and ext isn't in it)
+            if [ -n "$changed_exts" ] && ! echo "$changed_exts" | grep -qw "$ext"; then
+              continue
+            fi
             source "$ext_dir/extension.conf"
             for pg in 17 18 19; do
               [ -n "$pg_filter" ] && [ "$pg" != "$pg_filter" ] && continue
@@ -54,9 +74,12 @@ jobs:
             done
           done
           echo "include=$matrix" >> "$GITHUB_OUTPUT"
+          count=$(echo "$matrix" | jq length)
+          echo "Building $count extension/version combinations"
 
   build:
     needs: matrix
+    if: ${{ fromJson(needs.matrix.outputs.include)[0] != null }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -69,6 +92,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Set up QEMU
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
@@ -87,7 +111,8 @@ jobs:
         with:
           context: extensions/${{ matrix.extension }}
           file: extensions/${{ matrix.extension }}/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          # Multi-arch on push to main; amd64-only on PRs (saves ~50% time)
+          platforms: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
           build-args: |
             PG_MAJOR=${{ matrix.pg }}
             EXT_VERSION=${{ matrix.version }}
