@@ -24,6 +24,10 @@ on:
         description: 'Extension name (blank = all)'
         required: false
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   PREFIX: pgx
