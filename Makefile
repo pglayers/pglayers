@@ -130,6 +130,7 @@ image: ## Build a combined image with all extensions
 	@TMPFILE=$$(mktemp); \
 	skipped=""; \
 	included_list=""; \
+	included_label=""; \
 	included=0; \
 	total=0; \
 	{ \
@@ -142,6 +143,7 @@ image: ## Build a combined image with all extensions
 				echo "COPY --from=$(REGISTRY)/$(PREFIX)-$$ext:$(PG) / /"; \
 				included=$$((included + 1)); \
 				included_list="$${included_list:+$$included_list,}\"$$ext\""; \
+				included_label="$${included_label:+$$included_label }$$ext"; \
 			else \
 				skipped="$${skipped:+$$skipped }$$ext"; \
 			fi; \
@@ -166,8 +168,9 @@ image: ## Build a combined image with all extensions
 			echo "  && echo '  \"missing\": []' >> /etc/pglayers/manifest.json \\"; \
 		fi; \
 		echo "  && echo '}' >> /etc/pglayers/manifest.json"; \
-		echo "LABEL org.pglayers.extensions.included=$$included"; \
+		echo "LABEL org.pglayers.extensions.count=$$included"; \
 		echo "LABEL org.pglayers.extensions.total=$$total"; \
+		echo "LABEL org.pglayers.extensions.included=\"$$included_label\""; \
 		if [ -n "$$skipped" ]; then \
 			echo "LABEL org.pglayers.extensions.missing=\"$$skipped\""; \
 		fi; \
