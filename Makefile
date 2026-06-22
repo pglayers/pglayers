@@ -73,16 +73,24 @@ build: _check-ext ## Build a single extension image
 		extensions/$(EXT)
 
 build-all: ## Build all extensions for PG version(s)
-	@for pg in $(PG); do \
+	@failed=""; \
+	for pg in $(PG); do \
 		for ext in $(EXTENSIONS); do \
 			version=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo $${VERSION_'"$$pg"'}'); \
 			if [ -n "$$version" ]; then \
-				$(MAKE) --no-print-directory build EXT=$$ext PG=$$pg || exit 1; \
+				$(MAKE) --no-print-directory build EXT=$$ext PG=$$pg || { \
+					echo "FAILED: $$ext (PG $$pg)"; \
+					failed="$${failed:+$$failed }$$ext:$$pg"; \
+				}; \
 			else \
 				echo "Skipping $$ext (no version for PG $$pg)"; \
 			fi; \
 		done; \
-	done
+	done; \
+	if [ -n "$$failed" ]; then \
+		echo; echo "Build failures: $$failed"; \
+		exit 1; \
+	fi
 
 push: _check-ext ## Push a single extension image
 	docker push $(REGISTRY)/$(PREFIX)-$(EXT):$(PG)
