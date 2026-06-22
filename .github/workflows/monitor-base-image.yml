@@ -1,0 +1,81 @@
+name: Monitor Base Image
+
+on:
+  schedule:
+    # Every 6 hours: check if the official postgres images have been rebuilt
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  check-digests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Check base image digests
+        id: check
+        run: |
+          DIGEST_FILE=".github/base-image-digests.json"
+          CHANGED_VERSIONS=""
+
+          # Initialize if file doesn't exist
+          if [ ! -f "$DIGEST_FILE" ]; then
+            echo '{}' > "$DIGEST_FILE"
+          fi
+
+          for pg in 17 18 19; do
+            # Get current manifest digest from Docker Hub
+            current=$(docker buildx imagetools inspect \
+              --raw "docker.io/library/postgres:${pg}" 2>/dev/null \
+              | sha256sum | awk '{print "sha256:"$1}')
+
+            if [ -z "$current" ] || [ "$current" = "sha256:" ]; then
+              echo "::warning::Failed to fetch digest for postgres:${pg}"
+              continue
+            fi
+
+            # Get stored digest
+            stored=$(jq -r ".\"postgres:${pg}\" // \"\"" "$DIGEST_FILE")
+
+            if [ "$current" != "$stored" ]; then
+              echo "postgres:${pg} changed: ${stored:-<new>} -> ${current}"
+              CHANGED_VERSIONS="${CHANGED_VERSIONS:+${CHANGED_VERSIONS} }${pg}"
+              # Update the file
+              jq --arg key "postgres:${pg}" --arg val "$current" \
+                '.[$key] = $val' "$DIGEST_FILE" > tmp.json && mv tmp.json "$DIGEST_FILE"
+            else
+              echo "postgres:${pg} unchanged: ${current}"
+            fi
+          done
+
+          echo "changed=${CHANGED_VERSIONS}" >> "$GITHUB_OUTPUT"
+
+      - name: Commit updated digests
+        if: steps.check.outputs.changed != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/base-image-digests.json
+          git commit -m "chore: base image updated (PG ${{ steps.check.outputs.changed }})"
+          git push
+
+      - name: Trigger rebuild for changed versions
+        if: steps.check.outputs.changed != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          changed="${{ steps.check.outputs.changed }}"
+          # If multiple versions changed, rebuild everything
+          if [ "$(echo "$changed" | wc -w)" -gt 1 ]; then
+            echo "Multiple versions changed, triggering full rebuild"
+            gh workflow run build-push.yml
+          else
+            echo "Triggering rebuild for PG ${changed}"
+            gh workflow run build-push.yml -f pg_version="${changed}"
+          fi

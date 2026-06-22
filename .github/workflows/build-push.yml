@@ -12,6 +12,9 @@ on:
     paths:
       - 'extensions/**'
       - 'profiles/**'
+  schedule:
+    # Weekly full rebuild (safety net): Sunday 04:00 UTC
+    - cron: '0 4 * * 0'
   workflow_dispatch:
     inputs:
       pg_version:
@@ -43,7 +46,7 @@ jobs:
 
           # Detect which extensions changed (push/PR only)
           changed_exts=""
-          if [ -z "$ext_filter" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+          if [ -z "$ext_filter" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ] && [ "${{ github.event_name }}" != "schedule" ]; then
             changed_exts=$(git diff --name-only HEAD~1 -- extensions/ \
               | grep -oP 'extensions/\K[^/]+' | sort -u | tr '\n' ' ')
             # If workflow file changed, rebuild everything
@@ -94,14 +97,14 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Set up QEMU
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        if: github.event_name != 'pull_request'
         uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -113,12 +116,12 @@ jobs:
         with:
           context: extensions/${{ matrix.extension }}
           file: extensions/${{ matrix.extension }}/Dockerfile
-          # Multi-arch on push to main; amd64-only on PRs (saves ~50% time)
-          platforms: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          # Multi-arch on push/schedule/dispatch; amd64-only on PRs (saves ~50% time)
+          platforms: ${{ github.event_name != 'pull_request' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
           build-args: |
             PG_MAJOR=${{ matrix.pg }}
             EXT_VERSION=${{ matrix.version }}
-          push: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+          push: ${{ github.event_name != 'pull_request' }}
           tags: |
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}-${{ matrix.version }}
@@ -127,7 +130,7 @@ jobs:
 
   profile-images:
     needs: build
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
