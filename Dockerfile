@@ -1,22 +1,22 @@
 FROM postgres:17
 
 # Vector similarity search
-COPY --from=ghcr.io/iemejia/pgx-pgvector:17   / /
+COPY --from=ghcr.io/pglayers/pgx-pgvector:17   / /
 
 # Job scheduler
-COPY --from=ghcr.io/iemejia/pgx-pg_cron:17    / /
+COPY --from=ghcr.io/pglayers/pgx-pg_cron:17    / /
 
 # Geospatial
-COPY --from=ghcr.io/iemejia/pgx-postgis:17    / /
+COPY --from=ghcr.io/pglayers/pgx-postgis:17    / /
 
 # Online table reorganization
-COPY --from=ghcr.io/iemejia/pgx-pg_repack:17  / /
+COPY --from=ghcr.io/pglayers/pgx-pg_repack:17  / /
 
 # Audit logging
-COPY --from=ghcr.io/iemejia/pgx-pgaudit:17    / /
+COPY --from=ghcr.io/pglayers/pgx-pgaudit:17    / /
 
 # Partition management
-COPY --from=ghcr.io/iemejia/pgx-pg_partman:17 / /
+COPY --from=ghcr.io/pglayers/pgx-pg_partman:17 / /
 
 # Extensions that need shared_preload_libraries
 RUN echo "shared_preload_libraries = 'pg_cron,pgaudit,pg_partman_bgw'" \

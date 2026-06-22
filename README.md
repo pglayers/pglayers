@@ -17,9 +17,9 @@ Create a `Dockerfile`:
 ```dockerfile
 FROM postgres:17
 
-COPY --from=ghcr.io/iemejia/pgx-pgvector:17  / /
-COPY --from=ghcr.io/iemejia/pgx-pg_cron:17   / /
-COPY --from=ghcr.io/iemejia/pgx-postgis:17   / /
+COPY --from=ghcr.io/pglayers/pgx-pgvector:17  / /
+COPY --from=ghcr.io/pglayers/pgx-pg_cron:17   / /
+COPY --from=ghcr.io/pglayers/pgx-postgis:17   / /
 ```
 
 Build and run:
@@ -97,7 +97,7 @@ Each extension is published with two tag formats:
 - `pgx-<extension>:<pg_major>-<version>` -- pinned version (e.g. `pgx-pgvector:17-v0.8.3`)
 
 All images are multi-architecture (`linux/amd64` and `linux/arm64`) and
-hosted on GHCR at `ghcr.io/iemejia/pgx-*`. Docker automatically pulls
+hosted on GHCR at `ghcr.io/pglayers/pgx-*`. Docker automatically pulls
 the correct architecture for your platform.
 
 ## Configuration notes
@@ -183,7 +183,7 @@ correct filesystem paths:
 /usr/share/postgresql/17/extension/vector--0.8.3.sql
 ```
 
-When you write `COPY --from=ghcr.io/iemejia/pgx-pgvector:17 / /` in
+When you write `COPY --from=ghcr.io/pglayers/pgx-pgvector:17 / /` in
 your Dockerfile, Docker copies these files into the official `postgres`
 image at exactly the right locations. PostgreSQL finds them and you can
 `CREATE EXTENSION`.
