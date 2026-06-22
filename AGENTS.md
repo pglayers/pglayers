@@ -147,6 +147,39 @@ The collision, overwrite, and ldd checks are automatic for all
 extensions in the `extensions/` directory -- no manual update needed
 for those.
 
+### Version monitoring
+
+Every extension **must** be handled by the version monitoring workflow
+(`.github/workflows/monitor-extensions.yml`). When adding a new
+extension:
+
+1. **Standard semver tags** (e.g., `v1.0.0`, `1.0.0`) -- No action
+   needed. The workflow detects these automatically via the GitHub
+   Releases API.
+
+2. **Non-standard tag formats** (e.g., `REL2_4_7`, `ver_1.5.3`,
+   `VERSION_4_16_7`) -- Add a `TAG_FILTER` field to `extension.conf`
+   with a regex matching valid tags for this extension:
+   ```bash
+   TAG_FILTER="^REL"
+   ```
+   For PG-version-coupled tags (e.g., `REL17_1_7_1`), use `${PG}` as
+   a placeholder:
+   ```bash
+   TAG_FILTER="^REL${PG}_"
+   ```
+
+3. **No tagged releases** (pinned to `main`/`master`) -- Add the
+   extension name to the `SKIP_MONITOR` list in the workflow. These
+   extensions cannot be version-monitored automatically.
+
+4. **GitLab-hosted repos** -- Automatically detected from the `REPO`
+   URL. The workflow uses the GitLab Releases API instead of GitHub.
+
+5. **Profile membership** -- If the extension is available in a managed
+   PostgreSQL service (e.g., Azure), add it to the appropriate profile
+   in `profiles/`. Run `make check-profiles` to validate.
+
 ### Dockerfile requirements
 
 Every extension Dockerfile **must** follow these practices:
@@ -293,3 +326,28 @@ Common shellcheck issues to watch for:
 If adding a new shell script, include it in the shellcheck invocation.
 CI may enforce this check in the future; running it locally catches
 issues earlier.
+
+Before committing changes to GitHub Actions workflow files
+(`.github/workflows/*.yml`), **validate the YAML syntax**:
+
+```bash
+# If actionlint is installed (preferred):
+actionlint
+
+# Otherwise, use Python:
+python3 -c "
+import yaml, sys
+for f in sys.argv[1:]:
+    yaml.safe_load(open(f))
+    print(f'OK: {f}')
+" .github/workflows/*.yml
+```
+
+Common workflow issues to watch for:
+
+- Missing or incorrect `if:` conditions when adding new event triggers
+  (e.g., `schedule` events must be handled alongside `push` and
+  `workflow_dispatch`).
+- Incorrect indentation under `steps:` or `strategy:` blocks.
+- Using `${{ }}` expressions in `run:` blocks where shell variables
+  are intended (and vice versa).

@@ -1,0 +1,214 @@
+name: Monitor Extension Versions
+
+on:
+  schedule:
+    # Daily at 08:00 UTC: check for new upstream releases
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+jobs:
+  check-versions:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check for extension updates
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # Extensions pinned to a branch (no tagged releases to track)
+          SKIP_MONITOR="h3_pg pgjwt pg_similarity"
+
+          for dir in extensions/*/; do
+            ext="$(basename "$dir")"
+
+            # Skip extensions with no tagged releases
+            if echo "$SKIP_MONITOR" | grep -qw "$ext"; then
+              echo "SKIP $ext (pinned to branch, no releases)"
+              continue
+            fi
+
+            # Source extension config
+            # shellcheck disable=SC1091,SC2034
+            # SC1091: dynamic path; SC2034: variables used indirectly
+            source "$dir/extension.conf"
+
+            # Derive owner/repo from REPO URL
+            repo_url="$REPO"
+            if echo "$repo_url" | grep -q "github.com"; then
+              api_type="github"
+              owner_repo=$(echo "$repo_url" | sed -n 's|.*github\.com[:/]\([^/]*/[^/.]*\).*|\1|p')
+            elif echo "$repo_url" | grep -q "gitlab.com"; then
+              api_type="gitlab"
+              # GitLab needs URL-encoded project path
+              project_path=$(echo "$repo_url" | sed -n 's|.*gitlab\.com[:/]\([^.]*\).*|\1|p')
+              project_encoded="${project_path//\//%2F}"
+            else
+              echo "SKIP $ext (unsupported host: $repo_url)"
+              continue
+            fi
+
+            # Determine tag filter pattern
+            tag_filter="${TAG_FILTER:-}"
+            # Reset TAG_FILTER for next iteration
+            TAG_FILTER=""
+
+            # Get the current version (use first available PG version)
+            current=""
+            for pg in 17 18 19; do
+              ver_var="VERSION_${pg}"
+              ver="${!ver_var:-}"
+              if [ -n "$ver" ]; then
+                current="$ver"
+                break
+              fi
+            done
+
+            if [ -z "$current" ]; then
+              echo "SKIP $ext (no VERSION_* defined)"
+              continue
+            fi
+
+            # Fetch latest version from upstream
+            latest=""
+            if [ "$api_type" = "github" ]; then
+              if [ -n "$tag_filter" ]; then
+                # Non-standard tags: list tags, filter, sort, take latest
+                # For PG-version-coupled tags (TAG_FILTER contains ${PG}),
+                # expand for the first available PG version
+                resolved_filter="$tag_filter"
+                # shellcheck disable=SC2016
+                # Literal ${PG} match is intentional -- it's a placeholder in TAG_FILTER
+                if echo "$tag_filter" | grep -q '\${PG}'; then
+                  for pg in 17 18 19; do
+                    ver_var="VERSION_${pg}"
+                    if [ -n "${!ver_var:-}" ]; then
+                      resolved_filter="${tag_filter//\$\{PG\}/$pg}"
+                      break
+                    fi
+                  done
+                fi
+                latest=$(gh api "repos/${owner_repo}/tags" --paginate --jq '.[].name' 2>/dev/null \
+                  | grep -E "$resolved_filter" \
+                  | grep -viE '(alpha|beta|rc|dev|pre|snapshot)' \
+                  | sort -V \
+                  | tail -1) || true
+              else
+                # Standard: try GitHub Releases first (excludes pre-releases)
+                latest=$(gh api "repos/${owner_repo}/releases/latest" --jq '.tag_name' 2>/dev/null) || true
+                # Fallback to tags if no releases exist
+                if [ -z "$latest" ]; then
+                  latest=$(gh api "repos/${owner_repo}/tags" --paginate --jq '.[].name' 2>/dev/null \
+                    | grep -viE '(alpha|beta|rc|dev|pre|snapshot)' \
+                    | grep -E '^v?[0-9]' \
+                    | sort -V \
+                    | tail -1) || true
+                fi
+              fi
+            elif [ "$api_type" = "gitlab" ]; then
+              latest=$(curl -sf "https://gitlab.com/api/v4/projects/${project_encoded}/releases" \
+                | jq -r '[.[] | select(.upcoming_release != true)] | first | .tag_name // empty' 2>/dev/null) || true
+            fi
+
+            if [ -z "$latest" ]; then
+              echo "WARN $ext: could not determine latest version"
+              continue
+            fi
+
+            # Compare versions
+            if [ "$latest" = "$current" ]; then
+              echo "OK   $ext: ${current} (up to date)"
+              continue
+            fi
+
+            # Normalize for comparison: strip leading 'v' prefix
+            current_norm="${current#v}"
+            latest_norm="${latest#v}"
+            # If they are identical after normalization, skip (e.g., v1.0.0 vs 1.0.0)
+            if [ "$current_norm" = "$latest_norm" ]; then
+              echo "OK   $ext: ${current} (up to date, prefix difference only)"
+              continue
+            fi
+
+            echo "UPDATE $ext: ${current} -> ${latest}"
+
+            # Check if a PR already exists for this extension update
+            existing_pr=$(gh pr list --head "deps/update-${ext}" --state open --json number --jq 'length' 2>/dev/null) || existing_pr=0
+            if [ "$existing_pr" -gt 0 ]; then
+              echo "  PR already open for $ext, skipping"
+              continue
+            fi
+
+            # Create update branch
+            branch="deps/update-${ext}-${latest}"
+            git checkout -b "$branch" 2>/dev/null || {
+              echo "  Branch $branch already exists, skipping"
+              git checkout main 2>/dev/null
+              continue
+            }
+
+            # Update all VERSION_* fields that have a value
+            conf_file="extensions/${ext}/extension.conf"
+            for pg in 17 18 19; do
+              ver_var="VERSION_${pg}"
+              old_ver="${!ver_var:-}"
+              [ -z "$old_ver" ] && continue
+              # For PG-version-coupled tags, derive the new tag
+              new_ver="$latest"
+              # shellcheck disable=SC2016
+              # Literal ${PG} match is intentional
+              if echo "$tag_filter" | grep -q '\${PG}'; then
+                pg_filter="${tag_filter//\$\{PG\}/$pg}"
+                pg_latest=$(gh api "repos/${owner_repo}/tags" --paginate --jq '.[].name' 2>/dev/null \
+                  | grep -E "$pg_filter" \
+                  | grep -viE '(alpha|beta|rc|dev|pre|snapshot)' \
+                  | sort -V \
+                  | tail -1) || true
+                [ -n "$pg_latest" ] && new_ver="$pg_latest"
+              fi
+              sed -i "s|^VERSION_${pg}=.*|VERSION_${pg}=\"${new_ver}\"|" "$conf_file"
+            done
+
+            # Build PR body
+            if [ "$api_type" = "github" ]; then
+              release_url="https://github.com/${owner_repo}/releases/tag/${latest}"
+              compare_url="https://github.com/${owner_repo}/compare/${current}...${latest}"
+            else
+              release_url="https://gitlab.com/${project_path}/-/releases/${latest}"
+              compare_url="https://gitlab.com/${project_path}/-/compare/${current}...${latest}"
+            fi
+
+            pr_body="Upstream [${ext}](${repo_url%.git}) released "
+            pr_body+="[${latest}](${release_url})."
+            pr_body+=$'\n\n'
+            pr_body+="**Current version:** \`${current}\`"
+            pr_body+=$'\n'
+            pr_body+="**New version:** \`${latest}\`"
+            pr_body+=$'\n\n'
+            pr_body+="[Changelog](${release_url})"
+            pr_body+=" | [Compare](${compare_url})"
+            pr_body+=$'\n\n'
+            pr_body+="---"
+            pr_body+=$'\n'
+            pr_body+="*Automated by monitor-extensions workflow. CI will validate the build.*"
+
+            # Commit and push
+            git add "$conf_file"
+            git commit -m "deps(${ext}): update to ${latest}"
+            git push -u origin "$branch"
+
+            # Open PR
+            gh pr create \
+              --title "deps(${ext}): update to ${latest}" \
+              --body "$pr_body" \
+              --base main \
+              --head "$branch"
+
+            # Return to main for next extension
+            git checkout main 2>/dev/null
+          done
