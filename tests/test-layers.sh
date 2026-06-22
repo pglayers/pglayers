@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Test suite for postgres-extender: detects layer collisions, missing
+# Test suite for pglayers: detects layer collisions, missing
 # shared libraries, and verifies extensions load correctly.
 #
 # Usage:
@@ -14,7 +14,7 @@ set -euo pipefail
 REGISTRY="${1:-local}"
 PG="${2:-17}"
 PREFIX="pgx"
-IMAGE_TAG="postgres-extender-test:${PG}"
+IMAGE_TAG="pglayers-test:${PG}"
 
 PASS=0
 FAIL=0

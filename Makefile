@@ -103,7 +103,7 @@ info: _check-ext ## Show details for an extension
 		[ -n "$$SHARED_PRELOAD" ] && echo "shared_preload_libraries: $$SHARED_PRELOAD"; \
 		[ -n "$$NOTES" ] && echo "Notes: $$NOTES"'
 
-IMAGE_NAME ?= postgres-extender
+IMAGE_NAME ?= pglayers
 
 image: ## Build a combined image with all extensions
 	@echo "Building combined image $(IMAGE_NAME):$(PG) with all extensions..."

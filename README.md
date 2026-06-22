@@ -1,4 +1,4 @@
-# postgres-extender
+# pglayers
 
 Composable PostgreSQL extension layers for Docker. Pick the extensions you
 need, add a `COPY --from` line per extension, and get a ready-to-use image
@@ -422,7 +422,7 @@ git commit -m "Add <name> extension"
 ## Project structure
 
 ```
-postgres-extender/
+pglayers/
 ├── Makefile                          Build interface
 ├── Dockerfile                        Combined image (all extensions)
 ├── AGENTS.md                         Agent/CI instructions

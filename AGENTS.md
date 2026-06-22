@@ -1,6 +1,6 @@
 # Project Agent Instructions
 
-## postgres-extender
+## pglayers
 
 Composable PostgreSQL extension Docker layers on top of official images.
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Run integration tests against a combined postgres-extender image.
+# Run integration tests against a combined pglayers image.
 #
 # Usage:
 #   ./tests/test-image.sh [IMAGE_TAG]
@@ -10,11 +10,11 @@
 #   make test-image PG=17
 #
 # Or directly:
-#   ./tests/test-image.sh postgres-extender:17
+#   ./tests/test-image.sh pglayers:17
 
 set -euo pipefail
 
-IMAGE="${1:-postgres-extender:17}"
+IMAGE="${1:-pglayers:17}"
 CONTAINER="pgx-test-image-$$"
 
 PASS=0
