@@ -34,12 +34,22 @@ info() { printf -- "---- %s\n" "$1"; }
 
 # Discover extensions
 EXTENSIONS=()
-for dir in extensions/*/; do
-    ext="$(basename "$dir")"
-    ver_var="VERSION_${PG}"
-    ver="$(bash -c "source ${dir}/extension.conf && echo \${${ver_var}}")"
-    [ -n "$ver" ] && EXTENSIONS+=("$ext")
-done
+if [ -n "${PGLAYERS_EXTENSIONS:-}" ]; then
+    # Profile mode: use pre-filtered list from Makefile/environment
+    for ext in $PGLAYERS_EXTENSIONS; do
+        ver_var="VERSION_${PG}"
+        ver="$(bash -c "source extensions/${ext}/extension.conf && echo \${${ver_var}}")"
+        [ -n "$ver" ] && EXTENSIONS+=("$ext")
+    done
+else
+    # Default: discover from filesystem
+    for dir in extensions/*/; do
+        ext="$(basename "$dir")"
+        ver_var="VERSION_${PG}"
+        ver="$(bash -c "source ${dir}/extension.conf && echo \${${ver_var}}")"
+        [ -n "$ver" ] && EXTENSIONS+=("$ext")
+    done
+fi
 
 info "Testing ${#EXTENSIONS[@]} extensions for PG ${PG}: ${EXTENSIONS[*]}"
 info "Registry: ${REGISTRY}"
@@ -61,7 +71,7 @@ echo
 # ============================================================
 info "Phase 2: Extracting file lists..."
 TMPDIR="$(mktemp -d)"
-trap "rm -rf $TMPDIR" EXIT
+trap 'rm -rf "$TMPDIR"' EXIT
 
 # Get base image file list (files and symlinks only, no directories)
 docker create --name pgx-extract-base "postgres:${PG}" true 2>/dev/null
@@ -422,6 +432,8 @@ for ext in "${EXTENSIONS[@]}"; do
     passes="$(echo "$output" | grep -c '^PASS' || true)"
     if [ -n "$failures" ]; then
         fail "integration ${ext}:"
+        # shellcheck disable=SC2001
+        # Prepending indent to each line; no bash-native equivalent for multiline
         echo "$failures" | sed 's/^/       /'
     elif [ "$passes" -gt 0 ]; then
         pass "integration ${ext} (${passes} checks)"

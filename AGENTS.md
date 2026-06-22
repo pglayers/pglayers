@@ -268,3 +268,28 @@ When updating action versions:
 
 Do not pin to patch versions (e.g., `@v4.1.0`). Use the major tag
 (e.g., `@v4`) which floats to the latest compatible release.
+
+### Pre-commit checks
+
+Before committing changes to shell scripts (`*.sh`), **always run
+shellcheck**:
+
+```bash
+shellcheck tests/test-layers.sh tests/test-image.sh
+```
+
+Fix all errors and warnings before committing. Acceptable suppressions
+(via `# shellcheck disable=SCXXXX`) must include a comment explaining
+why the warning is inapplicable.
+
+Common shellcheck issues to watch for:
+
+- `SC2086` -- Word splitting on unquoted variables. Quote them.
+- `SC2034` -- Unused variables. Remove or mark with `# shellcheck disable=SC2034`.
+- `SC2155` -- Declare and assign separately to avoid masking return values.
+- `SC2016` -- Single-quoted strings with expressions. Intentional when
+  passing literal `$` to sub-shells.
+
+If adding a new shell script, include it in the shellcheck invocation.
+CI may enforce this check in the future; running it locally catches
+issues earlier.

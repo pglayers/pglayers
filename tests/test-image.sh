@@ -69,6 +69,8 @@ for test_file in extensions/*/test.sql; do
 
     if [ -n "$failures" ]; then
         fail "${ext}:"
+        # shellcheck disable=SC2001
+        # Prepending indent to each line; no bash-native equivalent for multiline
         echo "$failures" | sed 's/^/       /'
     elif [ "$passes" -gt 0 ]; then
         pass "${ext} (${passes} checks)"

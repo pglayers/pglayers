@@ -6,12 +6,21 @@ EXTENSIONS := $(sort $(notdir $(patsubst %/,%,$(wildcard extensions/*/))))
 # Default PG version for single-extension targets
 PG ?= 17
 
+# Profile support: override EXTENSIONS with a subset from profiles/<name>.txt
+ifdef PROFILE
+  _PROFILE_FILE := profiles/$(PROFILE).txt
+  ifeq ($(wildcard $(_PROFILE_FILE)),)
+    $(error Profile '$(PROFILE)' not found. Available: $(basename $(notdir $(wildcard profiles/*.txt))))
+  endif
+  EXTENSIONS := $(shell grep -v '^\#' $(_PROFILE_FILE) | grep -v '^$$' | sort)
+endif
+
 # Platform(s) for multi-arch builds.  Override with:
 #   make build EXT=pgvector PLATFORM=linux/amd64,linux/arm64
 # Default: native architecture only (fast local builds).
 PLATFORM ?=
 
-.PHONY: help list build build-all image push push-all dockerfile clean clean-all test test-image
+.PHONY: help list build build-all image push push-all dockerfile clean clean-all test test-image list-profiles check-profiles
 
 help: ## Show this help
 	@printf "Usage:\n"
@@ -24,12 +33,15 @@ help: ## Show this help
 	@printf "  make list                         List available extensions\n"
 	@printf "  make test [REGISTRY=local] [PG=17] Run collision and functional tests\n"
 	@printf "  make test-image [PG=17]            Run integration tests against combined image\n"
+	@printf "  make list-profiles                 List available profiles\n"
+	@printf "  make check-profiles                Verify profile files are in sync\n"
 	@printf "  make clean EXT=pgvector           Remove built image for one extension\n"
 	@printf "  make clean-all                    Remove all built extension images\n"
 	@printf "\nVariables:\n"
 	@printf "  REGISTRY=%s\n" "$(REGISTRY)"
 	@printf "  PREFIX=%s\n"   "$(PREFIX)"
 	@printf "  PG=%s\n"       "$(PG)"
+	@printf "  PROFILE=%s (set to filter extensions by profile, e.g. PROFILE=azure)\n" "$(or $(PROFILE),<none>)"
 	@printf "  PLATFORM=%s (set to linux/amd64,linux/arm64 for multi-arch)\n" "$(or $(PLATFORM),<native>)"
 
 list: ## List available extensions
@@ -103,7 +115,7 @@ info: _check-ext ## Show details for an extension
 		[ -n "$$SHARED_PRELOAD" ] && echo "shared_preload_libraries: $$SHARED_PRELOAD"; \
 		[ -n "$$NOTES" ] && echo "Notes: $$NOTES"'
 
-IMAGE_NAME ?= pglayers
+IMAGE_NAME ?= pglayers$(if $(PROFILE),-$(PROFILE))
 
 image: ## Build a combined image with all extensions
 	@echo "Building combined image $(IMAGE_NAME):$(PG) with all extensions..."
@@ -150,10 +162,42 @@ clean-all: ## Remove all built extension images
 	@echo "Done. Run 'docker image prune' to reclaim disk space."
 
 test: ## Run layer collision and functional tests
-	@./tests/test-layers.sh $(REGISTRY) $(PG)
+	@PGLAYERS_EXTENSIONS="$(EXTENSIONS)" ./tests/test-layers.sh $(REGISTRY) $(PG)
 
 test-image: ## Run integration tests against the combined image
 	@./tests/test-image.sh $(IMAGE_NAME):$(PG)
+
+list-profiles: ## List available profiles
+	@printf "%-12s %-6s %s\n" "PROFILE" "COUNT" "DESCRIPTION"
+	@printf "%-12s %-6s %s\n" "-------" "-----" "-----------"
+	@for f in profiles/*.txt; do \
+		name=$$(basename "$$f" .txt); \
+		count=$$(grep -cv '^\(#\|$$\)' "$$f"); \
+		desc=$$(head -1 "$$f" | sed 's/^# *//'); \
+		printf "%-12s %-6d %s\n" "$$name" "$$count" "$$desc"; \
+	done
+
+check-profiles: ## Verify profiles/full.txt matches extensions/ directory
+	@expected=$$(ls -1 extensions/ | sort); \
+	actual=$$(grep -v '^\#' profiles/full.txt | grep -v '^$$' | sort); \
+	if [ "$$expected" != "$$actual" ]; then \
+		echo "Error: profiles/full.txt is out of sync with extensions/ directory."; \
+		echo "Expected:"; echo "$$expected"; \
+		echo "Actual:"; echo "$$actual"; \
+		echo; echo "Run: ls -1 extensions/ | sort > /tmp/full.txt and update profiles/full.txt"; \
+		exit 1; \
+	fi
+	@for f in profiles/*.txt; do \
+		while IFS= read -r ext; do \
+			[ -z "$$ext" ] && continue; \
+			echo "$$ext" | grep -q '^#' && continue; \
+			if [ ! -d "extensions/$$ext" ]; then \
+				echo "Error: profile $$(basename $$f) references unknown extension '$$ext'"; \
+				exit 1; \
+			fi; \
+		done < "$$f"; \
+	done
+	@echo "All profiles valid."
 
 _check-ext:
 	@test -n "$(EXT)" || { echo "Error: EXT is required. Usage: make build EXT=pgvector [PG=17]"; exit 1; }

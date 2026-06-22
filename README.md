@@ -250,6 +250,71 @@ make test-image PG=17
 
 Tests must pass for all supported PG versions (17, 18, 19).
 
+### Profiles
+
+Profiles let you build and test a curated subset of extensions rather
+than the full set. This is useful for matching managed PostgreSQL
+service offerings (e.g., Azure Database for PostgreSQL) or creating
+purpose-built images.
+
+```bash
+# List available profiles
+make list-profiles
+
+# List extensions in a profile
+make list PROFILE=azure
+
+# Build only the extensions in a profile
+make build-all PG=17 PROFILE=azure
+
+# Build a combined image with only the profile's extensions
+make image PG=17 PROFILE=azure    # produces: pglayers-azure:17
+
+# Run the full test suite against a profile
+make test REGISTRY=local PG=17 PROFILE=azure
+
+# Validate all profile files are in sync with extensions/
+make check-profiles
+```
+
+#### Shipped profiles
+
+| Profile | Description |
+|---------|-------------|
+| `full` | All extensions provided by pglayers |
+| `azure` | Extensions matching Azure Database for PostgreSQL Flexible Server |
+
+#### Creating a custom profile
+
+Create a text file in `profiles/` with one extension directory name per
+line (alphabetically sorted). Comments (`#`) and blank lines are ignored:
+
+```
+# My custom profile
+pg_cron
+pgvector
+postgis
+```
+
+Then use it:
+
+```bash
+make image PG=17 PROFILE=myprofile
+make test REGISTRY=local PG=17 PROFILE=myprofile
+```
+
+#### Published profile images
+
+CI builds and pushes combined profile images to GHCR:
+
+- `ghcr.io/<owner>/pglayers-azure:17`
+- `ghcr.io/<owner>/pglayers-azure:18`
+- `ghcr.io/<owner>/pglayers-full:17`
+- `ghcr.io/<owner>/pglayers-full:18`
+
+These are ready-to-use PostgreSQL images with the profile's extensions
+pre-installed and `shared_preload_libraries` configured.
+
 The `make test` suite checks:
 
 1. **No file collisions** -- Every pair of extensions is compared for
@@ -436,8 +501,11 @@ pglayers/
 │   │   └── test.sql                  Integration tests (PASS/FAIL assertions)
 │   ├── pg_cron/
 │   ├── postgis/                      (complex: bundles runtime libs)
-│   ├── ... (34 extensions total)
+│   ├── ... (52 extensions total)
 │   └── wal2json/
+├── profiles/
+│   ├── azure.txt                     Azure PostgreSQL Flexible Server extensions
+│   └── full.txt                      All extensions (CI-verified)
 ├── tests/
 │   ├── test-layers.sh                Full test suite (collisions + functional)
 │   └── test-image.sh                 Quick integration tests against combined image

@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'extensions/**'
+      - 'profiles/**'
       - 'tests/**'
       - 'Makefile'
       - '.github/workflows/test.yml'
@@ -14,6 +15,10 @@ on:
     inputs:
       pg_version:
         description: 'PostgreSQL major version (blank = all)'
+        required: false
+        default: ''
+      profile:
+        description: 'Profile name (blank = full test without profile)'
         required: false
         default: ''
 
@@ -51,3 +56,39 @@ jobs:
 
       - name: Run test suite (PG ${{ matrix.pg }})
         run: make test REGISTRY=local PG=${{ matrix.pg }}
+
+      - name: Check profiles
+        run: make check-profiles
+
+  test-profiles:
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: ${{ fromJson( github.event.inputs.pg_version && format('["{0}"]', github.event.inputs.pg_version) || (github.event_name == 'pull_request' && '["17"]' || '["17", "18", "19"]') ) }}
+        profile: [azure]
+    name: Test profile ${{ matrix.profile }} (PG ${{ matrix.pg }})
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          docker system prune -af
+          df -h /
+
+      - name: Tag beta images as major version
+        run: |
+          if [ "${{ matrix.pg }}" = "19" ]; then
+            docker pull postgres:19beta1
+            docker tag postgres:19beta1 postgres:19
+          fi
+
+      - name: Build profile extensions (PG ${{ matrix.pg }}, profile ${{ matrix.profile }})
+        env:
+          DOCKER_BUILDKIT: 1
+        run: make build-all PG=${{ matrix.pg }} PROFILE=${{ matrix.profile }} REGISTRY=local
+
+      - name: Run profile test suite (PG ${{ matrix.pg }}, profile ${{ matrix.profile }})
+        run: make test REGISTRY=local PG=${{ matrix.pg }} PROFILE=${{ matrix.profile }}
