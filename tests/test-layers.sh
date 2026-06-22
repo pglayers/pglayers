@@ -59,11 +59,22 @@ echo
 # Phase 1: Build all extension images locally (if not already built)
 # ============================================================
 info "Phase 1: Building extension images..."
+BUILT_EXTENSIONS=()
 for ext in "${EXTENSIONS[@]}"; do
-    if ! docker image inspect "${REGISTRY}/${PREFIX}-${ext}:${PG}" &>/dev/null; then
-        make build EXT="$ext" PG="$PG" REGISTRY="$REGISTRY" >/dev/null 2>&1
+    if docker image inspect "${REGISTRY}/${PREFIX}-${ext}:${PG}" &>/dev/null; then
+        BUILT_EXTENSIONS+=("$ext")
+    elif make build EXT="$ext" PG="$PG" REGISTRY="$REGISTRY" >/dev/null 2>&1; then
+        BUILT_EXTENSIONS+=("$ext")
+    else
+        warn "Failed to build ${ext} for PG ${PG} (skipping)"
     fi
 done
+
+if [ "${#BUILT_EXTENSIONS[@]}" -lt "${#EXTENSIONS[@]}" ]; then
+    skipped=$((${#EXTENSIONS[@]} - ${#BUILT_EXTENSIONS[@]}))
+    info "Built ${#BUILT_EXTENSIONS[@]}/${#EXTENSIONS[@]} extensions (${skipped} skipped)"
+fi
+EXTENSIONS=("${BUILT_EXTENSIONS[@]}")
 echo
 
 # ============================================================
