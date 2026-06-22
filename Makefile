@@ -42,6 +42,7 @@ help: ## Show this help
 	@printf "  PREFIX=%s\n"   "$(PREFIX)"
 	@printf "  PG=%s\n"       "$(PG)"
 	@printf "  PROFILE=%s (set to filter extensions by profile, e.g. PROFILE=azure)\n" "$(or $(PROFILE),<none>)"
+	@printf "  PARTIAL=%s (set to 1 to allow building images with missing extensions)\n" "$(or $(PARTIAL),<off>)"
 	@printf "  PLATFORM=%s (set to linux/amd64,linux/arm64 for multi-arch)\n" "$(or $(PLATFORM),<native>)"
 
 list: ## List available extensions
@@ -117,10 +118,14 @@ info: _check-ext ## Show details for an extension
 
 IMAGE_NAME ?= pglayers$(if $(PROFILE),-$(PROFILE))
 
+# Set PARTIAL=1 to allow building images with missing extensions (e.g., PG 19 beta)
+PARTIAL ?=
+
 image: ## Build a combined image with all extensions
 	@echo "Building combined image $(IMAGE_NAME):$(PG)..."
 	@TMPFILE=$$(mktemp); \
 	skipped=""; \
+	included=0; \
 	{ \
 		echo "FROM postgres:$(PG)"; \
 		for ext in $(EXTENSIONS); do \
@@ -128,6 +133,7 @@ image: ## Build a combined image with all extensions
 			[ -z "$$ver" ] && continue; \
 			if docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1; then \
 				echo "COPY --from=$(REGISTRY)/$(PREFIX)-$$ext:$(PG) / /"; \
+				included=$$((included + 1)); \
 			else \
 				skipped="$${skipped:+$$skipped }$$ext"; \
 			fi; \
@@ -142,7 +148,15 @@ image: ## Build a combined image with all extensions
 		done; \
 		[ -n "$$preloads" ] && echo "RUN echo \"shared_preload_libraries = '$$preloads'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
 	} > "$$TMPFILE"; \
-	[ -n "$$skipped" ] && echo "Skipped (not built): $$skipped"; \
+	if [ -n "$$skipped" ]; then \
+		echo "Missing extensions: $$skipped"; \
+		if [ -z "$(PARTIAL)" ]; then \
+			echo "Error: some extensions are not built. Run 'make build-all PG=$(PG)' first, or set PARTIAL=1 to build with available extensions only."; \
+			rm -f "$$TMPFILE"; \
+			exit 1; \
+		fi; \
+		echo "PARTIAL=1: continuing with $$included extensions (skipping missing)"; \
+	fi; \
 	docker build -t $(IMAGE_NAME):$(PG) -f "$$TMPFILE" .; \
 	rm -f "$$TMPFILE"
 	@echo "Done: $(IMAGE_NAME):$(PG)"
