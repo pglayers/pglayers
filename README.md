@@ -34,6 +34,12 @@ Available profiles: `full`, `azure`. Each is published for PG 17, 18,
 and 19. See [Profiles](#profiles) for details and how to create custom
 ones.
 
+> **Note:** Vendor profiles (e.g., `azure`) are a best-effort
+> approximation for local development. They are not a replacement for
+> the actual managed service -- extension versions, configuration
+> defaults, and platform-specific behavior may differ. Use them to
+> develop and test locally, not to replicate production exactly.
+
 ### Option 2: Pick your own extensions
 
 Each extension is published as its own image layer. You stack them onto
