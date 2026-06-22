@@ -170,6 +170,8 @@ image: ## Build a combined image with all extensions
 			echo "  && echo '  \"missing\": []' >> /etc/pglayers/manifest.json \\"; \
 		fi; \
 		echo "  && echo '}' >> /etc/pglayers/manifest.json"; \
+		echo "LABEL org.pglayers.pg_version=\"$(PG)\""; \
+		echo "LABEL org.pglayers.profile=\"$(or $(PROFILE),full)\""; \
 		echo "LABEL org.pglayers.extensions.count=$$included"; \
 		echo "LABEL org.pglayers.extensions.total=$$total"; \
 		echo "LABEL org.pglayers.extensions.included=\"$$included_label\""; \
