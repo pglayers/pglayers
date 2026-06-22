@@ -119,24 +119,34 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push ${{ matrix.extension }} (PG ${{ matrix.pg }})
+        if: matrix.pg != '19'
         uses: docker/build-push-action@v7
         with:
           context: extensions/${{ matrix.extension }}
           file: extensions/${{ matrix.extension }}/Dockerfile
-          # PG 19 (beta): amd64-only with --load (base image only available locally)
-          # PG 17/18: multi-arch on push/schedule/dispatch; amd64-only on PRs
-          platforms: ${{ matrix.pg != '19' && github.event_name != 'pull_request' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          # Multi-arch on push/schedule/dispatch; amd64-only on PRs
+          platforms: ${{ github.event_name != 'pull_request' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
           build-args: |
             PG_MAJOR=${{ matrix.pg }}
             EXT_VERSION=${{ matrix.version }}
-          # PG 19 beta: load locally only (can't push without multi-arch manifest)
-          load: ${{ matrix.pg == '19' }}
-          push: ${{ matrix.pg != '19' && github.event_name != 'pull_request' }}
+          push: ${{ github.event_name != 'pull_request' }}
           tags: |
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}-${{ matrix.version }}
           cache-from: type=gha,scope=${{ matrix.extension }}-${{ matrix.pg }}
           cache-to: type=gha,mode=min,scope=${{ matrix.extension }}-${{ matrix.pg }}
+
+      - name: Build and push ${{ matrix.extension }} (PG ${{ matrix.pg }} beta)
+        if: matrix.pg == '19'
+        run: |
+          # PG 19 beta: use make build (local docker daemon sees the tagged beta image)
+          # then push amd64-only. Once PG 19 is GA, remove this step and the pg!=19 condition above.
+          make build EXT=${{ matrix.extension }} PG=${{ matrix.pg }} \
+            REGISTRY=${{ env.REGISTRY }}/${{ github.repository_owner }}
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}
+            docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}-${{ matrix.version }} || true
+          fi
 
   profile-images:
     needs: build
@@ -151,11 +161,16 @@ jobs:
       fail-fast: false
       matrix:
         profile: [azure, full]
-        # PG 19 excluded: beta images are not pushed to the registry
-        pg: [17, 18]
+        pg: [17, 18, 19]
     name: Profile ${{ matrix.profile }} (PG ${{ matrix.pg }})
     steps:
       - uses: actions/checkout@v7
+
+      - name: Tag beta images as major version
+        if: matrix.pg == '19'
+        run: |
+          docker pull postgres:19beta1
+          docker tag postgres:19beta1 postgres:19
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
