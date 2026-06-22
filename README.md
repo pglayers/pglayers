@@ -420,10 +420,20 @@ extensions, reporting bugs, and submitting changes.
 pglayers/
 ├── Makefile                          Build interface
 ├── Dockerfile                        Combined image (all extensions)
+├── CONTRIBUTING.md                   Contribution guide
 ├── AGENTS.md                         Agent/CI instructions
-├── .github/workflows/
-│   ├── build-push.yml                CI: builds all extensions, pushes to GHCR
-│   └── test.yml                      CI: runs full test suite (PG 17, 18, 19)
+├── .github/
+│   ├── base-image-digests.json       Tracked base image digests
+│   ├── ISSUE_TEMPLATE/
+│   │   ├── bug_report.yml            Bug report form
+│   │   ├── new_extension.yml         Extension request form
+│   │   └── config.yml                Template chooser config
+│   └── workflows/
+│       ├── build-push.yml            CI: builds extensions, pushes to GHCR
+│       ├── test.yml                  CI: full test suite (PG 17, 18, 19)
+│       ├── monitor-base-image.yml    Detects base image updates (every 6h)
+│       ├── monitor-extensions.yml    Detects new extension releases (daily)
+│       └── cache-cleanup.yml         Prunes stale GHA caches
 ├── extensions/
 │   ├── pgvector/
 │   │   ├── Dockerfile                Multi-stage build -> artifact image
