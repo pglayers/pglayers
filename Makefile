@@ -118,21 +118,31 @@ info: _check-ext ## Show details for an extension
 IMAGE_NAME ?= pglayers$(if $(PROFILE),-$(PROFILE))
 
 image: ## Build a combined image with all extensions
-	@echo "Building combined image $(IMAGE_NAME):$(PG) with all extensions..."
+	@echo "Building combined image $(IMAGE_NAME):$(PG)..."
 	@TMPFILE=$$(mktemp); \
+	skipped=""; \
 	{ \
 		echo "FROM postgres:$(PG)"; \
 		for ext in $(EXTENSIONS); do \
 			ver=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo $${VERSION_'"$(PG)"'}'); \
-			[ -n "$$ver" ] && echo "COPY --from=$(REGISTRY)/$(PREFIX)-$$ext:$(PG) / /"; \
+			[ -z "$$ver" ] && continue; \
+			if docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1; then \
+				echo "COPY --from=$(REGISTRY)/$(PREFIX)-$$ext:$(PG) / /"; \
+			else \
+				skipped="$${skipped:+$$skipped }$$ext"; \
+			fi; \
 		done; \
 		preloads=""; \
 		for ext in $(EXTENSIONS); do \
+			ver=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo $${VERSION_'"$(PG)"'}'); \
+			[ -z "$$ver" ] && continue; \
+			docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
 			spl=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$$SHARED_PRELOAD"'); \
 			[ -n "$$spl" ] && preloads="$${preloads:+$$preloads,}$$spl"; \
 		done; \
 		[ -n "$$preloads" ] && echo "RUN echo \"shared_preload_libraries = '$$preloads'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
 	} > "$$TMPFILE"; \
+	[ -n "$$skipped" ] && echo "Skipped (not built): $$skipped"; \
 	docker build -t $(IMAGE_NAME):$(PG) -f "$$TMPFILE" .; \
 	rm -f "$$TMPFILE"
 	@echo "Done: $(IMAGE_NAME):$(PG)"
