@@ -19,10 +19,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -euo pipefail
+          set -eo pipefail
 
-          # Extensions pinned to a branch (no tagged releases to track)
-          SKIP_MONITOR="h3_pg pgjwt pg_similarity"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Extensions pinned to a branch or with complex tag formats not yet handled
+          SKIP_MONITOR="age h3_pg pgjwt pg_similarity"
 
           for dir in extensions/*/; do
             ext="$(basename "$dir")"
