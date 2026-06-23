@@ -68,7 +68,7 @@ build: _check-ext ## Build a single extension image
 	docker buildx build \
 		$(if $(PLATFORM),--platform $(PLATFORM)) \
 		$(if $(CACHE_SCOPE),--cache-from type=gha$(comma)scope=$(CACHE_SCOPE)-$(EXT)-$(PG)) \
-		$(if $(CACHE_SCOPE),--cache-to type=gha$(comma)mode=min$(comma)scope=$(CACHE_SCOPE)-$(EXT)-$(PG)) \
+		$(if $(CACHE_SCOPE),--cache-to type=gha$(comma)mode=max$(comma)scope=$(CACHE_SCOPE)-$(EXT)-$(PG)) \
 		--build-arg PG_MAJOR=$(PG) \
 		--build-arg PG_TAG=$(or $(PG_TAG),$(PG)) \
 		--build-arg EXT_VERSION=$(EXT_VERSION) \
