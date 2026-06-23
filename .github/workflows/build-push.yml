@@ -68,6 +68,7 @@ jobs:
             if [ -n "$changed_exts" ] && ! echo "$changed_exts" | grep -qw "$ext"; then
               continue
             fi
+            CI_SKIP=""
             source "$ext_dir/extension.conf"
             # Skip extensions marked as CI_SKIP (still buildable locally)
             [ "${CI_SKIP:-}" = "1" ] && continue
