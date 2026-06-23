@@ -287,6 +287,24 @@ make clean EXT=pgvector
 make clean-all
 ```
 
+### Skipping extensions from CI
+
+Extensions with `CI_SKIP=1` in their `extension.conf` are excluded
+from CI builds but remain in the repository for local builds. This is
+useful for extensions with prohibitively long build times (e.g., plv8
+whose V8 engine compilation exceeds CI timeouts on arm64 emulation).
+
+```bash
+# Still works locally
+make build EXT=plv8 PG=17
+
+# But skipped by CI (not in build matrix, not in profile images)
+```
+
+To skip an extension, add `CI_SKIP=1` to its `extension.conf`. To
+re-enable, remove the field and add the extension back to the
+appropriate profiles.
+
 ### Running tests
 
 ```bash
