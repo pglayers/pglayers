@@ -53,10 +53,13 @@ jobs:
             docker tag postgres:19beta1 postgres:19
           fi
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
       - name: Build all extensions (PG ${{ matrix.pg }})
         env:
           DOCKER_BUILDKIT: 1
-        run: make build-all PG=${{ matrix.pg }} REGISTRY=local
+        run: make build-all PG=${{ matrix.pg }} REGISTRY=local CACHE_SCOPE=ci
 
       - name: Run test suite (PG ${{ matrix.pg }})
         run: make test REGISTRY=local PG=${{ matrix.pg }}
@@ -89,10 +92,13 @@ jobs:
             docker tag postgres:19beta1 postgres:19
           fi
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
       - name: Build profile extensions (PG ${{ matrix.pg }}, profile ${{ matrix.profile }})
         env:
           DOCKER_BUILDKIT: 1
-        run: make build-all PG=${{ matrix.pg }} PROFILE=${{ matrix.profile }} REGISTRY=local
+        run: make build-all PG=${{ matrix.pg }} PROFILE=${{ matrix.profile }} REGISTRY=local CACHE_SCOPE=ci
 
       - name: Run profile test suite (PG ${{ matrix.pg }}, profile ${{ matrix.profile }})
         run: make test REGISTRY=local PG=${{ matrix.pg }} PROFILE=${{ matrix.profile }}

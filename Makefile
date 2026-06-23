@@ -58,12 +58,17 @@ list: ## List available extensions
 		printf "%-15s %-6s %s\n" "$$ext" "$$versions" "$$desc"; \
 	done
 
+# Cache scope for GHA cache (used in CI). Set to enable layer caching.
+CACHE_SCOPE ?=
+
 build: _check-ext ## Build a single extension image
 	$(eval EXT_VERSION := $(shell bash -c 'source extensions/$(EXT)/extension.conf && echo $${VERSION_$(PG)}'))
 	@test -n "$(EXT_VERSION)" || { echo "Error: $(EXT) has no version defined for PG $(PG)"; exit 1; }
 	@echo "Building $(PREFIX)-$(EXT):$(PG) (extension $(EXT_VERSION))..."
 	docker buildx build \
 		$(if $(PLATFORM),--platform $(PLATFORM)) \
+		$(if $(CACHE_SCOPE),--cache-from type=gha$(comma)scope=$(CACHE_SCOPE)-$(EXT)-$(PG)) \
+		$(if $(CACHE_SCOPE),--cache-to type=gha$(comma)mode=min$(comma)scope=$(CACHE_SCOPE)-$(EXT)-$(PG)) \
 		--build-arg PG_MAJOR=$(PG) \
 		--build-arg PG_TAG=$(or $(PG_TAG),$(PG)) \
 		--build-arg EXT_VERSION=$(EXT_VERSION) \
@@ -72,6 +77,8 @@ build: _check-ext ## Build a single extension image
 		-f extensions/$(EXT)/Dockerfile \
 		$(if $(PLATFORM),--push,--load) \
 		extensions/$(EXT)
+
+comma := ,
 
 build-all: ## Build all extensions for PG version(s)
 	@failed=""; \

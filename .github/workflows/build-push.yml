@@ -137,8 +137,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}-${{ matrix.version }}
-          cache-from: type=gha,scope=${{ matrix.extension }}-${{ matrix.pg }}
-          cache-to: type=gha,mode=min,scope=${{ matrix.extension }}-${{ matrix.pg }}
+          cache-from: type=gha,scope=ci-${{ matrix.extension }}-${{ matrix.pg }}
+          cache-to: type=gha,mode=min,scope=ci-${{ matrix.extension }}-${{ matrix.pg }}
 
   profile-images:
     needs: build
