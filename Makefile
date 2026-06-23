@@ -151,7 +151,7 @@ image: ## Build a combined image with all extensions
 			if [ "$(REGISTRY)" = "local" ]; then \
 				docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || { skipped="$${skipped:+$$skipped }$$ext"; continue; }; \
 			else \
-				docker manifest inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || { skipped="$${skipped:+$$skipped }$$ext"; continue; }; \
+				docker buildx imagetools inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || { skipped="$${skipped:+$$skipped }$$ext"; continue; }; \
 			fi; \
 			echo "COPY --from=$(REGISTRY)/$(PREFIX)-$$ext:$(PG) / /"; \
 			included=$$((included + 1)); \
@@ -165,7 +165,7 @@ image: ## Build a combined image with all extensions
 			if [ "$(REGISTRY)" = "local" ]; then \
 				docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
 			else \
-				docker manifest inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
+				docker buildx imagetools inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
 			fi; \
 			spl=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$$SHARED_PRELOAD"'); \
 			[ -n "$$spl" ] && preloads="$${preloads:+$$preloads,}$$spl"; \
