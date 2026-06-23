@@ -141,9 +141,9 @@ jobs:
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}-${{ matrix.version }}
           cache-from: |
-            type=gha,scope=ci-${{ matrix.extension }}-${{ matrix.pg }}
+            type=gha,scope=${{ matrix.extension }}-${{ matrix.pg }}
             type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}
-          cache-to: type=gha,mode=max,scope=ci-${{ matrix.extension }}-${{ matrix.pg }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.extension }}-${{ matrix.pg }}
 
   profile-images:
     needs: build
