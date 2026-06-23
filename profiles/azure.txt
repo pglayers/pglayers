@@ -20,7 +20,6 @@ pgaudit
 pglogical
 pgrouting
 pgvector
-plv8
 postgis
 postgres_protobuf
 semver
