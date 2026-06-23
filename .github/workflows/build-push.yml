@@ -69,6 +69,8 @@ jobs:
               continue
             fi
             source "$ext_dir/extension.conf"
+            # Skip extensions marked as CI_SKIP (still buildable locally)
+            [ "${CI_SKIP:-}" = "1" ] && continue
             for pg in 17 18 19; do
               [ -n "$pg_filter" ] && [ "$pg" != "$pg_filter" ] && continue
               ver_var="VERSION_${pg}"

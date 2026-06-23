@@ -243,13 +243,18 @@ list-profiles: ## List available profiles
 	done
 
 check-profiles: ## Verify profiles/full.txt matches extensions/ directory
-	@expected=$$(ls -1 extensions/ | sort); \
+	@expected=$$(for dir in extensions/*/; do \
+		ext=$$(basename "$$dir"); \
+		ci_skip=$$(bash -c 'source '"$$dir"'/extension.conf && echo $${CI_SKIP:-}'); \
+		[ "$$ci_skip" = "1" ] && continue; \
+		echo "$$ext"; \
+	done | sort); \
 	actual=$$(grep -v '^\#' profiles/full.txt | grep -v '^$$' | sort); \
 	if [ "$$expected" != "$$actual" ]; then \
 		echo "Error: profiles/full.txt is out of sync with extensions/ directory."; \
 		echo "Expected:"; echo "$$expected"; \
 		echo "Actual:"; echo "$$actual"; \
-		echo; echo "Run: ls -1 extensions/ | sort > /tmp/full.txt and update profiles/full.txt"; \
+		echo; echo "Update profiles/full.txt (extensions with CI_SKIP=1 are excluded)."; \
 		exit 1; \
 	fi
 	@for f in profiles/*.txt; do \
