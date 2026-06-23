@@ -45,7 +45,7 @@ RUN . /root/.cargo/env \
     && cargo pgrx init "--pg${PG_MAJOR}=$(which pg_config)" \
     && cargo pgrx package --pg-config "$(which pg_config)" --features "pg${PG_MAJOR}" \
     && mkdir -p /output \
-    && cp -r target/release/wrappers-pg${PG_MAJOR}/* /output/ \
+    && cp -r /tmp/ext/target/release/wrappers-pg${PG_MAJOR}/* /output/ \
     && find /output -name '*.so' -exec strip --strip-unneeded {} \;
 
 FROM scratch
