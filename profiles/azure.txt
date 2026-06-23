@@ -9,7 +9,6 @@ hypopg
 ip4r
 orafce
 pg_cron
-pg_duckdb
 pg_failover_slots
 pg_hint_plan
 pg_ivm
