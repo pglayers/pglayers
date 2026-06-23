@@ -9,7 +9,7 @@ pglayers fixes this. It's both a **ready-to-use PostgreSQL distribution
 with extensions pre-installed** and a **tool to build your own custom
 image** with exactly the extensions you need -- all on top of the
 official `postgres` Docker images. You don't need to figure out how to
-build extensions, chase dependencies, or maintain Dockerfiles.
+build PostgreSQL extensions, install dependencies, or set up compilers.
 
 Each extension is published as a minimal Docker image layer containing
 only its binaries. You stack them on top of the official `postgres`
