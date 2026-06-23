@@ -17,13 +17,14 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libtiff-dev libcurl4-gnutls-dev
 
 # PostGIS is a build dependency (pgrouting needs PostGIS headers)
-# Install PostGIS from source first
+# Install PostGIS from source first (serial build: parallel make has
+# race conditions with --without-raster on upgrade SQL generation)
 ARG POSTGIS_VERSION=3.6.4
 RUN curl -fsSL "https://download.osgeo.org/postgis/source/postgis-${POSTGIS_VERSION}.tar.gz" \
     | tar xz -C /tmp \
     && cd /tmp/postgis-${POSTGIS_VERSION} \
     && ./configure --without-raster --without-sfcgal \
-    && make -j"$(nproc)" \
+    && make \
     && make install
 
 RUN git clone --branch ${EXT_VERSION} --depth 1 \
