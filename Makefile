@@ -140,7 +140,7 @@ image: ## Build a combined image with all extensions
 			ver=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo $${VERSION_'"$(PG)"'}'); \
 			[ -z "$$ver" ] && continue; \
 			total=$$((total + 1)); \
-			if docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1; then \
+			if [ "$(REGISTRY)" != "local" ] || docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1; then \
 				echo "COPY --from=$(REGISTRY)/$(PREFIX)-$$ext:$(PG) / /"; \
 				included=$$((included + 1)); \
 				included_list="$${included_list:+$$included_list,}\"$$ext\""; \
@@ -153,7 +153,9 @@ image: ## Build a combined image with all extensions
 		for ext in $(EXTENSIONS); do \
 			ver=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo $${VERSION_'"$(PG)"'}'); \
 			[ -z "$$ver" ] && continue; \
-			docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
+			if [ "$(REGISTRY)" = "local" ]; then \
+				docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
+			fi; \
 			spl=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$$SHARED_PRELOAD"'); \
 			[ -n "$$spl" ] && preloads="$${preloads:+$$preloads,}$$spl"; \
 		done; \
