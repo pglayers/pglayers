@@ -206,11 +206,13 @@ jobs:
             git push -u origin "$branch"
 
             # Open PR
-            gh pr create \
+            if ! gh pr create \
               --title "deps(${ext}): update to ${latest}" \
               --body "$pr_body" \
               --base main \
-              --head "$branch"
+              --head "$branch"; then
+              echo "  WARN: failed to create PR for $ext (check repo Actions permissions)"
+            fi
 
             # Return to main for next extension
             git checkout main 2>/dev/null
