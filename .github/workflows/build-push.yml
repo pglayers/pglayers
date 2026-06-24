@@ -183,8 +183,6 @@ jobs:
         run: |
           make image PG=${{ matrix.pg }} PROFILE=${{ matrix.profile }} \
             REGISTRY=${{ env.REGISTRY }}/${{ github.repository_owner }}
-          docker push pglayers-${{ matrix.profile }}:${{ matrix.pg }}
-          # Also tag with registry prefix for GHCR
           docker tag pglayers-${{ matrix.profile }}:${{ matrix.pg }} \
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/pglayers-${{ matrix.profile }}:${{ matrix.pg }}
           docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/pglayers-${{ matrix.profile }}:${{ matrix.pg }}
