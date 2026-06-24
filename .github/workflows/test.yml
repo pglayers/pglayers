@@ -37,6 +37,25 @@ jobs:
     name: Test PG ${{ matrix.pg }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2  # Need parent commit for diff
+
+      - name: Detect changed extensions
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            changed=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- extensions/ \
+              | grep -oP 'extensions/\K[^/]+' | sort -u | tr '\n' ' ')
+          else
+            changed=$(git diff --name-only HEAD~1 -- extensions/ \
+              | grep -oP 'extensions/\K[^/]+' | sort -u | tr '\n' ' ')
+          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          if [ -n "$changed" ]; then
+            echo "Changed extensions: $changed"
+          else
+            echo "No targeted changes detected, will build all"
+          fi
 
       - name: Free disk space
         run: |
@@ -56,7 +75,42 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      - name: Pull pre-built extension images
+        if: steps.changes.outputs.changed != ''
+        env:
+          REGISTRY: ghcr.io/pglayers
+          PREFIX: pgx
+        run: |
+          # Pull pre-built images for unchanged extensions from the registry
+          for ext in extensions/*/; do
+            ext="$(basename "$ext")"
+            changed="${{ steps.changes.outputs.changed }}"
+            if echo "$changed" | grep -qw "$ext"; then
+              echo "SKIP pull $ext (will build from source)"
+              continue
+            fi
+            ver=$(bash -c "source extensions/$ext/extension.conf && echo \${VERSION_${{ matrix.pg }}}")
+            [ -z "$ver" ] && continue
+            img="${REGISTRY}/${PREFIX}-${ext}:${{ matrix.pg }}"
+            if docker pull "$img" 2>/dev/null; then
+              # Re-tag as local/ so make test finds it
+              docker tag "$img" "local/${PREFIX}-${ext}:${{ matrix.pg }}"
+            else
+              echo "WARN: $img not available, will skip in tests"
+            fi
+          done
+
+      - name: Build changed extensions (PG ${{ matrix.pg }})
+        if: steps.changes.outputs.changed != ''
+        env:
+          DOCKER_BUILDKIT: 1
+        run: |
+          for ext in ${{ steps.changes.outputs.changed }}; do
+            make build EXT="$ext" PG=${{ matrix.pg }} REGISTRY=local CACHE_SCOPE=ci || exit 1
+          done
+
       - name: Build all extensions (PG ${{ matrix.pg }})
+        if: steps.changes.outputs.changed == ''
         env:
           DOCKER_BUILDKIT: 1
         run: make build-all PG=${{ matrix.pg }} REGISTRY=local CACHE_SCOPE=ci
@@ -78,6 +132,20 @@ jobs:
     name: Test profile ${{ matrix.profile }} (PG ${{ matrix.pg }})
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed extensions
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            changed=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- extensions/ \
+              | grep -oP 'extensions/\K[^/]+' | sort -u | tr '\n' ' ')
+          else
+            changed=$(git diff --name-only HEAD~1 -- extensions/ \
+              | grep -oP 'extensions/\K[^/]+' | sort -u | tr '\n' ' ')
+          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
       - name: Free disk space
         run: |
@@ -95,7 +163,44 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Build profile extensions (PG ${{ matrix.pg }}, profile ${{ matrix.profile }})
+      - name: Pull pre-built extension images
+        if: steps.changes.outputs.changed != ''
+        env:
+          REGISTRY: ghcr.io/pglayers
+          PREFIX: pgx
+        run: |
+          profile_exts=$(grep -v '^\#' profiles/${{ matrix.profile }}.txt | grep -v '^$')
+          for ext in $profile_exts; do
+            changed="${{ steps.changes.outputs.changed }}"
+            if echo "$changed" | grep -qw "$ext"; then
+              echo "SKIP pull $ext (will build from source)"
+              continue
+            fi
+            ver=$(bash -c "source extensions/$ext/extension.conf && echo \${VERSION_${{ matrix.pg }}}")
+            [ -z "$ver" ] && continue
+            img="${REGISTRY}/${PREFIX}-${ext}:${{ matrix.pg }}"
+            if docker pull "$img" 2>/dev/null; then
+              docker tag "$img" "local/${PREFIX}-${ext}:${{ matrix.pg }}"
+            else
+              echo "WARN: $img not available, will skip in tests"
+            fi
+          done
+
+      - name: Build changed extensions (PG ${{ matrix.pg }}, profile ${{ matrix.profile }})
+        if: steps.changes.outputs.changed != ''
+        env:
+          DOCKER_BUILDKIT: 1
+        run: |
+          profile_exts=$(grep -v '^\#' profiles/${{ matrix.profile }}.txt | grep -v '^$')
+          for ext in ${{ steps.changes.outputs.changed }}; do
+            # Only build if the extension is in this profile
+            if echo "$profile_exts" | grep -qw "$ext"; then
+              make build EXT="$ext" PG=${{ matrix.pg }} REGISTRY=local CACHE_SCOPE=ci || exit 1
+            fi
+          done
+
+      - name: Build all profile extensions (PG ${{ matrix.pg }}, profile ${{ matrix.profile }})
+        if: steps.changes.outputs.changed == ''
         env:
           DOCKER_BUILDKIT: 1
         run: make build-all PG=${{ matrix.pg }} PROFILE=${{ matrix.profile }} REGISTRY=local CACHE_SCOPE=ci
