@@ -114,6 +114,7 @@ promoted to stable.
 | [pgsodium](https://github.com/michelp/pgsodium) | 17, 18, 19 | Modern cryptography using libsodium |
 | [pg_squeeze](https://github.com/cybertec-postgresql/pg_squeeze) | 17, 18, 19 | Remove unused space from tables without heavy locks |
 | [pg_stat_monitor](https://github.com/percona/pg_stat_monitor) | 17, 18 | Enhanced query statistics with histograms and buckets |
+| [pg_textsearch](https://github.com/timescale/pg_textsearch) | 17, 18 | BM25 relevance-ranked full-text search |
 | [pg_uuidv7](https://github.com/fboulnois/pg_uuidv7) | 17, 18, 19 | UUIDv7 generation (time-sortable unique identifiers) |
 | [pg_wait_sampling](https://github.com/postgrespro/pg_wait_sampling) | 17, 18, 19 | Sampling-based statistics of wait events |
 | [pgvector](https://github.com/pgvector/pgvector) | 17, 18, 19 | Vector similarity search for AI/embeddings |
@@ -176,6 +177,7 @@ Extensions that need this:
 | pg_qualstats | `pg_qualstats` |
 | pg_squeeze | `pg_squeeze` |
 | pg_stat_monitor | `pg_stat_monitor` |
+| pg_textsearch | `pg_textsearch` |
 | pg_wait_sampling | `pg_wait_sampling` |
 | pgaudit | `pgaudit` |
 | pglogical | `pglogical` |

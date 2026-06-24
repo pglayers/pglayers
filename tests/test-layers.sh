@@ -255,6 +255,7 @@ declare -A EXT_SQL_NAMES=(
     [pg_similarity]="pg_similarity"
     [pg_squeeze]="pg_squeeze"
     [pg_stat_monitor]="pg_stat_monitor"
+    [pg_textsearch]="pg_textsearch"
     [pg_uuidv7]="pg_uuidv7"
     [pg_wait_sampling]="pg_wait_sampling"
     [pgaudit]="pgaudit"
@@ -383,6 +384,8 @@ has_ext pg_squeeze && smoke_test "pg_squeeze schema" \
     "SELECT count(*) FROM squeeze.tables;"
 has_ext pg_stat_monitor && smoke_test "pg_stat_monitor view" \
     "SELECT count(*) FROM pg_stat_monitor;"
+has_ext pg_textsearch && smoke_test "pg_textsearch index" \
+    "CREATE TABLE _ts_smoke (id serial, content text); INSERT INTO _ts_smoke (content) VALUES ('test search'); CREATE INDEX _ts_idx ON _ts_smoke USING bm25 (content) WITH (text_config = 'english'); SELECT count(*) FROM _ts_smoke ORDER BY content <@> to_bm25query('test', '_ts_idx'); DROP TABLE _ts_smoke;"
 has_ext pg_uuidv7 && smoke_test "pg_uuidv7 generate" \
     "SELECT uuid_generate_v7();"
 has_ext pg_wait_sampling && smoke_test "pg_wait_sampling profile" \

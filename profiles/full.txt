@@ -26,6 +26,7 @@ pg_roaringbitmap
 pg_similarity
 pg_squeeze
 pg_stat_monitor
+pg_textsearch
 pg_uuidv7
 pg_wait_sampling
 pgaudit
