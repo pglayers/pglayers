@@ -44,7 +44,14 @@ WORKDIR /tmp/ext
 RUN . /root/.cargo/env \
     && cargo pgrx init "--pg${PG_MAJOR}=$(which pg_config)" \
     && cargo pgrx package --pg-config "$(which pg_config)" --features "pg${PG_MAJOR}" \
+    && mkdir -p /output \
     && cp -r target/release/pg_graphql-pg${PG_MAJOR}/* /output/ \
+    && if [ -d /output/lib ] && [ ! -L /output/lib ]; then \
+         mkdir -p /output/usr && cp -r /output/lib/* /output/usr/lib/ && rm -rf /output/lib; \
+       fi \
+    && if [ -d /output/share ] && [ ! -L /output/share ]; then \
+         mkdir -p /output/usr && cp -r /output/share/* /output/usr/share/ && rm -rf /output/share; \
+       fi \
     && find /output -name '*.so' -exec strip --strip-unneeded {} \;
 
 FROM scratch
