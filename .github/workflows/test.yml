@@ -43,13 +43,10 @@ jobs:
       - name: Detect changed extensions
         id: changes
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            changed=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- extensions/ \
-              | grep -oP 'extensions/\K[^/]+' | sort -u | tr '\n' ' ')
-          else
-            changed=$(git diff --name-only HEAD~1 -- extensions/ \
-              | grep -oP 'extensions/\K[^/]+' | sort -u | tr '\n' ' ')
-          fi
+          # For PRs, checkout creates a merge commit: HEAD^1 is the base.
+          # For pushes, HEAD~1 is the previous commit. Both cases work with HEAD~1.
+          changed=$(git diff --name-only HEAD~1 -- extensions/ \
+            | grep -oP 'extensions/\K[^/]+' | sort -u | tr '\n' ' ')
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
           if [ -n "$changed" ]; then
             echo "Changed extensions: $changed"
@@ -138,13 +135,8 @@ jobs:
       - name: Detect changed extensions
         id: changes
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            changed=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- extensions/ \
-              | grep -oP 'extensions/\K[^/]+' | sort -u | tr '\n' ' ')
-          else
-            changed=$(git diff --name-only HEAD~1 -- extensions/ \
-              | grep -oP 'extensions/\K[^/]+' | sort -u | tr '\n' ' ')
-          fi
+          changed=$(git diff --name-only HEAD~1 -- extensions/ \
+            | grep -oP 'extensions/\K[^/]+' | sort -u | tr '\n' ' ')
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
       - name: Free disk space
