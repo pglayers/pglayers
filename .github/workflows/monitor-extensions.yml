@@ -14,10 +14,14 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Use PAT so that pushes and PRs trigger downstream workflows.
+          # Falls back to GITHUB_TOKEN if PAT_TOKEN is not set.
+          token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Check for extension updates
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           set -eo pipefail
 
