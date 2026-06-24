@@ -141,16 +141,17 @@ jobs:
             echo "UPDATE $ext: ${current} -> ${latest}"
 
             # Check if a PR already exists for this extension update
-            existing_pr=$(gh pr list --head "deps/update-${ext}" --state open --json number --jq 'length' 2>/dev/null) || existing_pr=0
+            branch="deps/update-${ext}-${latest}"
+            existing_pr=$(gh pr list --head "$branch" --state open --json number --jq 'length' 2>/dev/null) || existing_pr=0
             if [ "$existing_pr" -gt 0 ]; then
               echo "  PR already open for $ext, skipping"
               continue
             fi
 
-            # Create update branch
-            branch="deps/update-${ext}-${latest}"
+            # Create update branch (delete stale remote branch from previous failed runs)
+            git push origin --delete "$branch" 2>/dev/null || true
             git checkout -b "$branch" 2>/dev/null || {
-              echo "  Branch $branch already exists, skipping"
+              echo "  Branch $branch already exists locally, skipping"
               git checkout main 2>/dev/null
               continue
             }
