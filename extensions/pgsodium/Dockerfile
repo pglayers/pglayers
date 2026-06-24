@@ -30,5 +30,16 @@ RUN make -j"$(nproc)" && make install DESTDIR=/output \
 # Bundle libsodium runtime library (not in base postgres image)
 RUN cp /usr/lib/libsodium.so* /output/usr/lib/
 
+# Install default getkey script (generates a random root key in $PGDATA)
+RUN install -m 755 /dev/stdin \
+    /output/usr/share/postgresql/${PG_MAJOR}/extension/pgsodium_getkey <<'SCRIPT'
+#!/bin/bash
+KEY_FILE=$PGDATA/pgsodium_root.key
+if [ ! -f "$KEY_FILE" ]; then
+    head -c 32 /dev/urandom | od -A n -t x1 | tr -d ' \n' > "$KEY_FILE"
+fi
+cat "$KEY_FILE"
+SCRIPT
+
 FROM scratch
 COPY --from=builder /output/ /
