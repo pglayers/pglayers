@@ -103,8 +103,11 @@ jobs:
                   | tail -1) || true
               else
                 # Standard: try GitHub Releases first (excludes pre-releases)
-                latest=$(gh api "repos/${owner_repo}/releases/latest" --jq '.tag_name' 2>/dev/null) || true
-                # Fallback to tags if no releases exist
+                # gh api writes 404 JSON to stdout, so check exit code explicitly
+                if gh api "repos/${owner_repo}/releases/latest" --jq '.tag_name' > /tmp/latest_ver 2>/dev/null; then
+                  latest=$(cat /tmp/latest_ver)
+                fi
+                # Fallback to tags if no releases exist or API returned an error
                 if [ -z "$latest" ]; then
                   latest=$(gh api "repos/${owner_repo}/tags" --paginate --jq '.[].name' 2>/dev/null \
                     | grep -viE '(alpha|beta|rc|dev|pre|snapshot)' \
@@ -135,6 +138,13 @@ jobs:
             # If they are identical after normalization, skip (e.g., v1.0.0 vs 1.0.0)
             if [ "$current_norm" = "$latest_norm" ]; then
               echo "OK   $ext: ${current} (up to date, prefix difference only)"
+              continue
+            fi
+
+            # Reject downgrades: if current sorts higher than latest, the
+            # releases API is behind the actual tags -- not a real update
+            if [ "$(printf '%s\n%s\n' "$current_norm" "$latest_norm" | sort -V | tail -1)" = "$current_norm" ]; then
+              echo "OK   $ext: ${current} (up to date, latest release ${latest} is older)"
               continue
             fi
 
