@@ -31,6 +31,23 @@ jobs:
           # Extensions pinned to a branch or with complex tag formats not yet handled
           SKIP_MONITOR="age h3_pg pgjwt pg_similarity"
 
+          # ============================================================
+          # Download PGDG APT package index (used for APT-based extensions)
+          # ============================================================
+          PGDG_DIST="trixie-pgdg"
+          PACKAGES_URL="https://apt.postgresql.org/pub/repos/apt/dists/${PGDG_DIST}/main/binary-amd64/Packages.gz"
+          curl -sf "$PACKAGES_URL" | zcat > /tmp/pgdg-packages.txt
+
+          # Helper: get upstream version of an APT package from the PGDG index.
+          # Strips the Debian revision suffix (e.g., "0.8.3-1.pgdg13+1" -> "0.8.3").
+          apt_version() {
+            local pkg="$1"
+            awk -v p="$pkg" '
+              /^Package: /{found=($2==p)}
+              found && /^Version:/{print $2; exit}
+            ' /tmp/pgdg-packages.txt | sed 's/-[0-9].*$//' | sed 's/+dfsg.*$//'
+          }
+
           for dir in extensions/*/; do
             ext="$(basename "$dir")"
 
@@ -44,26 +61,6 @@ jobs:
             # shellcheck disable=SC1091,SC2034
             # SC1091: dynamic path; SC2034: variables used indirectly
             source "$dir/extension.conf"
-
-            # Derive owner/repo from REPO URL
-            repo_url="$REPO"
-            if echo "$repo_url" | grep -q "github.com"; then
-              api_type="github"
-              owner_repo=$(echo "$repo_url" | sed -n 's|.*github\.com[:/]\([^/]*/[^/.]*\).*|\1|p')
-            elif echo "$repo_url" | grep -q "gitlab.com"; then
-              api_type="gitlab"
-              # GitLab needs URL-encoded project path
-              project_path=$(echo "$repo_url" | sed -n 's|.*gitlab\.com[:/]\([^.]*\).*|\1|p')
-              project_encoded="${project_path//\//%2F}"
-            else
-              echo "SKIP $ext (unsupported host: $repo_url)"
-              continue
-            fi
-
-            # Determine tag filter pattern
-            tag_filter="${TAG_FILTER:-}"
-            # Reset TAG_FILTER for next iteration
-            TAG_FILTER=""
 
             # Get the current version (use first available PG version)
             current=""
@@ -81,13 +78,146 @@ jobs:
               continue
             fi
 
+            # Determine tag filter pattern (for source-built extensions)
+            tag_filter="${TAG_FILTER:-}"
+            TAG_FILTER=""
+
+            # ============================================================
+            # APT-based extensions: check PGDG repository
+            # ============================================================
+            apt_pkg="${APT_PACKAGE:-}"
+            APT_PACKAGE=""  # Reset for next iteration
+
+            if [ -n "$apt_pkg" ]; then
+              # Query APT versions for each PG version
+              latest=""
+              for pg in 17 18 19; do
+                ver_var="VERSION_${pg}"
+                [ -z "${!ver_var:-}" ] && continue
+                pkg_name="postgresql-${pg}-${apt_pkg}"
+                apt_ver="$(apt_version "$pkg_name")"
+                if [ -n "$apt_ver" ] && [ -z "$latest" ]; then
+                  latest="$apt_ver"
+                fi
+              done
+
+              if [ -z "$latest" ]; then
+                echo "WARN $ext: no APT package found in PGDG repo"
+                continue
+              fi
+
+              # Normalize current version for comparison (strip v prefix,
+              # common tag prefixes like REL, ver_, VERSION_, wal2json_)
+              current_norm="$current"
+              current_norm="${current_norm#v}"
+              current_norm="${current_norm#REL}"
+              current_norm="${current_norm#ver_}"
+              current_norm="${current_norm#VERSION_}"
+              current_norm="${current_norm#wal2json_}"
+              # Convert underscores to dots for version comparison
+              current_norm="${current_norm//_/.}"
+
+              latest_norm="$latest"
+
+              if [ "$current_norm" = "$latest_norm" ]; then
+                echo "OK   $ext: ${current} = apt:${latest} (up to date)"
+                continue
+              fi
+
+              # Reject downgrades
+              if [ "$(printf '%s\n%s\n' "$current_norm" "$latest_norm" | sort -V | tail -1)" = "$current_norm" ]; then
+                echo "OK   $ext: ${current} (up to date, APT ${latest} is older)"
+                continue
+              fi
+
+              echo "UPDATE $ext: ${current} -> ${latest} (from PGDG APT)"
+
+              # Derive release/compare URLs from upstream repo
+              repo_url="$REPO"
+              owner_repo=$(echo "$repo_url" | sed -n 's|.*github\.com[:/]\([^/]*/[^/.]*\).*|\1|p')
+              release_url="https://github.com/${owner_repo}/releases"
+              compare_url="$release_url"
+
+              # Check if a PR already exists
+              branch="deps/update-${ext}-${latest}"
+              existing_pr=$(gh pr list --head "$branch" --state open --json number --jq 'length' 2>/dev/null) || existing_pr=0
+              if [ "$existing_pr" -gt 0 ]; then
+                echo "  PR already open for $ext, skipping"
+                continue
+              fi
+
+              # Create update branch
+              git push origin --delete "$branch" 2>/dev/null || true
+              git checkout -b "$branch" 2>/dev/null || {
+                echo "  Branch $branch already exists locally, skipping"
+                git checkout main 2>/dev/null
+                continue
+              }
+
+              # Update VERSION_* fields per PG version from APT
+              conf_file="extensions/${ext}/extension.conf"
+              for pg in 17 18 19; do
+                ver_var="VERSION_${pg}"
+                old_ver="${!ver_var:-}"
+                [ -z "$old_ver" ] && continue
+                pkg_name="postgresql-${pg}-${apt_pkg}"
+                new_ver="$(apt_version "$pkg_name")"
+                [ -z "$new_ver" ] && continue
+                sed -i "s|^VERSION_${pg}=.*|VERSION_${pg}=\"${new_ver}\"|" "$conf_file"
+              done
+
+              # Build PR body
+              pr_body="PGDG APT repository updated **${ext}** to \`${latest}\`."
+              pr_body+=$'\n\n'
+              pr_body+="**Current version:** \`${current}\`"
+              pr_body+=$'\n'
+              pr_body+="**APT version:** \`${latest}\`"
+              pr_body+=$'\n\n'
+              pr_body+="Package: \`postgresql-17-${apt_pkg}\`"
+              pr_body+=$'\n'
+              pr_body+="[Upstream releases](${release_url})"
+              pr_body+=$'\n\n'
+              pr_body+="---"
+              pr_body+=$'\n'
+              pr_body+="*Automated by monitor-extensions workflow (APT source).*"
+
+              # Commit, push, and open PR
+              git add "$conf_file"
+              git commit -m "deps(${ext}): update to ${latest} (APT)"
+              git push -u origin "$branch"
+
+              if ! gh pr create \
+                --title "deps(${ext}): update to ${latest}" \
+                --body "$pr_body" \
+                --base main \
+                --head "$branch"; then
+                echo "  WARN: failed to create PR for $ext"
+              fi
+
+              git checkout main 2>/dev/null
+              continue
+            fi
+
+            # ============================================================
+            # Source-built extensions: check GitHub/GitLab releases
+            # ============================================================
+            repo_url="$REPO"
+            if echo "$repo_url" | grep -q "github.com"; then
+              api_type="github"
+              owner_repo=$(echo "$repo_url" | sed -n 's|.*github\.com[:/]\([^/]*/[^/.]*\).*|\1|p')
+            elif echo "$repo_url" | grep -q "gitlab.com"; then
+              api_type="gitlab"
+              project_path=$(echo "$repo_url" | sed -n 's|.*gitlab\.com[:/]\([^.]*\).*|\1|p')
+              project_encoded="${project_path//\//%2F}"
+            else
+              echo "SKIP $ext (unsupported host: $repo_url)"
+              continue
+            fi
+
             # Fetch latest version from upstream
             latest=""
             if [ "$api_type" = "github" ]; then
               if [ -n "$tag_filter" ]; then
-                # Non-standard tags: list tags, filter, sort, take latest
-                # For PG-version-coupled tags (TAG_FILTER contains ${PG}),
-                # expand for the first available PG version
                 resolved_filter="$tag_filter"
                 # shellcheck disable=SC2016
                 # Literal ${PG} match is intentional -- it's a placeholder in TAG_FILTER
@@ -106,12 +236,9 @@ jobs:
                   | sort -V \
                   | tail -1) || true
               else
-                # Standard: try GitHub Releases first (excludes pre-releases)
-                # gh api writes 404 JSON to stdout, so check exit code explicitly
                 if gh api "repos/${owner_repo}/releases/latest" --jq '.tag_name' > /tmp/latest_ver 2>/dev/null; then
                   latest=$(cat /tmp/latest_ver)
                 fi
-                # Fallback to tags if no releases exist or API returned an error
                 if [ -z "$latest" ]; then
                   latest=$(gh api "repos/${owner_repo}/tags" --paginate --jq '.[].name' 2>/dev/null \
                     | grep -viE '(alpha|beta|rc|dev|pre|snapshot)' \
@@ -136,17 +263,14 @@ jobs:
               continue
             fi
 
-            # Normalize for comparison: strip leading 'v' prefix
             current_norm="${current#v}"
             latest_norm="${latest#v}"
-            # If they are identical after normalization, skip (e.g., v1.0.0 vs 1.0.0)
             if [ "$current_norm" = "$latest_norm" ]; then
               echo "OK   $ext: ${current} (up to date, prefix difference only)"
               continue
             fi
 
-            # Reject downgrades: if current sorts higher than latest, the
-            # releases API is behind the actual tags -- not a real update
+            # Reject downgrades
             if [ "$(printf '%s\n%s\n' "$current_norm" "$latest_norm" | sort -V | tail -1)" = "$current_norm" ]; then
               echo "OK   $ext: ${current} (up to date, latest release ${latest} is older)"
               continue
@@ -154,7 +278,7 @@ jobs:
 
             echo "UPDATE $ext: ${current} -> ${latest}"
 
-            # Check if a PR already exists for this extension update
+            # Check if a PR already exists
             branch="deps/update-${ext}-${latest}"
             existing_pr=$(gh pr list --head "$branch" --state open --json number --jq 'length' 2>/dev/null) || existing_pr=0
             if [ "$existing_pr" -gt 0 ]; then
@@ -162,7 +286,7 @@ jobs:
               continue
             fi
 
-            # Create update branch (delete stale remote branch from previous failed runs)
+            # Create update branch
             git push origin --delete "$branch" 2>/dev/null || true
             git checkout -b "$branch" 2>/dev/null || {
               echo "  Branch $branch already exists locally, skipping"
@@ -170,13 +294,12 @@ jobs:
               continue
             }
 
-            # Update all VERSION_* fields that have a value
+            # Update VERSION_* fields
             conf_file="extensions/${ext}/extension.conf"
             for pg in 17 18 19; do
               ver_var="VERSION_${pg}"
               old_ver="${!ver_var:-}"
               [ -z "$old_ver" ] && continue
-              # For PG-version-coupled tags, derive the new tag
               new_ver="$latest"
               # shellcheck disable=SC2016
               # Literal ${PG} match is intentional
@@ -213,14 +336,13 @@ jobs:
             pr_body+=$'\n\n'
             pr_body+="---"
             pr_body+=$'\n'
-            pr_body+="*Automated by monitor-extensions workflow. CI will validate the build.*"
+            pr_body+="*Automated by monitor-extensions workflow (source build).*"
 
-            # Commit and push
+            # Commit, push, and open PR
             git add "$conf_file"
             git commit -m "deps(${ext}): update to ${latest}"
             git push -u origin "$branch"
 
-            # Open PR
             if ! gh pr create \
               --title "deps(${ext}): update to ${latest}" \
               --body "$pr_body" \
@@ -229,6 +351,5 @@ jobs:
               echo "  WARN: failed to create PR for $ext (check repo Actions permissions)"
             fi
 
-            # Return to main for next extension
             git checkout main 2>/dev/null
           done
