@@ -1,11 +1,12 @@
 # syntax=docker/dockerfile:1
 ARG PG_MAJOR=17
+ARG PG_TAG=${PG_MAJOR}
 
-FROM postgres:${PG_MAJOR} AS base
+FROM postgres:${PG_TAG} AS base
 RUN find /usr/lib -name '*.so*' \( -type f -o -type l \) 2>/dev/null \
     | sed 's|.*/||' | sort -u > /tmp/base-libs.txt
 
-FROM postgres:${PG_MAJOR} AS builder
+FROM postgres:${PG_TAG} AS builder
 ARG PG_MAJOR
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \

@@ -1,12 +1,13 @@
 # syntax=docker/dockerfile:1
 ARG PG_MAJOR=17
+ARG PG_TAG=${PG_MAJOR}
 ARG EXT_VERSION=v1.1.1
 
 # Use official pre-built pg_duckdb image (avoids 10-15 min DuckDB compilation).
 FROM pgduckdb/pgduckdb:${PG_MAJOR}-${EXT_VERSION} AS upstream
 
 # Snapshot base image libraries for diffing (by soname, not canonical path)
-FROM postgres:${PG_MAJOR} AS base
+FROM postgres:${PG_TAG} AS base
 RUN find /usr/lib -name '*.so*' \( -type f -o -type l \) 2>/dev/null \
     | sed 's|.*/||' | sort -u > /tmp/base-libs.txt
 

@@ -15,6 +15,7 @@ REGISTRY="${1:-local}"
 PG="${2:-17}"
 PREFIX="pgx"
 IMAGE_TAG="pglayers-test:${PG}"
+PG_TAG="${PG_TAG:-$PG}"
 
 PASS=0
 FAIL=0
@@ -85,7 +86,7 @@ TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
 # Get base image file list (files and symlinks only, no directories)
-docker create --name pgx-extract-base "postgres:${PG}" true 2>/dev/null
+docker create --name pgx-extract-base "postgres:${PG_TAG}" true 2>/dev/null
 docker export pgx-extract-base 2>/dev/null | tar -t 2>/dev/null \
     | grep -v '/$' \
     | sed 's|^|/|' \
@@ -189,7 +190,7 @@ info "Phase 5: Building combined image and checking shared libraries..."
 
 # Generate a test Dockerfile
 {
-    echo "FROM postgres:${PG}"
+    echo "FROM postgres:${PG_TAG}"
     for ext in "${EXTENSIONS[@]}"; do
         echo "COPY --from=${REGISTRY}/${PREFIX}-${ext}:${PG} / /"
     done

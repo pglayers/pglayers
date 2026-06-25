@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
 ARG PG_MAJOR=17
+ARG PG_TAG=${PG_MAJOR}
 ARG EXT_VERSION=v0.2.3
 
 # Stage 1: Install cargo-pgrx (PG-independent, cached across PG versions)
