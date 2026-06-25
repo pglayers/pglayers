@@ -41,6 +41,7 @@ pgtt
 pgvector
 plpgsql_check
 plprofiler
+plv8
 postgis
 postgres_protobuf
 prefix
