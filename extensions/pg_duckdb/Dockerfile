@@ -32,16 +32,27 @@ RUN set -eux; \
 # Bundle runtime shared libraries that pg_duckdb needs but the base
 # postgres image doesn't have (compare by soname to avoid bundling
 # older versions of libs already present in the base image).
+# Exclude libcurl and its deps -- these are provided by the http/postgis
+# layers which install from the same OS as the combined image.
 RUN set -eux; \
     PG=${PG_MAJOR}; \
     # Collect all ldd-reported paths from extension .so files
     ldd /usr/lib/postgresql/${PG}/lib/pg_duckdb.so \
         /usr/lib/postgresql/${PG}/lib/libduckdb.so 2>/dev/null \
         | awk '/=>/ && /\// {print $3}' | sort -u > /tmp/all-deps.txt; \
+    # Libraries provided by other extension layers (http, postgis);
+    # skip these to avoid version conflicts in the combined image.
+    printf '%s\n' \
+        libcurl.so.4 libbrotlicommon.so.1 libbrotlidec.so.1 \
+        libnghttp2.so.14 libpsl.so.5 librtmp.so.1 libssh2.so.1 \
+        > /tmp/skip-libs.txt; \
     # Copy each dep whose soname is not already in the base image
     while IFS= read -r lib; do \
         soname="$(basename "$lib")"; \
         if grep -qxF "$soname" /tmp/base-libs.txt 2>/dev/null; then \
+            continue; \
+        fi; \
+        if grep -qxF "$soname" /tmp/skip-libs.txt 2>/dev/null; then \
             continue; \
         fi; \
         dest="$(echo "$lib" | sed 's|^/lib/|/usr/lib/|')"; \
