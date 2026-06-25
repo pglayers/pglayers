@@ -49,13 +49,16 @@ list: ## List available extensions
 	@printf "%-15s %-6s %s\n" "---------" "--" "-----------"
 	@for ext in $(EXTENSIONS); do \
 		desc=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$$DESCRIPTION"'); \
+		ci_skip=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$${CI_SKIP:-}"'); \
 		versions=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && \
 			for v in $(PG_VERSIONS); do \
 				ver_var="VERSION_$$v"; \
 				ver="$${!ver_var}"; \
 				[ -n "$$ver" ] && printf "$$v "; \
 			done'); \
-		printf "%-15s %-6s %s\n" "$$ext" "$$versions" "$$desc"; \
+		skip_marker=""; \
+		[ "$$ci_skip" = "1" ] && skip_marker=" [CI_SKIP]"; \
+		printf "%-15s %-6s %s%s\n" "$$ext" "$$versions" "$$desc" "$$skip_marker"; \
 	done
 
 # Cache scope for GHA cache (used in CI). Set to enable layer caching.
