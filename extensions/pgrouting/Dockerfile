@@ -14,7 +14,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     cmake libboost-graph-dev \
     libgeos-dev libproj-dev libjson-c-dev libxml2-dev \
     libprotobuf-c-dev protobuf-c-compiler \
-    libtiff-dev libcurl4-gnutls-dev
+    libtiff-dev libcurl4-openssl-dev
 
 # PostGIS is a build dependency (pgrouting needs PostGIS headers)
 # Install PostGIS from source first (serial build: parallel make has

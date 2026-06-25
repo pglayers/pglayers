@@ -11,7 +11,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
     build-essential git ca-certificates \
     postgresql-server-dev-${PG_MAJOR} \
-    libcurl4-gnutls-dev libicu-dev
+    libcurl4-openssl-dev libicu-dev
 
 RUN git clone --branch ${EXT_VERSION} --depth 1 \
     https://github.com/supabase/pg_net.git /tmp/ext
