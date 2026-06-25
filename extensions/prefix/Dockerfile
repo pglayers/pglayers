@@ -18,7 +18,8 @@ RUN git clone --branch ${EXT_VERSION} --depth 1 \
 WORKDIR /tmp/ext
 
 RUN make -j"$(nproc)" && make install DESTDIR=/output \
-    && find /output -name '*.so' -exec strip --strip-unneeded {} \;
+    && find /output -name '*.so' -exec strip --strip-unneeded {} \; \
+    && rm -rf /output/usr/share/doc
 
 FROM scratch
 COPY --from=builder /output/ /

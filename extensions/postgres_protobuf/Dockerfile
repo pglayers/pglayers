@@ -22,7 +22,8 @@ WORKDIR /tmp/ext
 # Build bundled protobuf library, then build the extension.
 RUN ./build-protobuf-library.sh \
     && make -j"$(nproc)" && make install DESTDIR=/output \
-    && find /output -name '*.so' -exec strip --strip-unneeded {} \;
+    && find /output -name '*.so' -exec strip --strip-unneeded {} \; \
+    && rm -rf /output/usr/share/doc
 
 FROM scratch
 COPY --from=builder /output/ /

@@ -86,6 +86,12 @@ jobs:
               echo "SKIP pull $ext (will build from source)"
               continue
             fi
+            # Skip CI_SKIP extensions (long builds not available in registry)
+            ci_skip=$(bash -c "source extensions/$ext/extension.conf && echo \${CI_SKIP:-}")
+            if [ "$ci_skip" = "1" ]; then
+              echo "SKIP pull $ext (CI_SKIP=1)"
+              continue
+            fi
             ver=$(bash -c "source extensions/$ext/extension.conf && echo \${VERSION_${{ matrix.pg }}}")
             [ -z "$ver" ] && continue
             img="${REGISTRY}/${PREFIX}-${ext}:${{ matrix.pg }}"

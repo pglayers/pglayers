@@ -50,12 +50,17 @@ RUN make -j"$(nproc)" DUCKDB_GEN=ninja \
     && make install DESTDIR=/output \
     && find /output -name '*.so' -exec strip --strip-unneeded {} \;
 
-# Bundle runtime shared libraries not in the base postgres image
+# Bundle runtime shared libraries not in the base postgres image.
+# Note: libcurl is NOT bundled here to avoid collision with PostGIS
+# (which bundles libcurl-gnutls). In combined images, PostGIS provides
+# libcurl. For standalone use without PostGIS, add libcurl manually.
 RUN set -eux; \
     MULTIARCH="$(dpkg-architecture -q DEB_HOST_MULTIARCH)"; \
     LIBDIR="/usr/lib/${MULTIARCH}"; \
     mkdir -p /output${LIBDIR}; \
-    cp -a ${LIBDIR}/libcurl.so* /output${LIBDIR}/
+    for lib in ${LIBDIR}/libcurl.so*; do \
+        : "skipping $lib (provided by PostGIS layer)"; \
+    done
 
 FROM scratch
 COPY --from=builder /output/ /
