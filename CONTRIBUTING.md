@@ -63,29 +63,110 @@ extensions/<name>/
 DESCRIPTION="Short description"
 REPO="https://github.com/org/extension.git"
 LICENSE="PostgreSQL"          # Required
-VERSION_17="v1.0.0"
-VERSION_18="v1.0.0"
-VERSION_19="v1.0.0"
+VERSION_17="1.0.0"
+VERSION_18="1.0.0"
+VERSION_19="1.0.0"
 SHARED_PRELOAD=""             # Library name if needed, empty otherwise
 NOTES=""
+APT_PACKAGE=""                # PGDG package name suffix (if APT-based)
 TAG_FILTER=""                 # Optional: regex for non-standard tag formats
 ```
 
-See [AGENTS.md](AGENTS.md) for Dockerfile requirements (BuildKit
-syntax, APT cache mounts, strip symbols, `FROM scratch` final stage,
-architecture-neutral paths).
+### Step 3: Write the Dockerfile
 
-### Step 3: Build and verify locally
+**Prefer APT packages** -- Check if the extension is available in the
+PGDG APT repository first:
+
+```bash
+docker run --rm postgres:17 bash -c \
+  "apt-get update && apt-cache search postgresql-17-<name>"
+```
+
+If a package exists, use the APT-based pattern:
+
+```dockerfile
+# syntax=docker/dockerfile:1
+ARG PG_MAJOR=17
+ARG PG_TAG=${PG_MAJOR}
+
+FROM postgres:${PG_TAG} AS builder
+ARG PG_MAJOR
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-${PG_MAJOR}-<package>
+
+# Extract extension files
+RUN mkdir -p /output && \
+    dpkg -L postgresql-${PG_MAJOR}-<package> \
+    | grep -E '^/usr/(lib|share)/postgresql/' \
+    | while IFS= read -r f; do \
+        [ -f "$f" ] || continue; \
+        mkdir -p "/output$(dirname "$f")"; \
+        cp -a "$f" "/output$f"; \
+    done
+
+FROM scratch
+COPY --from=builder /output/ /
+```
+
+Set `APT_PACKAGE="<package>"` in `extension.conf`. The `VERSION_*`
+fields should reflect the upstream version shipped by the APT package
+(e.g., `1.0.0` without the `v` prefix or Debian revision suffix).
+
+**Source build** (when no APT package exists):
+
+```dockerfile
+# syntax=docker/dockerfile:1
+ARG PG_MAJOR=17
+ARG PG_TAG=${PG_MAJOR}
+ARG EXT_VERSION=v1.0.0
+
+FROM postgres:${PG_TAG} AS builder
+ARG PG_MAJOR
+ARG EXT_VERSION
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+    build-essential git ca-certificates \
+    postgresql-server-dev-${PG_MAJOR}
+
+RUN git clone --branch ${EXT_VERSION} --depth 1 \
+    https://github.com/org/extension.git /tmp/ext
+
+WORKDIR /tmp/ext
+RUN make -j"$(nproc)" && make install DESTDIR=/output \
+    && find /output -name '*.so' -exec strip --strip-unneeded {} \;
+
+FROM scratch
+COPY --from=builder /output/ /
+```
+
+**Runtime shared library dependencies** -- If the extension depends on
+libraries not present in the base `postgres` image (check with `ldd`),
+add a dep-bundling stage. See `extensions/postgis/Dockerfile` or
+`extensions/tds_fdw/Dockerfile` for the full pattern.
+
+**Architecture-neutral** -- Dockerfiles must work on both `linux/amd64`
+and `linux/arm64`. Do not hardcode paths like `/usr/lib/x86_64-linux-gnu/`.
+
+### Step 4: Build and verify locally
 
 ```bash
 make build EXT=<name> PG=17 REGISTRY=local
 make test REGISTRY=local PG=17
 ```
 
-Tests must also pass for PG 18 and PG 19 (if the extension supports
-them).
+Tests must also pass for PG 18. For PG 19 (beta), use:
 
-### Step 4: Add test coverage
+```bash
+make build EXT=<name> PG=19 PG_TAG=19beta1 REGISTRY=local
+make test REGISTRY=local PG=19 PG_TAG=19beta1
+```
+
+### Step 5: Add test coverage
 
 Edit `tests/test-layers.sh`:
 
@@ -118,7 +199,7 @@ Edit `tests/test-layers.sh`:
    ```
    Aim for 2-4 checks per extension.
 
-### Step 5: Update documentation and profiles
+### Step 6: Update documentation and profiles
 
 In the **same commit**:
 
@@ -129,18 +210,23 @@ In the **same commit**:
   the extension is available in that service
 - Run `make check-profiles` to validate
 
-### Step 6: Set up version monitoring
+### Step 7: Set up version monitoring
 
 The extension must be tracked by the
 [monitor-extensions workflow](.github/workflows/monitor-extensions.yml):
 
-- **Standard semver tags** -- No action needed.
-- **Non-standard tags** -- Add `TAG_FILTER` to `extension.conf`.
-- **No tagged releases** -- Add to `SKIP_MONITOR` in the workflow.
+- **APT-based extensions** -- Automatically monitored via the PGDG
+  APT repository. No action needed beyond setting `APT_PACKAGE` in
+  `extension.conf`.
+- **Standard semver tags** (source-built) -- No action needed.
+- **Non-standard tags** (source-built) -- Add `TAG_FILTER` to
+  `extension.conf`.
+- **No tagged releases** (source-built) -- Add to `SKIP_MONITOR` in
+  the workflow.
 
 See [AGENTS.md](AGENTS.md#version-monitoring) for details.
 
-### Step 7: Pre-commit checks
+### Step 8: Pre-commit checks
 
 Before submitting:
 
@@ -154,13 +240,12 @@ actionlint  # or: python3 -c "import yaml; ..."
 # Run tests for all supported PG versions
 make test REGISTRY=local PG=17
 make test REGISTRY=local PG=18
-make test REGISTRY=local PG=19
 
 # Verify profiles
 make check-profiles
 ```
 
-### Step 8: Submit
+### Step 9: Submit
 
 ```bash
 git add extensions/<name>/ tests/test-layers.sh profiles/full.txt README.md

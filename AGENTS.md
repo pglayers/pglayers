@@ -196,23 +196,59 @@ Every extension Dockerfile **must** follow these practices:
    Do NOT add `rm -rf /var/lib/apt/lists/*` (unnecessary with cache
    mounts and it defeats the caching).
 
-3. **Strip debug symbols** -- Always strip `.so` files after
-   `make install` to reduce image size (50-80% reduction):
+3. **Prefer APT packages** -- If the extension is available in the PGDG
+   APT repository (`apt.postgresql.org`), install it via `apt-get`
+   rather than compiling from source. This is faster, more reproducible,
+   and automatically picks up security patches. The standard APT-based
+   Dockerfile pattern:
+   ```dockerfile
+   # syntax=docker/dockerfile:1
+   ARG PG_MAJOR=17
+   ARG PG_TAG=${PG_MAJOR}
+
+   FROM postgres:${PG_TAG} AS builder
+   ARG PG_MAJOR
+
+   RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+       --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+       apt-get update && apt-get install -y --no-install-recommends \
+       postgresql-${PG_MAJOR}-<package>
+
+   RUN mkdir -p /output && \
+       dpkg -L postgresql-${PG_MAJOR}-<package> \
+       | grep -E '^/usr/(lib|share)/postgresql/' \
+       | while IFS= read -r f; do \
+           [ -f "$f" ] || continue; \
+           mkdir -p "/output$(dirname "$f")"; \
+           cp -a "$f" "/output$f"; \
+       done
+
+   FROM scratch
+   COPY --from=builder /output/ /
+   ```
+   Add `APT_PACKAGE="<package>"` to `extension.conf` when using this
+   pattern. If the extension has runtime shared library dependencies
+   not present in the base postgres image, add a dep-bundling stage
+   (see `extensions/postgis/Dockerfile` for the full pattern).
+
+4. **Source builds (when no APT package exists)** -- Strip `.so` files
+   after `make install` to reduce image size (50-80% reduction):
    ```dockerfile
    RUN make -j"$(nproc)" && make install DESTDIR=/output \
        && find /output -name '*.so' -exec strip --strip-unneeded {} \;
    ```
 
-4. **Minimal final image** -- The final stage must be `FROM scratch`
+5. **Minimal final image** -- The final stage must be `FROM scratch`
    containing only the extension artifacts. No build tools, no source
    code, no package manager state.
 
-5. **Architecture-neutral** -- Dockerfiles must work on both `linux/amd64`
+6. **Architecture-neutral** -- Dockerfiles must work on both `linux/amd64`
    and `linux/arm64` without modification. Do NOT hardcode architecture-
    specific paths like `/usr/lib/x86_64-linux-gnu/`. Use
    `dpkg-architecture -q DEB_HOST_MULTIARCH` if you need the multiarch
-   tuple. All source builds (git clone + make) are inherently portable;
-   only pre-built binary downloads need `TARGETARCH` handling.
+   tuple. APT packages and source builds (git clone + make) are
+   inherently portable; only pre-built binary downloads need
+   `TARGETARCH` handling.
 
 ### Keeping documentation in sync
 

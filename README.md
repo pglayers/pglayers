@@ -223,7 +223,7 @@ PostGIS Docker image).
 
 The project publishes one Docker image per extension per PostgreSQL
 version. These are not runnable containers -- they are `FROM scratch`
-images containing only the compiled extension artifacts laid out at the
+images containing only the extension artifacts laid out at the
 correct filesystem paths:
 
 ```
@@ -526,6 +526,77 @@ the PostGIS and pgRouting `COPY --from` lines from your Dockerfile.
 | GPL-3.0 | No | login_hook, session_variable |
 | AGPL-3.0 | No | -- |
 | BSL, SSPL, ELv2, FSL | No | -- |
+
+## FAQ
+
+### How does pglayers work?
+
+Each extension is built as a minimal `FROM scratch` Docker image containing
+only the extension's files (shared libraries, control files, SQL scripts).
+These images are not runnable containers -- they are filesystem layers.
+
+When you write:
+```dockerfile
+COPY --from=ghcr.io/pglayers/pgx-pgvector:17 / /
+```
+
+Docker copies the extension files into the official `postgres` image at
+exactly the right paths (`/usr/lib/postgresql/17/lib/`,
+`/usr/share/postgresql/17/extension/`). PostgreSQL discovers them and
+you can `CREATE EXTENSION`. No compilation, no package manager, no
+runtime dependencies to resolve -- just file copies stacked on top of
+the official image.
+
+### Why is version X of extension Y not available?
+
+pglayers follows a deliberate version policy. We prefer stability and
+reproducibility over bleeding-edge releases, using this priority order:
+
+1. **PGDG APT packages** (preferred) -- Most extensions are installed
+   from the official PostgreSQL APT repository (`apt.postgresql.org`).
+   The version you get is whatever the PGDG maintainers have packaged.
+   This is typically the latest stable release, but may lag a few days
+   or weeks behind upstream.
+
+2. **Source builds** (fallback) -- Extensions not available in PGDG are
+   compiled from source at the latest stable release tag.
+
+If the PGDG repository ships an older version than upstream, we ship
+that older version. This is intentional: PGDG packages are tested
+against the corresponding PostgreSQL release, receive security patches
+through the same channel, and are guaranteed to be ABI-compatible.
+We only override this if there is a critical bug fix or security issue
+in a newer release that PGDG has not yet packaged.
+
+### Why is my extension not included?
+
+Possibly one of:
+
+- **License** -- pglayers only ships extensions with permissive
+  open-source licenses (PostgreSQL, MIT, BSD, Apache 2.0, ISC). We
+  exclude proprietary, source-available (BSL, SSPL, FSL, ELv2), and
+  strong copyleft (AGPL) licenses. We also exclude extensions that
+  require proprietary runtime dependencies (e.g., Oracle client).
+  See the [Licensing policy](#licensing-policy) section for details.
+
+- **Not yet contributed** -- We welcome contributions! To add a new
+  extension, see the [Contributing guide](CONTRIBUTING.md) for the
+  full checklist, Dockerfile patterns, and test requirements.
+
+### Why is there no package for my PostgreSQL version?
+
+Extension availability per PostgreSQL version depends on upstream
+support:
+
+- **APT-based extensions** -- Available when the PGDG repository
+  publishes a package for that PG version. New major PG versions
+  (e.g., PG 19 during beta) may not have all packages yet.
+
+- **Source-built extensions** -- Available when the extension compiles
+  cleanly against that PG version's headers.
+
+If an extension you need doesn't support your PG version yet, you can
+contribute by following the [Contributing guide](CONTRIBUTING.md).
 
 ## License
 
