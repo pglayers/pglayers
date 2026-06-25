@@ -1,63 +1,52 @@
 # syntax=docker/dockerfile:1
 ARG PG_MAJOR=17
-ARG PG_TAG=${PG_MAJOR}
 ARG EXT_VERSION=v1.1.1
 
-# Stage 1: Build DuckDB engine (PG-independent, cached across PG versions)
-# DuckDB is ~1M lines of C++; this takes ~10-15 min but is identical for all PG versions.
-FROM debian:bookworm AS duckdb-builder
-ARG EXT_VERSION
+# Use official pre-built pg_duckdb image (avoids 10-15 min DuckDB compilation).
+FROM pgduckdb/pgduckdb:${PG_MAJOR}-${EXT_VERSION} AS upstream
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git ca-certificates \
-    cmake ninja-build libssl-dev pkg-config \
-    liblz4-dev libicu-dev libcurl4-openssl-dev
+# Snapshot base image libraries for diffing (by soname, not canonical path)
+FROM postgres:${PG_MAJOR} AS base
+RUN find /usr/lib -name '*.so*' \( -type f -o -type l \) 2>/dev/null \
+    | sed 's|.*/||' | sort -u > /tmp/base-libs.txt
 
-RUN git clone --branch ${EXT_VERSION} --depth 1 --recurse-submodules \
-    https://github.com/duckdb/pg_duckdb.git /tmp/ext
-
-WORKDIR /tmp/ext
-
-# Build DuckDB directly via its own Makefile (bypasses pg_duckdb's PGXS check)
-RUN OVERRIDE_GIT_DESCRIBE=v1.4.3 \
-    GEN=ninja \
-    CMAKE_VARS="-DCXX_EXTRA=-fvisibility=default -DBUILD_SHELL=0 -DBUILD_PYTHON=0 -DBUILD_UNITTESTS=0" \
-    DISABLE_SANITIZER=1 \
-    EXTENSION_CONFIGS="../pg_duckdb_extensions.cmake" \
-    make -C third_party/duckdb release
-
-# Stage 2: Build pg_duckdb extension (PG-specific, ~1-2 min)
-FROM postgres:${PG_TAG} AS builder
+# Collector: extract extension + bundle missing runtime deps
+FROM upstream AS collector
 ARG PG_MAJOR
+COPY --from=base /tmp/base-libs.txt /tmp/base-libs.txt
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
-    build-essential ca-certificates \
-    postgresql-server-dev-${PG_MAJOR} \
-    cmake ninja-build libssl-dev pkg-config \
-    liblz4-dev libicu-dev libcurl4-openssl-dev
+USER root
 
-# Copy source tree with pre-built DuckDB library
-COPY --from=duckdb-builder /tmp/ext /tmp/ext
-
-WORKDIR /tmp/ext
-
-# Build only the pg_duckdb extension (DuckDB library already built)
-RUN make -j"$(nproc)" DUCKDB_GEN=ninja \
-    && make install DESTDIR=/output \
-    && find /output -name '*.so' -exec strip --strip-unneeded {} \;
-
-# Bundle runtime shared libraries not in the base postgres image.
-# Uses libcurl-openssl (same as PostGIS) so the files are identical
-# when both extensions are combined in the same image.
+# Copy extension artifacts to /output
 RUN set -eux; \
-    MULTIARCH="$(dpkg-architecture -q DEB_HOST_MULTIARCH)"; \
-    LIBDIR="/usr/lib/${MULTIARCH}"; \
-    mkdir -p /output${LIBDIR}; \
-    cp -a ${LIBDIR}/libcurl.so* /output${LIBDIR}/
+    PG=${PG_MAJOR}; \
+    mkdir -p /output/usr/lib/postgresql/${PG}/lib/bitcode \
+             /output/usr/share/postgresql/${PG}/extension; \
+    cp /usr/lib/postgresql/${PG}/lib/libduckdb.so /output/usr/lib/postgresql/${PG}/lib/; \
+    cp /usr/lib/postgresql/${PG}/lib/pg_duckdb.so /output/usr/lib/postgresql/${PG}/lib/; \
+    cp /usr/lib/postgresql/${PG}/lib/bitcode/pg_duckdb.index.bc /output/usr/lib/postgresql/${PG}/lib/bitcode/; \
+    cp -r /usr/lib/postgresql/${PG}/lib/bitcode/pg_duckdb /output/usr/lib/postgresql/${PG}/lib/bitcode/; \
+    cp /usr/share/postgresql/${PG}/extension/pg_duckdb* /output/usr/share/postgresql/${PG}/extension/
+
+# Bundle runtime shared libraries that pg_duckdb needs but the base
+# postgres image doesn't have (compare by soname to avoid bundling
+# older versions of libs already present in the base image).
+RUN set -eux; \
+    PG=${PG_MAJOR}; \
+    # Collect all ldd-reported paths from extension .so files
+    ldd /usr/lib/postgresql/${PG}/lib/pg_duckdb.so \
+        /usr/lib/postgresql/${PG}/lib/libduckdb.so 2>/dev/null \
+        | awk '/=>/ && /\// {print $3}' | sort -u > /tmp/all-deps.txt; \
+    # Copy each dep whose soname is not already in the base image
+    while IFS= read -r lib; do \
+        soname="$(basename "$lib")"; \
+        if grep -qxF "$soname" /tmp/base-libs.txt 2>/dev/null; then \
+            continue; \
+        fi; \
+        dest="$(echo "$lib" | sed 's|^/lib/|/usr/lib/|')"; \
+        mkdir -p "/output$(dirname "$dest")"; \
+        cp -aL "$lib" "/output${dest}" 2>/dev/null || true; \
+    done < /tmp/all-deps.txt
 
 FROM scratch
-COPY --from=builder /output/ /
+COPY --from=collector /output/ /
