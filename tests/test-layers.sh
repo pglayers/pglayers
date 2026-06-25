@@ -94,9 +94,11 @@ docker export pgx-extract-base 2>/dev/null | tar -t 2>/dev/null \
 docker rm pgx-extract-base >/dev/null 2>&1
 
 # Get each extension's file list (files and symlinks only, no directories)
+# Also save the tar export for content-level collision checks in Phase 3.
 for ext in "${EXTENSIONS[@]}"; do
     docker create --name "pgx-extract-${ext}" "${REGISTRY}/${PREFIX}-${ext}:${PG}" true 2>/dev/null
-    docker export "pgx-extract-${ext}" 2>/dev/null | tar -t 2>/dev/null \
+    docker export "pgx-extract-${ext}" 2>/dev/null > "${TMPDIR}/${ext}.tar"
+    tar -tf "${TMPDIR}/${ext}.tar" 2>/dev/null \
         | grep -v '/$' \
         | sed 's|^|/|' \
         | grep -v -E '^/\.dockerenv|^/dev/|^/proc/|^/sys/|^/etc/(hostname|hosts|resolv\.conf|mtab)$' \
@@ -111,19 +113,38 @@ echo
 info "Phase 3: Checking for file collisions between extensions..."
 COLLISION_FOUND=false
 
+# Helper: get sha256 of a file from an extension's exported tar
+file_hash() {
+    local ext="$1" filepath="$2"
+    # tar paths don't have a leading slash
+    tar -xOf "${TMPDIR}/${ext}.tar" "${filepath#/}" 2>/dev/null | sha256sum | awk '{print $1}'
+}
+
 for ((i=0; i<${#EXTENSIONS[@]}; i++)); do
     for ((j=i+1; j<${#EXTENSIONS[@]}; j++)); do
         ext_a="${EXTENSIONS[$i]}"
         ext_b="${EXTENSIONS[$j]}"
         overlaps="$(comm -12 "${TMPDIR}/${ext_a}.txt" "${TMPDIR}/${ext_b}.txt" || true)"
         if [ -n "$overlaps" ]; then
-            real_overlaps="$overlaps"
-            if [ -n "$real_overlaps" ]; then
-                count="$(echo "$real_overlaps" | wc -l)"
+            # Check if overlapping files have different content
+            real_conflicts=""
+            while IFS= read -r filepath; do
+                hash_a="$(file_hash "$ext_a" "$filepath")"
+                hash_b="$(file_hash "$ext_b" "$filepath")"
+                if [ "$hash_a" != "$hash_b" ]; then
+                    real_conflicts="${real_conflicts:+${real_conflicts}
+}${filepath}"
+                fi
+            done <<< "$overlaps"
+            if [ -n "$real_conflicts" ]; then
+                count="$(echo "$real_conflicts" | wc -l)"
                 COLLISION_FOUND=true
-                fail "${ext_a} <-> ${ext_b}: ${count} overlapping file(s)"
-                echo "$real_overlaps" | head -10 | sed 's/^/       /'
+                fail "${ext_a} <-> ${ext_b}: ${count} conflicting file(s)"
+                echo "$real_conflicts" | head -10 | sed 's/^/       /'
                 [ "$count" -gt 10 ] && echo "       ... and $((count - 10)) more"
+            else
+                overlap_count="$(echo "$overlaps" | wc -l)"
+                pass "${ext_a} <-> ${ext_b}: ${overlap_count} shared file(s), identical content"
             fi
         else
             pass "${ext_a} <-> ${ext_b}: no collisions"
