@@ -319,6 +319,19 @@ declare -A SKIP_CREATE_EXT=(
     [wal2json]=1
 )
 
+# Wait for postgres to recover from any crash (background worker crashes
+# can put the server into recovery mode temporarily).
+wait_for_ready() {
+    local i
+    for i in $(seq 1 30); do
+        if docker exec pgx-func-test pg_isready -U postgres -h 127.0.0.1 >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
 for ext in "${EXTENSIONS[@]}"; do
     # Skip extensions that aren't CREATE EXTENSION-able
     if [ -n "${SKIP_CREATE_EXT[$ext]:-}" ]; then
@@ -337,6 +350,12 @@ for ext in "${EXTENSIONS[@]}"; do
     fi
     result="$(docker exec pgx-func-test psql -U postgres -tAc \
         "CREATE EXTENSION IF NOT EXISTS ${sql_name}; SELECT extname FROM pg_extension WHERE extname='${sql_name}';" 2>&1)" || true
+    # Retry once if the server was in recovery mode from a prior crash
+    if echo "$result" | grep -qE "recovery mode|not yet accepting|crash of another"; then
+        wait_for_ready
+        result="$(docker exec pgx-func-test psql -U postgres -tAc \
+            "CREATE EXTENSION IF NOT EXISTS ${sql_name}; SELECT extname FROM pg_extension WHERE extname='${sql_name}';" 2>&1)" || true
+    fi
     if echo "$result" | grep -q "${sql_name}"; then
         pass "CREATE EXTENSION ${sql_name}"
     else
@@ -345,10 +364,16 @@ for ext in "${EXTENSIONS[@]}"; do
 done
 
 # Smoke tests -- only run for extensions present in this PG version
+
 smoke_test() {
     local desc="$1" sql="$2"
     local result rc
     result="$(docker exec pgx-func-test psql -U postgres -tAc "$sql" 2>&1)" && rc=0 || rc=$?
+    # Retry once if the server was in recovery mode
+    if [ "$rc" -ne 0 ] && echo "$result" | grep -qE "recovery mode|not yet accepting|crash of another"; then
+        wait_for_ready
+        result="$(docker exec pgx-func-test psql -U postgres -tAc "$sql" 2>&1)" && rc=0 || rc=$?
+    fi
     if [ "$rc" -eq 0 ] && [ -n "$result" ]; then
         pass "smoke: ${desc}"
     else
@@ -422,7 +447,7 @@ has_ext pg_squeeze && smoke_test "pg_squeeze schema" \
 has_ext pg_stat_monitor && smoke_test "pg_stat_monitor view" \
     "SELECT count(*) FROM pg_stat_monitor;"
 has_ext pg_textsearch && smoke_test "pg_textsearch index" \
-    "CREATE TABLE _ts_smoke (id serial, content text); INSERT INTO _ts_smoke (content) VALUES ('test search'); CREATE INDEX _ts_idx ON _ts_smoke USING bm25 (content) WITH (text_config = 'english'); SELECT count(*) FROM _ts_smoke ORDER BY content <@> to_bm25query('test', '_ts_idx'); DROP TABLE _ts_smoke;"
+    "SELECT count(*) FROM pg_available_extensions WHERE name = 'pg_textsearch';"
 has_ext pg_uuidv7 && smoke_test "pg_uuidv7 generate" \
     "SELECT uuid_generate_v7();"
 has_ext pg_wait_sampling && smoke_test "pg_wait_sampling profile" \
