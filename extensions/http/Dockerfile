@@ -1,25 +1,43 @@
 # syntax=docker/dockerfile:1
 ARG PG_MAJOR=17
-ARG PG_TAG=${PG_MAJOR}
 
-FROM postgres:${PG_TAG} AS builder
+FROM postgres:${PG_MAJOR} AS base
+RUN find /usr/lib -name '*.so*' \( -type f -o -type l \) 2>/dev/null \
+    | sed 's|.*/||' | sort -u > /tmp/base-libs.txt
+
+FROM postgres:${PG_MAJOR} AS builder
 ARG PG_MAJOR
-ARG EXT_VERSION=v1.7.1
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git ca-certificates \
-    postgresql-server-dev-${PG_MAJOR} \
-    libcurl4-openssl-dev
+    postgresql-${PG_MAJOR}-http
 
-RUN git clone --branch ${EXT_VERSION} --depth 1 \
-    https://github.com/pramsey/pgsql-http.git /tmp/ext
+# Extract extension files (exclude headers and docs)
+RUN mkdir -p /output && \
+    dpkg -L postgresql-${PG_MAJOR}-http \
+    | grep -E '^/usr/(lib|share)/postgresql/' \
+    | while IFS= read -r f; do \
+        [ -f "$f" ] || continue; \
+        mkdir -p "/output$(dirname "$f")"; \
+        cp -a "$f" "/output$f"; \
+    done
 
-WORKDIR /tmp/ext
-
-RUN make -j"$(nproc)" && make install DESTDIR=/output \
-    && find /output -name '*.so' -exec strip --strip-unneeded {} \;
+# Bundle runtime shared libraries not in the base postgres image
+COPY --from=base /tmp/base-libs.txt /tmp/base-libs.txt
+RUN set -eux; \
+    PG=${PG_MAJOR}; \
+    find /output/usr/lib/postgresql/${PG}/lib -name '*.so' -exec ldd {} + 2>/dev/null \
+        | awk '/=>/ && /\// {print $3}' | sort -u > /tmp/all-deps.txt; \
+    while IFS= read -r lib; do \
+        soname="$(basename "$lib")"; \
+        if grep -qxF "$soname" /tmp/base-libs.txt 2>/dev/null; then \
+            continue; \
+        fi; \
+        dest="$(echo "$lib" | sed 's|^/lib/|/usr/lib/|')"; \
+        mkdir -p "/output$(dirname "$dest")"; \
+        cp -aL "$lib" "/output$dest" 2>/dev/null || true; \
+    done < /tmp/all-deps.txt
 
 FROM scratch
 COPY --from=builder /output/ /

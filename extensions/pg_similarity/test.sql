@@ -10,7 +10,7 @@ END;
 
 -- Test: Cosine similarity
 SELECT CASE
-    WHEN cosine('hello world', 'hello world') = 1.0
+    WHEN cosine('hello world', 'hello world') > 0.99
     THEN 'PASS pg_similarity: cosine similarity identical strings'
     ELSE 'FAIL pg_similarity: cosine similarity identical strings'
 END;

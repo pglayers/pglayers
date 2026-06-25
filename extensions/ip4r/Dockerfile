@@ -1,24 +1,23 @@
 # syntax=docker/dockerfile:1
 ARG PG_MAJOR=17
-ARG PG_TAG=${PG_MAJOR}
 
-FROM postgres:${PG_TAG} AS builder
+FROM postgres:${PG_MAJOR} AS builder
 ARG PG_MAJOR
-ARG EXT_VERSION=2.4.3
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git ca-certificates \
-    postgresql-server-dev-${PG_MAJOR}
+    postgresql-${PG_MAJOR}-ip4r
 
-RUN git clone --branch ${EXT_VERSION} --depth 1 \
-    https://github.com/RhodiumToad/ip4r.git /tmp/ext
-
-WORKDIR /tmp/ext
-
-RUN make -j"$(nproc)" && make install DESTDIR=/output \
-    && find /output -name '*.so' -exec strip --strip-unneeded {} \;
+# Extract extension files (exclude headers and docs)
+RUN mkdir -p /output && \
+    dpkg -L postgresql-${PG_MAJOR}-ip4r \
+    | grep -E '^/usr/(lib|share)/postgresql/' \
+    | while IFS= read -r f; do \
+        [ -f "$f" ] || continue; \
+        mkdir -p "/output$(dirname "$f")"; \
+        cp -a "$f" "/output$f"; \
+    done
 
 FROM scratch
 COPY --from=builder /output/ /

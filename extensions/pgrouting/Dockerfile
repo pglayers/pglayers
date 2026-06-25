@@ -1,44 +1,46 @@
 # syntax=docker/dockerfile:1
 ARG PG_MAJOR=17
-ARG PG_TAG=${PG_MAJOR}
 
-FROM postgres:${PG_TAG} AS builder
+FROM postgres:${PG_MAJOR} AS base
+RUN find /usr/lib -name '*.so*' \( -type f -o -type l \) 2>/dev/null \
+    | sed 's|.*/||' | sort -u > /tmp/base-libs.txt
+
+FROM postgres:${PG_MAJOR} AS builder
 ARG PG_MAJOR
-ARG EXT_VERSION=v4.0.1
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git ca-certificates curl \
-    postgresql-server-dev-${PG_MAJOR} \
-    cmake libboost-graph-dev \
-    libgeos-dev libproj-dev libjson-c-dev libxml2-dev \
-    libprotobuf-c-dev protobuf-c-compiler \
-    libtiff-dev libcurl4-openssl-dev
+    postgresql-${PG_MAJOR}-pgrouting
 
-# PostGIS is a build dependency (pgrouting needs PostGIS headers)
-# Install PostGIS from source first (serial build: parallel make has
-# race conditions with --without-raster on upgrade SQL generation)
-ARG POSTGIS_VERSION=3.6.4
-RUN curl -fsSL "https://download.osgeo.org/postgis/source/postgis-${POSTGIS_VERSION}.tar.gz" \
-    | tar xz -C /tmp \
-    && cd /tmp/postgis-${POSTGIS_VERSION} \
-    && ./configure --without-raster --without-sfcgal \
-    && make \
-    && make install
+# Extract extension files from all installed PG packages (includes -scripts)
+RUN mkdir -p /output && \
+    dpkg -l "postgresql-${PG_MAJOR}-pgrouting*" 2>/dev/null \
+    | awk '/^ii/ {print $2}' \
+    | xargs -I{} dpkg -L {} \
+    | grep -E '^/usr/(lib|share)/postgresql/' \
+    | sort -u \
+    | while IFS= read -r f; do \
+        [ -f "$f" ] || continue; \
+        mkdir -p "/output$(dirname "$f")"; \
+        cp -a "$f" "/output$f"; \
+    done
 
-RUN git clone --branch ${EXT_VERSION} --depth 1 \
-    https://github.com/pgRouting/pgrouting.git /tmp/ext
-
-WORKDIR /tmp/ext/build
-
-RUN cmake -DCMAKE_BUILD_TYPE=Release \
-    -DWITH_DOC=OFF \
-    -DBUILD_DOXY=OFF \
-    .. \
-    && make -j"$(nproc)" \
-    && make install DESTDIR=/output \
-    && find /output -name '*.so' -exec strip --strip-unneeded {} \;
+# Bundle runtime shared libraries not in the base postgres image
+COPY --from=base /tmp/base-libs.txt /tmp/base-libs.txt
+RUN set -eux; \
+    PG=${PG_MAJOR}; \
+    find /output/usr/lib/postgresql/${PG}/lib -name '*.so' -exec ldd {} + 2>/dev/null \
+        | awk '/=>/ && /\// {print $3}' | sort -u > /tmp/all-deps.txt; \
+    while IFS= read -r lib; do \
+        soname="$(basename "$lib")"; \
+        if grep -qxF "$soname" /tmp/base-libs.txt 2>/dev/null; then \
+            continue; \
+        fi; \
+        dest="$(echo "$lib" | sed 's|^/lib/|/usr/lib/|')"; \
+        mkdir -p "/output$(dirname "$dest")"; \
+        cp -aL "$lib" "/output$dest" 2>/dev/null || true; \
+    done < /tmp/all-deps.txt
 
 FROM scratch
 COPY --from=builder /output/ /

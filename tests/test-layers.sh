@@ -200,6 +200,12 @@ info "Phase 5: Building combined image and checking shared libraries..."
         [ -n "$spl" ] && preloads="${preloads:+${preloads},}${spl}"
     done
     [ -n "$preloads" ] && echo "RUN echo \"shared_preload_libraries = '${preloads}'\" >> /usr/share/postgresql/postgresql.conf.sample"
+    # pgtt requires session_preload_libraries (not shared_preload)
+    if printf '%s\n' "${EXTENSIONS[@]}" | grep -qx pgtt; then
+        echo "RUN echo \"session_preload_libraries = 'pgtt'\" >> /usr/share/postgresql/postgresql.conf.sample"
+    fi
+    # Many extensions register background workers; increase the limit
+    echo "RUN echo \"max_worker_processes = 64\" >> /usr/share/postgresql/postgresql.conf.sample"
     # pg_durable config (only if present)
     if printf '%s\n' "${EXTENSIONS[@]}" | grep -qx pg_durable; then
         echo "RUN echo \"pg_durable.database = 'postgres'\" >> /usr/share/postgresql/postgresql.conf.sample"
@@ -238,9 +244,10 @@ docker run -d --name pgx-func-test \
     -e POSTGRES_HOST_AUTH_METHOD=trust \
     "${IMAGE_TAG}" >/dev/null 2>&1
 
-# Wait for postgres to be ready
-for i in $(seq 1 60); do
-    if docker exec pgx-func-test pg_isready -U postgres >/dev/null 2>&1; then
+# Wait for postgres to be ready (use TCP -- only available after final restart,
+# not during the init phase which listens on Unix socket only)
+for i in $(seq 1 90); do
+    if docker exec pgx-func-test pg_isready -U postgres -h 127.0.0.1 >/dev/null 2>&1; then
         break
     fi
     sleep 1
@@ -319,6 +326,15 @@ for ext in "${EXTENSIONS[@]}"; do
         continue
     fi
     sql_name="${EXT_SQL_NAMES[$ext]:-$ext}"
+    # Handle extension dependencies
+    deps=""
+    case "$sql_name" in
+        pgjwt) deps="pgcrypto" ;;
+        pgrouting) deps="postgis" ;;
+    esac
+    if [ -n "$deps" ]; then
+        docker exec pgx-func-test psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS ${deps};" >/dev/null 2>&1 || true
+    fi
     result="$(docker exec pgx-func-test psql -U postgres -tAc \
         "CREATE EXTENSION IF NOT EXISTS ${sql_name}; SELECT extname FROM pg_extension WHERE extname='${sql_name}';" 2>&1)" || true
     if echo "$result" | grep -q "${sql_name}"; then
@@ -428,7 +444,7 @@ has_ext plprofiler && smoke_test "plprofiler loaded" \
 has_ext plv8 && smoke_test "plv8 javascript" \
     "SELECT plv8_version();"
 has_ext postgis && smoke_test "PostGIS geometry" \
-    "SELECT ST_AsText(ST_Point(1, 2));"
+    "SELECT ST_AsText(ST_GeomFromText('POINT(1 2)'));"
 has_ext postgres_protobuf && smoke_test "postgres_protobuf loaded" \
     "SELECT count(*) FROM pg_proc WHERE proname = 'protobuf_decode';"
 has_ext prefix && smoke_test "prefix range" \

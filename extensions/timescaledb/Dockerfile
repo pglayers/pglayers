@@ -1,32 +1,23 @@
 # syntax=docker/dockerfile:1
 ARG PG_MAJOR=17
-ARG PG_TAG=${PG_MAJOR}
 
-FROM postgres:${PG_TAG} AS builder
+FROM postgres:${PG_MAJOR} AS builder
 ARG PG_MAJOR
-ARG EXT_VERSION=2.28.0
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git ca-certificates \
-    postgresql-server-dev-${PG_MAJOR} \
-    cmake libssl-dev libkrb5-dev
+    postgresql-${PG_MAJOR}-timescaledb
 
-RUN git clone --branch ${EXT_VERSION} --depth 1 \
-    https://github.com/timescale/timescaledb.git /tmp/ext
-
-WORKDIR /tmp/ext/build
-
-# Build Apache-2.0 community edition only (no TSL-licensed code)
-RUN cmake -DCMAKE_BUILD_TYPE=Release \
-    -DAPACHE_ONLY=ON \
-    -DREGRESS_CHECKS=OFF \
-    -DWARNINGS_AS_ERRORS=OFF \
-    .. \
-    && make -j"$(nproc)" \
-    && make install DESTDIR=/output \
-    && find /output -name '*.so' -exec strip --strip-unneeded {} \;
+# Extract extension files (exclude headers and docs)
+RUN mkdir -p /output && \
+    dpkg -L postgresql-${PG_MAJOR}-timescaledb \
+    | grep -E '^/usr/(lib|share)/postgresql/' \
+    | while IFS= read -r f; do \
+        [ -f "$f" ] || continue; \
+        mkdir -p "/output$(dirname "$f")"; \
+        cp -a "$f" "/output$f"; \
+    done
 
 FROM scratch
 COPY --from=builder /output/ /

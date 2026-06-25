@@ -1,11 +1,11 @@
 -- postgres_protobuf integration tests
 CREATE EXTENSION IF NOT EXISTS postgres_protobuf;
 
--- Test: protobuf_decode function exists
+-- Test: protobuf_query function exists
 SELECT CASE
-    WHEN (SELECT count(*) FROM pg_proc WHERE proname = 'protobuf_decode') > 0
-    THEN 'PASS postgres_protobuf: protobuf_decode function available'
-    ELSE 'FAIL postgres_protobuf: protobuf_decode function available'
+    WHEN (SELECT count(*) FROM pg_proc WHERE proname = 'protobuf_query') > 0
+    THEN 'PASS postgres_protobuf: protobuf_query function available'
+    ELSE 'FAIL postgres_protobuf: protobuf_query function available'
 END;
 
 -- Test: protobuf_to_json_text function exists
