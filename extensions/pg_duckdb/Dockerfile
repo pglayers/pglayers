@@ -13,7 +13,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
     build-essential git ca-certificates \
     cmake ninja-build libssl-dev pkg-config \
-    liblz4-dev libicu-dev libcurl4-openssl-dev
+    liblz4-dev libicu-dev libcurl4-gnutls-dev
 
 RUN git clone --branch ${EXT_VERSION} --depth 1 --recurse-submodules \
     https://github.com/duckdb/pg_duckdb.git /tmp/ext
@@ -38,7 +38,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     build-essential ca-certificates \
     postgresql-server-dev-${PG_MAJOR} \
     cmake ninja-build libssl-dev pkg-config \
-    liblz4-dev libicu-dev libcurl4-openssl-dev
+    liblz4-dev libicu-dev libcurl4-gnutls-dev
 
 # Copy source tree with pre-built DuckDB library
 COPY --from=duckdb-builder /tmp/ext /tmp/ext
@@ -51,16 +51,13 @@ RUN make -j"$(nproc)" DUCKDB_GEN=ninja \
     && find /output -name '*.so' -exec strip --strip-unneeded {} \;
 
 # Bundle runtime shared libraries not in the base postgres image.
-# Note: libcurl is NOT bundled here to avoid collision with PostGIS
-# (which bundles libcurl-gnutls). In combined images, PostGIS provides
-# libcurl. For standalone use without PostGIS, add libcurl manually.
+# Uses libcurl-gnutls (same as PostGIS) so the files are identical
+# when both extensions are combined in the same image.
 RUN set -eux; \
     MULTIARCH="$(dpkg-architecture -q DEB_HOST_MULTIARCH)"; \
     LIBDIR="/usr/lib/${MULTIARCH}"; \
     mkdir -p /output${LIBDIR}; \
-    for lib in ${LIBDIR}/libcurl.so*; do \
-        : "skipping $lib (provided by PostGIS layer)"; \
-    done
+    cp -a ${LIBDIR}/libcurl.so* /output${LIBDIR}/
 
 FROM scratch
 COPY --from=builder /output/ /
