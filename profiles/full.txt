@@ -11,6 +11,7 @@ ip4r
 orafce
 pg_bigm
 pg_cron
+pg_duckdb
 pg_durable
 pg_failover_slots
 pg_graphql
