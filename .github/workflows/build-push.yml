@@ -143,6 +143,7 @@ jobs:
           cache-from: |
             type=gha,scope=${{ matrix.extension }}-${{ matrix.pg }}
             type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}
+            ${{ matrix.extension == 'plv8' && format('type=registry,ref={0}/{1}/plv8-v8:{2}', env.REGISTRY, github.repository_owner, matrix.version) || '' }}
           cache-to: |
             type=gha,mode=max,scope=${{ matrix.extension }}-${{ matrix.pg }}
             type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }},mode=max

@@ -1,0 +1,55 @@
+name: Build plv8 V8 Engine Cache
+
+# Builds the V8 JavaScript engine natively on amd64 and arm64 runners,
+# then pushes the result as a registry cache image. The main plv8 build
+# uses this as cache-from so it never has to compile V8 under QEMU.
+#
+# Trigger manually when plv8 version changes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'plv8 version tag (e.g., v3.2.4)'
+        required: true
+        default: 'v3.2.4'
+
+env:
+  REGISTRY: ghcr.io
+  CACHE_IMAGE: ghcr.io/${{ github.repository_owner }}/plv8-v8
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux/amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build V8 engine and push cache (${{ matrix.platform }})
+        uses: docker/build-push-action@v7
+        with:
+          context: extensions/plv8
+          file: extensions/plv8/Dockerfile.v8
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            EXT_VERSION=${{ inputs.version }}
+          # Push as a cache image (not a runnable image)
+          push: false
+          cache-to: type=registry,ref=${{ env.CACHE_IMAGE }}:${{ inputs.version }},mode=max

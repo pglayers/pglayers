@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1
+#
+# Builds the V8 JavaScript engine for plv8.
+# This is PG-independent and architecture-specific.
+# Used by: .github/workflows/build-plv8-v8.yml
+# Result is referenced by: extensions/plv8/Dockerfile
+ARG EXT_VERSION=v3.2.4
+
+FROM debian:bookworm
+ARG EXT_VERSION
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+    build-essential git ca-certificates \
+    python3 ninja-build cmake pkg-config \
+    libc++-dev libc++abi-dev
+
+RUN git clone --branch ${EXT_VERSION} --depth 1 --recurse-submodules \
+    https://github.com/plv8/plv8.git /tmp/ext
+
+WORKDIR /tmp/ext
+RUN make v8

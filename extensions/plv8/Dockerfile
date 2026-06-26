@@ -3,12 +3,14 @@ ARG PG_MAJOR=17
 ARG PG_TAG=${PG_MAJOR}
 ARG EXT_VERSION=v3.2.4
 
-# Stage 1: V8 engine (PG-independent, ~10 min first build, cached thereafter)
+# Stage 1: V8 engine (PG-independent, ~10 min natively)
 #
-# In CI, the V8 layer is pre-built and pushed as a registry cache image
-# (ghcr.io/pglayers/plv8-v8-cache:v3.2.4). Local builds compile from
-# source on the first run but benefit from BuildKit layer caching on
-# subsequent runs.
+# In CI, this stage is fully cached via the pre-built multi-arch image
+# ghcr.io/pglayers/plv8-v8:<version> (built by build-plv8-v8.yml on
+# native amd64/arm64 runners). BuildKit skips compilation entirely.
+#
+# For local builds, V8 compiles from source on the first run (~10 min)
+# and is cached by BuildKit for subsequent builds.
 FROM debian:bookworm AS v8-builder
 ARG EXT_VERSION
 
