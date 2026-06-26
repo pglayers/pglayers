@@ -87,8 +87,8 @@ promoted to stable.
 | [age](https://github.com/apache/age) | 17, 18 | Graph database with openCypher query language (Apache AGE) |
 | [anon](https://gitlab.com/dalibo/postgresql_anonymizer) | 17, 18 | Data anonymization and masking |
 | [credcheck](https://github.com/HexaCluster/credcheck) | 17, 18, 19 | Credential checks on user creation / password change |
-| [h3-pg](https://github.com/zachasme/h3-pg) | 17, 18, 19 | Uber H3 hexagonal geospatial indexing |
-| [hll](https://github.com/citusdata/postgresql-hll) | 17, 18 | HyperLogLog probabilistic distinct counting |
+| [h3-pg](https://github.com/zachasme/h3-pg) | 17, 18 | Uber H3 hexagonal geospatial indexing |
+| [hll](https://github.com/citusdata/postgresql-hll) | 17, 18, 19 | HyperLogLog probabilistic distinct counting |
 | [http](https://github.com/pramsey/pgsql-http) | 17, 18, 19 | HTTP client for PostgreSQL (web requests from SQL) |
 | [hypopg](https://github.com/HypoPG/hypopg) | 17, 18, 19 | Hypothetical indexes for what-if analysis |
 | [ip4r](https://github.com/RhodiumToad/ip4r) | 17, 18, 19 | IPv4/IPv6 range data types with GiST indexing |
@@ -110,8 +110,8 @@ promoted to stable.
 | [pg_qualstats](https://github.com/powa-team/pg_qualstats) | 17, 18, 19 | Statistics collector for WHERE clause predicates |
 | [pg_repack](https://github.com/reorg/pg_repack) | 17, 18, 19 | Online table reorganization without heavy locks |
 | [pg_roaringbitmap](https://github.com/ChenHuajun/pg_roaringbitmap) | 17, 18 | Roaring bitmap data type for fast set operations |
-| [pg_similarity](https://github.com/eulerto/pg_similarity) | 17, 18, 19 | Similarity functions (Levenshtein, Jaro-Winkler, Cosine, Jaccard) |
-| [pgrouting](https://github.com/pgRouting/pgrouting) | 17, 18 | Geospatial routing and network analysis on PostGIS |
+| [pg_similarity](https://github.com/eulerto/pg_similarity) | 17, 18 | Similarity functions (Levenshtein, Jaro-Winkler, Cosine, Jaccard) |
+| [pgrouting](https://github.com/pgRouting/pgrouting) | 17, 18, 19 | Geospatial routing and network analysis on PostGIS |
 | [pgsodium](https://github.com/michelp/pgsodium) | 17, 18, 19 | Modern cryptography using libsodium |
 | [pg_squeeze](https://github.com/cybertec-postgresql/pg_squeeze) | 17, 18, 19 | Remove unused space from tables without heavy locks |
 | [pg_stat_monitor](https://github.com/percona/pg_stat_monitor) | 17, 18 | Enhanced query statistics with histograms and buckets |
