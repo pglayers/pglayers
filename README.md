@@ -2,8 +2,9 @@
 
 The [official PostgreSQL Docker images](https://hub.docker.com/_/postgres)
 ship without extensions. Every time you need pgvector, PostGIS, or
-pg_cron, you're stuck compiling from source or settling for third-party
-images that only include a handful of extensions.
+pg_cron, you're stuck manually installing dependencies, compiling from
+source, or settling for third-party images that bundle a fixed set of
+extensions.
 
 pglayers fixes this. It's both a **ready-to-use PostgreSQL distribution
 with extensions pre-installed** and a **tool to build your own custom
