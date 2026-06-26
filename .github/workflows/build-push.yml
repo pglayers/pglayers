@@ -36,7 +36,8 @@ jobs:
   matrix:
     runs-on: ubuntu-latest
     outputs:
-      include: ${{ steps.set.outputs.include }}
+      extensions: ${{ steps.set.outputs.extensions }}
+      build: ${{ steps.set.outputs.build }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -59,52 +60,64 @@ jobs:
             fi
           fi
 
-          matrix="[]"
+          extensions="[]"
+          build="[]"
           for ext_dir in extensions/*/; do
             ext="$(basename "$ext_dir")"
-            # Filter: workflow_dispatch with explicit extension
             [ -n "$ext_filter" ] && [ "$ext" != "$ext_filter" ] && continue
-            # Filter: only changed extensions (skip if we have a list and ext isn't in it)
             if [ -n "$changed_exts" ] && ! echo "$changed_exts" | grep -qw "$ext"; then
               continue
             fi
             CI_SKIP=""
+            APT_PACKAGE=""
             source "$ext_dir/extension.conf"
-            # Skip extensions marked as CI_SKIP (still buildable locally)
             [ "${CI_SKIP:-}" = "1" ] && continue
             for pg in 17 18 19; do
               [ -n "$pg_filter" ] && [ "$pg" != "$pg_filter" ] && continue
               ver_var="VERSION_${pg}"
               ver="${!ver_var}"
               [ -z "$ver" ] && continue
-              matrix=$(echo "$matrix" | jq -c \
-                --arg ext "$ext" \
-                --arg pg "$pg" \
-                --arg ver "$ver" \
-                --arg desc "$DESCRIPTION" \
-                '. + [{"extension": $ext, "pg": $pg, "version": $ver, "description": $desc}]')
+              extensions=$(echo "$extensions" | jq -c \
+                --arg ext "$ext" --arg pg "$pg" --arg ver "$ver" \
+                '. + [{"extension": $ext, "pg": $pg, "version": $ver}]')
+              # Source-built extensions: native build per arch (no QEMU)
+              # APT-based extensions: single job with QEMU (fast enough)
+              if [ -z "$APT_PACKAGE" ]; then
+                for arch in amd64 arm64; do
+                  build=$(echo "$build" | jq -c \
+                    --arg ext "$ext" --arg pg "$pg" --arg ver "$ver" --arg arch "$arch" \
+                    '. + [{"extension": $ext, "pg": $pg, "version": $ver, "arch": $arch, "native": true}]')
+                done
+              else
+                build=$(echo "$build" | jq -c \
+                  --arg ext "$ext" --arg pg "$pg" --arg ver "$ver" \
+                  '. + [{"extension": $ext, "pg": $pg, "version": $ver, "arch": "all", "native": false}]')
+              fi
             done
           done
-          echo "include=$matrix" >> "$GITHUB_OUTPUT"
-          count=$(echo "$matrix" | jq length)
-          echo "Building $count extension/version combinations"
+          echo "extensions=$extensions" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "Building $(echo "$extensions" | jq length) extensions ($(echo "$build" | jq length) build jobs)"
 
   # Build each architecture natively (no QEMU emulation)
   build:
     needs: matrix
-    if: ${{ fromJson(needs.matrix.outputs.include)[0] != null && github.event_name != 'pull_request' }}
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    if: ${{ fromJson(needs.matrix.outputs.build)[0] != null && github.event_name != 'pull_request' }}
+    runs-on: ${{ matrix.native && (matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04') || 'ubuntu-24.04' }}
     permissions:
       contents: read
       packages: write
     strategy:
       fail-fast: false
       matrix:
-        item: ${{ fromJson(needs.matrix.outputs.include) }}
-        arch: [amd64, arm64]
-    name: build (${{ matrix.item.extension }}, ${{ matrix.item.pg }}, ${{ matrix.arch }})
+        include: ${{ fromJson(needs.matrix.outputs.build) }}
+    name: build (${{ matrix.extension }}, ${{ matrix.pg }}, ${{ matrix.arch }})
     steps:
       - uses: actions/checkout@v7
+
+      - name: Set up QEMU
+        if: ${{ !matrix.native }}
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -116,38 +129,38 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push (${{ matrix.arch }})
+      - name: Build and push
         uses: docker/build-push-action@v7
         with:
-          context: extensions/${{ matrix.item.extension }}
-          file: extensions/${{ matrix.item.extension }}/Dockerfile
-          platforms: linux/${{ matrix.arch }}
+          context: extensions/${{ matrix.extension }}
+          file: extensions/${{ matrix.extension }}/Dockerfile
+          platforms: ${{ matrix.native && format('linux/{0}', matrix.arch) || 'linux/amd64,linux/arm64' }}
           build-args: |
-            PG_MAJOR=${{ matrix.item.pg }}
-            PG_TAG=${{ matrix.item.pg == '19' && '19beta1' || matrix.item.pg }}
-            EXT_VERSION=${{ matrix.item.version }}
+            PG_MAJOR=${{ matrix.pg }}
+            PG_TAG=${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
+            EXT_VERSION=${{ matrix.version }}
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.item.extension }}:${{ matrix.item.pg }}-${{ matrix.arch }}
+            ${{ matrix.native && format('{0}/{1}/{2}-{3}:{4}-{5}', env.REGISTRY, github.repository_owner, env.PREFIX, matrix.extension, matrix.pg, matrix.arch) || format('{0}/{1}/{2}-{3}:{4}\n{0}/{1}/{2}-{3}:{4}-{5}', env.REGISTRY, github.repository_owner, env.PREFIX, matrix.extension, matrix.pg, matrix.version) }}
           cache-from: |
-            type=gha,scope=${{ matrix.item.extension }}-${{ matrix.item.pg }}-${{ matrix.arch }}
-            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.item.extension }}:buildcache-${{ matrix.item.pg }}-${{ matrix.arch }}
-            ${{ matrix.item.extension == 'plv8' && format('type=registry,ref={0}/{1}/plv8-v8:{2}', env.REGISTRY, github.repository_owner, matrix.item.version) || '' }}
+            type=gha,scope=${{ matrix.extension }}-${{ matrix.pg }}-${{ matrix.arch }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-${{ matrix.arch }}
+            ${{ matrix.extension == 'plv8' && format('type=registry,ref={0}/{1}/plv8-v8:{2}', env.REGISTRY, github.repository_owner, matrix.version) || '' }}
           cache-to: |
-            type=gha,mode=max,scope=${{ matrix.item.extension }}-${{ matrix.item.pg }}-${{ matrix.arch }}
-            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.item.extension }}:buildcache-${{ matrix.item.pg }}-${{ matrix.arch }},mode=max
+            type=gha,mode=max,scope=${{ matrix.extension }}-${{ matrix.pg }}-${{ matrix.arch }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-${{ matrix.arch }},mode=max
 
-  # Merge per-arch images into multi-arch manifest lists
+  # Merge per-arch images into multi-arch manifest lists (only for native builds)
   manifest:
     needs: [matrix, build]
-    if: ${{ fromJson(needs.matrix.outputs.include)[0] != null && github.event_name != 'pull_request' }}
+    if: ${{ fromJson(needs.matrix.outputs.extensions)[0] != null && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     permissions:
       packages: write
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJson(needs.matrix.outputs.include) }}
+        include: ${{ fromJson(needs.matrix.outputs.extensions) }}
     name: manifest (${{ matrix.extension }}, ${{ matrix.pg }})
     steps:
       - uses: docker/login-action@v4
@@ -156,30 +169,36 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create multi-arch manifest
+      - name: Create multi-arch manifest (if per-arch images exist)
         run: |
           IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}"
-          docker manifest create "${IMAGE}:${{ matrix.pg }}" \
-            "${IMAGE}:${{ matrix.pg }}-amd64" \
-            "${IMAGE}:${{ matrix.pg }}-arm64"
-          docker manifest push "${IMAGE}:${{ matrix.pg }}"
+          # Only create manifest if per-arch tags exist (native builds)
+          if docker manifest inspect "${IMAGE}:${{ matrix.pg }}-amd64" >/dev/null 2>&1 && \
+             docker manifest inspect "${IMAGE}:${{ matrix.pg }}-arm64" >/dev/null 2>&1; then
+            docker manifest create "${IMAGE}:${{ matrix.pg }}" \
+              "${IMAGE}:${{ matrix.pg }}-amd64" \
+              "${IMAGE}:${{ matrix.pg }}-arm64"
+            docker manifest push "${IMAGE}:${{ matrix.pg }}"
 
-          docker manifest create "${IMAGE}:${{ matrix.pg }}-${{ matrix.version }}" \
-            "${IMAGE}:${{ matrix.pg }}-amd64" \
-            "${IMAGE}:${{ matrix.pg }}-arm64"
-          docker manifest push "${IMAGE}:${{ matrix.pg }}-${{ matrix.version }}"
+            docker manifest create "${IMAGE}:${{ matrix.pg }}-${{ matrix.version }}" \
+              "${IMAGE}:${{ matrix.pg }}-amd64" \
+              "${IMAGE}:${{ matrix.pg }}-arm64"
+            docker manifest push "${IMAGE}:${{ matrix.pg }}-${{ matrix.version }}"
+          else
+            echo "Skipping manifest (APT-based extension, already multi-arch)"
+          fi
 
   # PR-only: amd64 build check (no push, no arm64)
   build-pr:
     needs: matrix
-    if: ${{ fromJson(needs.matrix.outputs.include)[0] != null && github.event_name == 'pull_request' }}
+    if: ${{ fromJson(needs.matrix.outputs.extensions)[0] != null && github.event_name == 'pull_request' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJson(needs.matrix.outputs.include) }}
+        include: ${{ fromJson(needs.matrix.outputs.extensions) }}
     name: build-pr (${{ matrix.extension }}, ${{ matrix.pg }})
     steps:
       - uses: actions/checkout@v7
