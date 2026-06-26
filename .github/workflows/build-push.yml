@@ -89,67 +89,120 @@ jobs:
           count=$(echo "$matrix" | jq length)
           echo "Building $count extension/version combinations"
 
+  # Build each architecture natively (no QEMU emulation)
   build:
     needs: matrix
-    if: ${{ fromJson(needs.matrix.outputs.include)[0] != null }}
-    runs-on: ubuntu-latest
+    if: ${{ fromJson(needs.matrix.outputs.include)[0] != null && github.event_name != 'pull_request' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     permissions:
       contents: read
       packages: write
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJson(needs.matrix.outputs.include) }}
+        item: ${{ fromJson(needs.matrix.outputs.include) }}
+        arch: [amd64, arm64]
+    name: build (${{ matrix.item.extension }}, ${{ matrix.item.pg }}, ${{ matrix.arch }})
     steps:
       - uses: actions/checkout@v7
-
-      - name: Tag beta images as major version
-        if: matrix.pg == '19'
-        run: |
-          # PG 19 is in beta; tag so profile-images job can use it as base
-          docker pull postgres:19beta1
-          docker tag postgres:19beta1 postgres:19
-
-      - name: Set up QEMU
-        if: github.event_name != 'pull_request'
-        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push ${{ matrix.extension }} (PG ${{ matrix.pg }})
+      - name: Build and push (${{ matrix.arch }})
+        uses: docker/build-push-action@v7
+        with:
+          context: extensions/${{ matrix.item.extension }}
+          file: extensions/${{ matrix.item.extension }}/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            PG_MAJOR=${{ matrix.item.pg }}
+            PG_TAG=${{ matrix.item.pg == '19' && '19beta1' || matrix.item.pg }}
+            EXT_VERSION=${{ matrix.item.version }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.item.extension }}:${{ matrix.item.pg }}-${{ matrix.arch }}
+          cache-from: |
+            type=gha,scope=${{ matrix.item.extension }}-${{ matrix.item.pg }}-${{ matrix.arch }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.item.extension }}:buildcache-${{ matrix.item.pg }}-${{ matrix.arch }}
+            ${{ matrix.item.extension == 'plv8' && format('type=registry,ref={0}/{1}/plv8-v8:{2}', env.REGISTRY, github.repository_owner, matrix.item.version) || '' }}
+          cache-to: |
+            type=gha,mode=max,scope=${{ matrix.item.extension }}-${{ matrix.item.pg }}-${{ matrix.arch }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.item.extension }}:buildcache-${{ matrix.item.pg }}-${{ matrix.arch }},mode=max
+
+  # Merge per-arch images into multi-arch manifest lists
+  manifest:
+    needs: [matrix, build]
+    if: ${{ fromJson(needs.matrix.outputs.include)[0] != null && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.matrix.outputs.include) }}
+    name: manifest (${{ matrix.extension }}, ${{ matrix.pg }})
+    steps:
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create multi-arch manifest
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}"
+          docker manifest create "${IMAGE}:${{ matrix.pg }}" \
+            "${IMAGE}:${{ matrix.pg }}-amd64" \
+            "${IMAGE}:${{ matrix.pg }}-arm64"
+          docker manifest push "${IMAGE}:${{ matrix.pg }}"
+
+          docker manifest create "${IMAGE}:${{ matrix.pg }}-${{ matrix.version }}" \
+            "${IMAGE}:${{ matrix.pg }}-amd64" \
+            "${IMAGE}:${{ matrix.pg }}-arm64"
+          docker manifest push "${IMAGE}:${{ matrix.pg }}-${{ matrix.version }}"
+
+  # PR-only: amd64 build check (no push, no arm64)
+  build-pr:
+    needs: matrix
+    if: ${{ fromJson(needs.matrix.outputs.include)[0] != null && github.event_name == 'pull_request' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.matrix.outputs.include) }}
+    name: build-pr (${{ matrix.extension }}, ${{ matrix.pg }})
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build (amd64, no push)
         uses: docker/build-push-action@v7
         with:
           context: extensions/${{ matrix.extension }}
           file: extensions/${{ matrix.extension }}/Dockerfile
-          # Multi-arch on push/schedule/dispatch; amd64-only on PRs
-          platforms: ${{ github.event_name != 'pull_request' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          platforms: linux/amd64
           build-args: |
             PG_MAJOR=${{ matrix.pg }}
             PG_TAG=${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
             EXT_VERSION=${{ matrix.version }}
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: |
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}-${{ matrix.version }}
-          cache-from: |
-            type=gha,scope=${{ matrix.extension }}-${{ matrix.pg }}
-            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}
-            ${{ matrix.extension == 'plv8' && format('type=registry,ref={0}/{1}/plv8-v8:{2}', env.REGISTRY, github.repository_owner, matrix.version) || '' }}
-          cache-to: |
-            type=gha,mode=max,scope=${{ matrix.extension }}-${{ matrix.pg }}
-            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }},mode=max
+          push: false
+          cache-from: type=gha,scope=${{ matrix.extension }}-${{ matrix.pg }}-amd64
+          cache-to: type=gha,mode=max,scope=${{ matrix.extension }}-${{ matrix.pg }}-amd64
 
   profile-images:
-    needs: build
+    needs: [build, manifest]
     # Run even if some extension builds failed (e.g., PG 19 beta).
     # The profile image for PG 17 doesn't need PG 19 extensions to succeed.
     if: always() && !cancelled() && github.event_name != 'pull_request'
