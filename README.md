@@ -82,61 +82,61 @@ promoted to stable.
 
 ## Available extensions
 
-| Extension | PG versions | Description |
-|-----------|-------------|-------------|
-| [age](https://github.com/apache/age) | 17, 18 | Graph database with openCypher query language (Apache AGE) |
-| [anon](https://gitlab.com/dalibo/postgresql_anonymizer) | 17, 18 | Data anonymization and masking |
-| [credcheck](https://github.com/HexaCluster/credcheck) | 17, 18, 19 | Credential checks on user creation / password change |
-| [h3-pg](https://github.com/zachasme/h3-pg) | 17, 18 | Uber H3 hexagonal geospatial indexing |
-| [hll](https://github.com/citusdata/postgresql-hll) | 17, 18, 19 | HyperLogLog probabilistic distinct counting |
-| [http](https://github.com/pramsey/pgsql-http) | 17, 18, 19 | HTTP client for PostgreSQL (web requests from SQL) |
-| [hypopg](https://github.com/HypoPG/hypopg) | 17, 18, 19 | Hypothetical indexes for what-if analysis |
-| [ip4r](https://github.com/RhodiumToad/ip4r) | 17, 18, 19 | IPv4/IPv6 range data types with GiST indexing |
-| [orafce](https://github.com/orafce/orafce) | 17, 18, 19 | Oracle compatibility functions and packages |
-| [pgaudit](https://github.com/pgaudit/pgaudit) | 17, 18 | Audit logging (session and object-level) |
-| [pg_bigm](https://github.com/pgbigm/pg_bigm) | 17, 18 | 2-gram full text search (better for CJK languages) |
-| [pglogical](https://github.com/2ndQuadrant/pglogical) | 17, 18, 19 | Logical streaming replication using publish/subscribe model |
-| [pg_cron](https://github.com/citusdata/pg_cron) | 17, 18 | Job scheduler (periodic jobs inside the database) |
-| [pg_duckdb](https://github.com/duckdb/pg_duckdb) | 17, 18 | DuckDB columnar analytics engine embedded in Postgres |
-| [pg_durable](https://github.com/microsoft/pg_durable) | 17, 18 | In-database durable execution (fault-tolerant workflows) |
-| [pg_failover_slots](https://github.com/EnterpriseDB/pg_failover_slots) | 17, 18 | Logical replication slot manager for failover |
-| [pg_graphql](https://github.com/supabase/pg_graphql) | 17, 18 | GraphQL support for PostgreSQL |
-| [pg_hashids](https://github.com/iCyberon/pg_hashids) | 17, 18, 19 | Short unique hash IDs from integers |
-| [pg_hint_plan](https://github.com/ossc-db/pg_hint_plan) | 17, 18 | Tweak execution plans using hints in SQL comments |
-| [pg_ivm](https://github.com/sraoss/pg_ivm) | 17, 18 | Incremental View Maintenance for materialized views |
-| [pg_jsonschema](https://github.com/supabase/pg_jsonschema) | 17, 18 | JSON Schema validation |
-| [pg_net](https://github.com/supabase/pg_net) | 17, 18, 19 | Async non-blocking HTTP/HTTPS requests |
-| [pg_partman](https://github.com/pgpartman/pg_partman) | 17, 18, 19 | Automated table partition management |
-| [pg_qualstats](https://github.com/powa-team/pg_qualstats) | 17, 18, 19 | Statistics collector for WHERE clause predicates |
-| [pg_repack](https://github.com/reorg/pg_repack) | 17, 18, 19 | Online table reorganization without heavy locks |
-| [pg_roaringbitmap](https://github.com/ChenHuajun/pg_roaringbitmap) | 17, 18 | Roaring bitmap data type for fast set operations |
-| [pg_similarity](https://github.com/eulerto/pg_similarity) | 17, 18 | Similarity functions (Levenshtein, Jaro-Winkler, Cosine, Jaccard) |
-| [pgrouting](https://github.com/pgRouting/pgrouting) | 17, 18, 19 | Geospatial routing and network analysis on PostGIS |
-| [pgsodium](https://github.com/michelp/pgsodium) | 17, 18, 19 | Modern cryptography using libsodium |
-| [pg_squeeze](https://github.com/cybertec-postgresql/pg_squeeze) | 17, 18, 19 | Remove unused space from tables without heavy locks |
-| [pg_stat_monitor](https://github.com/percona/pg_stat_monitor) | 17, 18 | Enhanced query statistics with histograms and buckets |
-| [pg_textsearch](https://github.com/timescale/pg_textsearch) | 17, 18 | BM25 relevance-ranked full-text search |
-| [pg_uuidv7](https://github.com/fboulnois/pg_uuidv7) | 17, 18, 19 | UUIDv7 generation (time-sortable unique identifiers) |
-| [pg_wait_sampling](https://github.com/postgrespro/pg_wait_sampling) | 17, 18, 19 | Sampling-based statistics of wait events |
-| [pgvector](https://github.com/pgvector/pgvector) | 17, 18, 19 | Vector similarity search for AI/embeddings |
-| [pgjwt](https://github.com/michelp/pgjwt) | 17, 18, 19 | JSON Web Token (JWT) generation and validation |
-| [pgtap](https://github.com/theory/pgtap) | 17, 18, 19 | Unit testing framework for PostgreSQL |
-| [pgtt](https://github.com/darold/pgtt) | 17, 18, 19 | Oracle-style Global Temporary Tables |
-| [plpgsql_check](https://github.com/okbob/plpgsql_check) | 17, 18, 19 | PL/pgSQL linter and validator |
-| [plprofiler](https://github.com/bigsql/plprofiler) | 17, 18 | Performance profiler for PL/pgSQL functions |
-| [plv8](https://github.com/plv8/plv8) | 17, 18 | JavaScript (V8) procedural language |
-| [PostGIS](https://github.com/postgis/postgis) | 17, 18, 19 | Geospatial extensions (geometry, geography, raster, MVT) |
-| [postgres_protobuf](https://github.com/mpartel/postgres-protobuf) | 17, 18, 19 | Protocol Buffer support (query, convert to/from JSON) |
-| [prefix](https://github.com/dimitri/prefix) | 17, 18, 19 | Prefix range data type for phone routing lookups |
-| [pgfincore](https://github.com/klando/pgfincore) | 17, 18, 19 | Inspect and manage OS page cache for data files |
-| [rum](https://github.com/postgrespro/rum) | 17, 18 | GIN-like index with ordering for full text search |
-| [semver](https://github.com/theory/pg-semver) | 17, 18, 19 | Semantic version data type |
-| [tdigest](https://github.com/tvondra/tdigest) | 17, 18, 19 | T-digest for quantile and percentile estimation |
-| [tds_fdw](https://github.com/tds-fdw/tds_fdw) | 17, 18 | Foreign data wrapper for SQL Server and Sybase |
-| [temporal_tables](https://github.com/arkhipov/temporal_tables) | 17, 18 | System-period temporal tables |
-| [timescaledb](https://github.com/timescale/timescaledb) | 17, 18 | Time-series hypertables, compression, continuous aggregates |
-| [wal2json](https://github.com/eulerto/wal2json) | 17, 18 | JSON output plugin for logical replication / CDC |
-| [wrappers](https://github.com/supabase/wrappers) | 17, 18 | Foreign Data Wrapper framework (Stripe, S3, Firebase, etc.) |
+| Extension | Version | PG versions | Description |
+|-----------|---------|-------------|-------------|
+| [age](https://github.com/apache/age) | 1.7.0-rc0 | 17, 18 | Graph database with openCypher query language (Apache AGE) |
+| [anon](https://gitlab.com/dalibo/postgresql_anonymizer) | 3.1.1 | 17, 18 | Data anonymization and masking |
+| [credcheck](https://github.com/HexaCluster/credcheck) | 5.0 | 17, 18, 19 | Credential checks on user creation / password change |
+| [h3-pg](https://github.com/zachasme/h3-pg) | 4.2.3 | 17, 18 | Uber H3 hexagonal geospatial indexing |
+| [hll](https://github.com/citusdata/postgresql-hll) | 2.21 | 17, 18, 19 | HyperLogLog probabilistic distinct counting |
+| [http](https://github.com/pramsey/pgsql-http) | 1.7.1 | 17, 18, 19 | HTTP client for PostgreSQL (web requests from SQL) |
+| [hypopg](https://github.com/HypoPG/hypopg) | 1.4.3 | 17, 18, 19 | Hypothetical indexes for what-if analysis |
+| [ip4r](https://github.com/RhodiumToad/ip4r) | 2.4.3 | 17, 18, 19 | IPv4/IPv6 range data types with GiST indexing |
+| [orafce](https://github.com/orafce/orafce) | 4.16.7 | 17, 18, 19 | Oracle compatibility functions and packages |
+| [pgaudit](https://github.com/pgaudit/pgaudit) | 17.1 | 17, 18 | Audit logging (session and object-level) |
+| [pg_bigm](https://github.com/pgbigm/pg_bigm) | 1.2 | 17, 18 | 2-gram full text search (better for CJK languages) |
+| [pg_cron](https://github.com/citusdata/pg_cron) | 1.6.7 | 17, 18 | Job scheduler (periodic jobs inside the database) |
+| [pg_duckdb](https://github.com/duckdb/pg_duckdb) | 1.1.1 | 17, 18 | DuckDB columnar analytics engine embedded in Postgres |
+| [pg_durable](https://github.com/microsoft/pg_durable) | 0.2.3 | 17, 18 | In-database durable execution (fault-tolerant workflows) |
+| [pg_failover_slots](https://github.com/EnterpriseDB/pg_failover_slots) | 1.2.1 | 17, 18 | Logical replication slot manager for failover |
+| [pg_graphql](https://github.com/supabase/pg_graphql) | 1.6.1 | 17, 18 | GraphQL support for PostgreSQL |
+| [pg_hashids](https://github.com/iCyberon/pg_hashids) | 1.2.1 | 17, 18, 19 | Short unique hash IDs from integers |
+| [pg_hint_plan](https://github.com/ossc-db/pg_hint_plan) | 1.7.1 | 17, 18 | Tweak execution plans using hints in SQL comments |
+| [pg_ivm](https://github.com/sraoss/pg_ivm) | 1.13 | 17, 18 | Incremental View Maintenance for materialized views |
+| [pg_jsonschema](https://github.com/supabase/pg_jsonschema) | 0.3.4 | 17, 18 | JSON Schema validation |
+| [pg_net](https://github.com/supabase/pg_net) | 0.20.3 | 17, 18, 19 | Async non-blocking HTTP/HTTPS requests |
+| [pg_partman](https://github.com/pgpartman/pg_partman) | 5.4.3 | 17, 18, 19 | Automated table partition management |
+| [pg_qualstats](https://github.com/powa-team/pg_qualstats) | 2.1.4 | 17, 18, 19 | Statistics collector for WHERE clause predicates |
+| [pg_repack](https://github.com/reorg/pg_repack) | 1.5.3 | 17, 18, 19 | Online table reorganization without heavy locks |
+| [pg_roaringbitmap](https://github.com/ChenHuajun/pg_roaringbitmap) | 1.1.0 | 17, 18 | Roaring bitmap data type for fast set operations |
+| [pg_similarity](https://github.com/eulerto/pg_similarity) | 1.0 | 17, 18 | Similarity functions (Levenshtein, Jaro-Winkler, Cosine, Jaccard) |
+| [pg_squeeze](https://github.com/cybertec-postgresql/pg_squeeze) | 1.9.3 | 17, 18, 19 | Remove unused space from tables without heavy locks |
+| [pg_stat_monitor](https://github.com/percona/pg_stat_monitor) | 2.3.2 | 17, 18 | Enhanced query statistics with histograms and buckets |
+| [pg_textsearch](https://github.com/timescale/pg_textsearch) | 1.3.1 | 17, 18 | BM25 relevance-ranked full-text search |
+| [pg_uuidv7](https://github.com/fboulnois/pg_uuidv7) | 1.7.0 | 17, 18, 19 | UUIDv7 generation (time-sortable unique identifiers) |
+| [pg_wait_sampling](https://github.com/postgrespro/pg_wait_sampling) | 1.1.9 | 17, 18, 19 | Sampling-based statistics of wait events |
+| [pgfincore](https://github.com/klando/pgfincore) | 1.4.0 | 17, 18, 19 | Inspect and manage OS page cache for data files |
+| [pgjwt](https://github.com/michelp/pgjwt) | master | 17, 18, 19 | JSON Web Token (JWT) generation and validation |
+| [pglogical](https://github.com/2ndQuadrant/pglogical) | 2.4.7 | 17, 18, 19 | Logical streaming replication using publish/subscribe model |
+| [pgrouting](https://github.com/pgRouting/pgrouting) | 4.0.1 | 17, 18, 19 | Geospatial routing and network analysis on PostGIS |
+| [pgsodium](https://github.com/michelp/pgsodium) | 3.1.11 | 17, 18, 19 | Modern cryptography using libsodium |
+| [pgtap](https://github.com/theory/pgtap) | 1.3.4 | 17, 18, 19 | Unit testing framework for PostgreSQL |
+| [pgtt](https://github.com/darold/pgtt) | 4.5 | 17, 18, 19 | Oracle-style Global Temporary Tables |
+| [pgvector](https://github.com/pgvector/pgvector) | 0.8.3 | 17, 18, 19 | Vector similarity search for AI/embeddings |
+| [plpgsql_check](https://github.com/okbob/plpgsql_check) | 2.9.1 | 17, 18, 19 | PL/pgSQL linter and validator |
+| [plprofiler](https://github.com/bigsql/plprofiler) | 4.2.5 | 17, 18 | Performance profiler for PL/pgSQL functions |
+| [plv8](https://github.com/plv8/plv8) | 3.2.4 | 17, 18 | JavaScript (V8) procedural language |
+| [PostGIS](https://github.com/postgis/postgis) | 3.6.4 | 17, 18, 19 | Geospatial extensions (geometry, geography, raster, MVT) |
+| [postgres_protobuf](https://github.com/mpartel/postgres-protobuf) | 0.3.2 | 17, 18, 19 | Protocol Buffer support (query, convert to/from JSON) |
+| [prefix](https://github.com/dimitri/prefix) | 1.2.11 | 17, 18, 19 | Prefix range data type for phone routing lookups |
+| [rum](https://github.com/postgrespro/rum) | 1.3.15 | 17, 18 | GIN-like index with ordering for full text search |
+| [semver](https://github.com/theory/pg-semver) | 0.41.0 | 17, 18, 19 | Semantic version data type |
+| [tdigest](https://github.com/tvondra/tdigest) | 1.4.3 | 17, 18, 19 | T-digest for quantile and percentile estimation |
+| [tds_fdw](https://github.com/tds-fdw/tds_fdw) | 2.0.5 | 17, 18 | Foreign data wrapper for SQL Server and Sybase |
+| [temporal_tables](https://github.com/arkhipov/temporal_tables) | 1.2.2 | 17, 18 | System-period temporal tables |
+| [timescaledb](https://github.com/timescale/timescaledb) | 2.28.1 | 17, 18 | Time-series hypertables, compression, continuous aggregates |
+| [wal2json](https://github.com/eulerto/wal2json) | 2.6 | 17, 18 | JSON output plugin for logical replication / CDC |
+| [wrappers](https://github.com/supabase/wrappers) | 0.6.2 | 17, 18 | Foreign Data Wrapper framework (Stripe, S3, Firebase, etc.) |
 
 ### Image tags
 
