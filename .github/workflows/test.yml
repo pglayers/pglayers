@@ -109,6 +109,11 @@ jobs:
           DOCKER_BUILDKIT: 1
         run: |
           for ext in ${{ steps.changes.outputs.changed }}; do
+            ver=$(bash -c "source extensions/$ext/extension.conf && echo \${VERSION_${{ matrix.pg }}}")
+            if [ -z "$ver" ]; then
+              echo "SKIP $ext (no version for PG ${{ matrix.pg }})"
+              continue
+            fi
             make build EXT="$ext" PG=${{ matrix.pg }} REGISTRY=local CACHE_SCOPE=ci || exit 1
           done
 
@@ -193,6 +198,11 @@ jobs:
           for ext in ${{ steps.changes.outputs.changed }}; do
             # Only build if the extension is in this profile
             if echo "$profile_exts" | grep -qw "$ext"; then
+              ver=$(bash -c "source extensions/$ext/extension.conf && echo \${VERSION_${{ matrix.pg }}}")
+              if [ -z "$ver" ]; then
+                echo "SKIP $ext (no version for PG ${{ matrix.pg }})"
+                continue
+              fi
               make build EXT="$ext" PG=${{ matrix.pg }} REGISTRY=local CACHE_SCOPE=ci || exit 1
             fi
           done

@@ -324,9 +324,13 @@ declare -A SKIP_CREATE_EXT=(
 # can put the server into recovery mode temporarily).
 wait_for_ready() {
     local i
-    for i in $(seq 1 30); do
+    for i in $(seq 1 60); do
         if docker exec pgx-func-test pg_isready -U postgres -h 127.0.0.1 >/dev/null 2>&1; then
-            return 0
+            # Double-check: ensure we can actually run a query (pg_isready
+            # can return OK before the server finishes crash recovery)
+            if docker exec pgx-func-test psql -U postgres -tAc "SELECT 1;" >/dev/null 2>&1; then
+                return 0
+            fi
         fi
         sleep 1
     done
@@ -351,12 +355,14 @@ for ext in "${EXTENSIONS[@]}"; do
     fi
     result="$(docker exec pgx-func-test psql -U postgres -tAc \
         "CREATE EXTENSION IF NOT EXISTS ${sql_name}; SELECT extname FROM pg_extension WHERE extname='${sql_name}';" 2>&1)" || true
-    # Retry once if the server was in recovery mode from a prior crash
-    if echo "$result" | grep -qE "recovery mode|not yet accepting|crash of another"; then
+    # Retry up to 3 times if the server was in recovery mode from a prior crash
+    retries=0
+    while [ "$retries" -lt 3 ] && echo "$result" | grep -qE "recovery mode|not yet accepting|crash of another|server closed the connection"; do
         wait_for_ready
         result="$(docker exec pgx-func-test psql -U postgres -tAc \
             "CREATE EXTENSION IF NOT EXISTS ${sql_name}; SELECT extname FROM pg_extension WHERE extname='${sql_name}';" 2>&1)" || true
-    fi
+        ((retries++)) || true
+    done
     if echo "$result" | grep -q "${sql_name}"; then
         pass "CREATE EXTENSION ${sql_name}"
     else
@@ -368,13 +374,14 @@ done
 
 smoke_test() {
     local desc="$1" sql="$2"
-    local result rc
+    local result rc retries=0
     result="$(docker exec pgx-func-test psql -U postgres -tAc "$sql" 2>&1)" && rc=0 || rc=$?
-    # Retry once if the server was in recovery mode
-    if [ "$rc" -ne 0 ] && echo "$result" | grep -qE "recovery mode|not yet accepting|crash of another"; then
+    # Retry up to 3 times if the server was in recovery mode
+    while [ "$rc" -ne 0 ] && [ "$retries" -lt 3 ] && echo "$result" | grep -qE "recovery mode|not yet accepting|crash of another|server closed the connection"; do
         wait_for_ready
         result="$(docker exec pgx-func-test psql -U postgres -tAc "$sql" 2>&1)" && rc=0 || rc=$?
-    fi
+        ((retries++)) || true
+    done
     if [ "$rc" -eq 0 ] && [ -n "$result" ]; then
         pass "smoke: ${desc}"
     else

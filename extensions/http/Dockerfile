@@ -24,15 +24,21 @@ RUN mkdir -p /output && \
         cp -a "$f" "/output$f"; \
     done
 
-# Bundle runtime shared libraries not in the base postgres image
+# Bundle runtime shared libraries not in the base postgres image.
+# Exclude libs already provided by the postgis layer (libcurl transitive
+# deps) to avoid layer collisions in the combined image.
 COPY --from=base /tmp/base-libs.txt /tmp/base-libs.txt
 RUN set -eux; \
     PG=${PG_MAJOR}; \
     find /output/usr/lib/postgresql/${PG}/lib -name '*.so' -exec ldd {} + 2>/dev/null \
         | awk '/=>/ && /\// {print $3}' | sort -u > /tmp/all-deps.txt; \
+    printf '%s\n' libssh2.so.1 > /tmp/skip-libs.txt; \
     while IFS= read -r lib; do \
         soname="$(basename "$lib")"; \
         if grep -qxF "$soname" /tmp/base-libs.txt 2>/dev/null; then \
+            continue; \
+        fi; \
+        if grep -qxF "$soname" /tmp/skip-libs.txt 2>/dev/null; then \
             continue; \
         fi; \
         dest="$(echo "$lib" | sed 's|^/lib/|/usr/lib/|')"; \
