@@ -598,6 +598,18 @@ support:
 If an extension you need doesn't support your PG version yet, you can
 contribute by following the [Contributing guide](CONTRIBUTING.md).
 
+## Acknowledgements
+
+This project stands on the shoulders of the PostgreSQL community:
+
+- The [PostgreSQL Global Development Group](https://www.postgresql.org/community/) for building the best open-source database
+- The [PGDG APT Repository](https://apt.postgresql.org/) maintainers who package and distribute extensions for Debian and Ubuntu
+- The [Official PostgreSQL Docker image](https://hub.docker.com/_/postgres) maintainers for providing reliable, well-configured base images
+- The [Debian PostgreSQL team](https://wiki.debian.org/PostgreSql) for their packaging work that makes all of this possible
+- Every extension author who releases their work under permissive open-source licenses
+
+pglayers is a thin layer of automation on top of their work. Without the quality and consistency of the upstream ecosystem, this project would not exist.
+
 ## License
 
 [MIT](LICENSE)
