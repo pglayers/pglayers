@@ -141,7 +141,8 @@ jobs:
             EXT_VERSION=${{ matrix.version }}
           push: true
           tags: |
-            ${{ matrix.native && format('{0}/{1}/{2}-{3}:{4}-{5}', env.REGISTRY, github.repository_owner, env.PREFIX, matrix.extension, matrix.pg, matrix.arch) || format('{0}/{1}/{2}-{3}:{4}\n{0}/{1}/{2}-{3}:{4}-{5}', env.REGISTRY, github.repository_owner, env.PREFIX, matrix.extension, matrix.pg, matrix.version) }}
+            ${{ matrix.native && format('{0}/{1}/{2}-{3}:{4}-{5}', env.REGISTRY, github.repository_owner, env.PREFIX, matrix.extension, matrix.pg, matrix.arch) || format('{0}/{1}/{2}-{3}:{4}', env.REGISTRY, github.repository_owner, env.PREFIX, matrix.extension, matrix.pg) }}
+            ${{ !matrix.native && format('{0}/{1}/{2}-{3}:{4}-{5}', env.REGISTRY, github.repository_owner, env.PREFIX, matrix.extension, matrix.pg, matrix.version) || '' }}
           cache-from: |
             type=gha,scope=${{ matrix.extension }}-${{ matrix.pg }}-${{ matrix.arch }}
             type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-${{ matrix.arch }}
