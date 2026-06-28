@@ -505,13 +505,23 @@ echo
 # ============================================================
 info "Phase 7: Integration tests (extensions/*/test.sql)..."
 
+# Ensure container is healthy before starting integration tests
+wait_for_ready
+
 for ext in "${EXTENSIONS[@]}"; do
     test_file="extensions/${ext}/test.sql"
     if [ ! -f "$test_file" ]; then
         warn "${ext}: no test.sql found"
         continue
     fi
-    output="$(docker exec -i pgx-func-test psql -U postgres -tA -v ON_ERROR_STOP=0 < "$test_file" 2>&1)"
+    output="$(docker exec -i pgx-func-test psql -U postgres -tA -v ON_ERROR_STOP=0 < "$test_file" 2>&1)" || true
+    # Retry up to 3 times if the server was in recovery mode
+    retries=0
+    while [ "$retries" -lt 3 ] && echo "$output" | grep -qE "recovery mode|not yet accepting|crash of another|server closed the connection"; do
+        wait_for_ready
+        output="$(docker exec -i pgx-func-test psql -U postgres -tA -v ON_ERROR_STOP=0 < "$test_file" 2>&1)" || true
+        ((retries++)) || true
+    done
     failures="$(echo "$output" | grep '^FAIL' || true)"
     passes="$(echo "$output" | grep -c '^PASS' || true)"
     if [ -n "$failures" ]; then
