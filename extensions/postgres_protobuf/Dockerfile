@@ -4,7 +4,7 @@ ARG PG_TAG=${PG_MAJOR}
 
 FROM postgres:${PG_TAG} AS builder
 ARG PG_MAJOR
-ARG EXT_VERSION=v0.3.2
+ARG EXT_VERSION=v0.3.3
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
