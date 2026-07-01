@@ -87,6 +87,7 @@ promoted to stable.
 | [age](https://github.com/apache/age) | 1.7.0-rc0 | 17, 18 | Graph database with openCypher query language (Apache AGE) |
 | [anon](https://gitlab.com/dalibo/postgresql_anonymizer) | 3.1.1 | 17, 18 | Data anonymization and masking |
 | [credcheck](https://github.com/HexaCluster/credcheck) | 5.0 | 17, 18, 19 | Credential checks on user creation / password change |
+| [documentdb](https://github.com/documentdb/documentdb) | 0.113-0 | 17, 18 | MongoDB-compatible document database engine (BSON types and CRUD API) |
 | [h3-pg](https://github.com/zachasme/h3-pg) | 4.2.3 | 17, 18 | Uber H3 hexagonal geospatial indexing |
 | [hll](https://github.com/citusdata/postgresql-hll) | 2.21 | 17, 18, 19 | HyperLogLog probabilistic distinct counting |
 | [http](https://github.com/pramsey/pgsql-http) | 1.7.1 | 17, 18, 19 | HTTP client for PostgreSQL (web requests from SQL) |
@@ -219,6 +220,24 @@ ENV POSTGIS_GDAL_ENABLED_DRIVERS=ENABLE_ALL
 
 By default, GDAL drivers are disabled for security (same as the official
 PostGIS Docker image).
+
+### DocumentDB
+
+DocumentDB provides a MongoDB-compatible document database engine built
+on PostgreSQL. It consists of two extensions:
+
+- **`documentdb_core`** -- BSON data type and core operations (no
+  dependencies, works standalone).
+- **`documentdb`** -- Full CRUD API surface. Requires `documentdb_core`,
+  `pg_cron`, `vector` (pgvector), `postgis`, and `tsm_system_rows`.
+
+Create extensions in order:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS documentdb_core;
+-- For the full API (requires pg_cron, vector, postgis layers):
+CREATE EXTENSION IF NOT EXISTS documentdb;
+```
 
 ## How it works
 

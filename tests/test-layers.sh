@@ -261,6 +261,7 @@ done
 declare -A EXT_SQL_NAMES=(
     [age]="age"
     [anon]="anon"
+    [documentdb]="documentdb_core"
     [h3_pg]="h3"
     [hll]="hll"
     [http]="http"
@@ -398,6 +399,8 @@ has_ext anon && smoke_test "anon loaded" \
     "SELECT count(*) FROM pg_extension WHERE extname = 'anon';"
 has_ext credcheck && smoke_test "credcheck loaded" \
     "SHOW credcheck.password_min_length;"
+has_ext documentdb && smoke_test "documentdb BSON type" \
+    "SELECT '{\"hello\": \"world\"}'::documentdb_core.bson;"
 has_ext h3_pg && smoke_test "h3 cell" \
     "SELECT h3_lat_lng_to_cell('(0,0)'::point, 5);"
 has_ext hll && smoke_test "hll aggregate" \
