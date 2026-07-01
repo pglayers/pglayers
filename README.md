@@ -67,6 +67,9 @@ layers from the registry and overlays them onto the official image.
 The result is a single image with exactly the extensions you chose,
 composed layer by layer.
 
+> **New to Docker?** See [Verifying your container](#verifying-your-container)
+> for how to check it's running and handle port conflicts.
+
 ## Supported PostgreSQL versions
 
 | Version | Status |
@@ -452,6 +455,56 @@ PASS integration postgis (4 checks)
 Results: 699 passed, 0 failed, 0 warnings
 ========================================
 ```
+
+## Verifying your container
+
+After running a `docker run` command, the container starts in the
+background (`-d` flag). To confirm it's running:
+
+```bash
+# List running containers -- look for STATUS "Up"
+docker ps
+
+# Check the container logs for "database system is ready to accept connections"
+docker logs <container_id>
+```
+
+To connect and verify PostgreSQL is working:
+
+```bash
+# Connect from inside the running container
+docker exec -it <container_id> psql -U postgres -c "SELECT version();"
+```
+
+Replace `<container_id>` with the ID shown by `docker ps` (or the first
+few characters of it).
+
+### Exposing and changing the port
+
+By default, the examples above don't publish a port to your host machine.
+To access PostgreSQL from outside the container, add `-p`:
+
+```bash
+# Publish pglayers (PostgreSQL) on the default port (5432)
+docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=secret ghcr.io/pglayers/pglayers-full:17
+```
+
+If port 5432 is already in use (another PostgreSQL instance, for example),
+map to a different host port:
+
+```bash
+# Use host port 5433 instead (container still listens on 5432 internally)
+docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=secret ghcr.io/pglayers/pglayers-full:17
+```
+
+Then connect specifying the port:
+
+```bash
+psql -h localhost -p 5433 -U postgres
+```
+
+The format is `-p <host_port>:<container_port>`. Only the host port
+(left side) needs to change -- the container always listens on 5432.
 
 ## Contributing
 
