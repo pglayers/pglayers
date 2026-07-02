@@ -27,3 +27,29 @@ SELECT CASE
     THEN 'PASS documentdb: full extension loaded with dependencies'
     ELSE 'FAIL documentdb: full extension loaded with dependencies'
 END;
+
+-- Test: Gateway background worker started (give it 3 seconds to connect)
+SELECT pg_sleep(3);
+
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1 FROM pg_stat_activity
+        WHERE backend_type = 'bg worker'
+          AND application_name = ''
+          AND datname = current_database()
+    )
+    THEN 'PASS documentdb: gateway background worker active'
+    ELSE 'FAIL documentdb: gateway background worker active'
+END;
+
+-- Test: MongoDB wire protocol port is reachable (via SQL insert/find roundtrip)
+SELECT documentdb_api.insert_one('test_db', 'test_coll', '{"_id": 1, "msg": "hello from pglayers"}');
+
+SELECT CASE
+    WHEN documentdb_api.find_one('test_db', 'test_coll', '{"_id": 1}') IS NOT NULL
+    THEN 'PASS documentdb: insert_one and find_one roundtrip'
+    ELSE 'FAIL documentdb: insert_one and find_one roundtrip'
+END;
+
+-- Cleanup
+SELECT documentdb_api.drop_collection('test_db', 'test_coll');

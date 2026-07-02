@@ -172,6 +172,7 @@ Extensions that need this:
 | age | `age` |
 | anon | `anon` |
 | credcheck | `credcheck` |
+| documentdb | `pg_documentdb_gw_host` |
 | pg_cron | `pg_cron` |
 | pg_duckdb | `pg_duckdb` |
 | pg_durable | `pg_durable` |
@@ -234,6 +235,11 @@ on PostgreSQL. It consists of two extensions:
 - **`documentdb`** -- Full CRUD API surface. Requires `documentdb_core`,
   `pg_cron`, `vector` (pgvector), `postgis`, and `tsm_system_rows`.
 
+The layer also includes `pg_documentdb_gw_host`, a background worker
+that provides MongoDB wire protocol compatibility on port 10260. When
+loaded via `shared_preload_libraries`, MongoDB clients (mongosh, pymongo,
+Node.js driver) can connect directly.
+
 Create extensions in order:
 
 ```sql
@@ -241,6 +247,20 @@ CREATE EXTENSION IF NOT EXISTS documentdb_core;
 -- For the full API (requires pg_cron, vector, postgis layers):
 CREATE EXTENSION IF NOT EXISTS documentdb;
 ```
+
+Gateway configuration (add to `postgresql.conf`):
+
+```ini
+shared_preload_libraries = 'pg_documentdb_gw_host'
+documentdb_gateway.database = 'postgres'
+documentdb_gateway.setup_configuration_file = '/etc/documentdb/gateway_config.json'
+```
+
+A default configuration file is bundled in the layer at
+`/etc/documentdb/gateway_config.json`. It listens on port 10260 with
+auto-generated self-signed TLS certificates (clients can connect with or
+without TLS). Override with your own file to customize ports, TLS, or
+blocked roles.
 
 ## How it works
 
