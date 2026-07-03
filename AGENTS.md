@@ -275,6 +275,18 @@ must be updated in the same commit**:
 5. **`extension.conf` LICENSE field** -- Every extension must document
    its license. Run `make list` and verify the new extension appears.
 
+6. **`extension.conf` DEPENDS field** -- If the extension requires
+   another extension at runtime, add a `DEPENDS` field with a
+   comma-separated list of SQL extension names (not directory names):
+   ```bash
+   DEPENDS="vector"           # pgvectorscale needs pgvector
+   DEPENDS="postgis"          # pgrouting needs PostGIS
+   DEPENDS="pgcrypto"         # pgjwt needs pgcrypto (contrib)
+   ```
+   The test suite reads this field to auto-install dependencies before
+   running `CREATE EXTENSION`. Both pglayers extensions and built-in
+   contrib extensions are valid values.
+
 Do not merge a PR that adds an extension to `extensions/` without
 updating the README table and tests. Stale documentation is a bug.
 

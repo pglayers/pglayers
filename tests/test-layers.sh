@@ -354,15 +354,14 @@ for ext in "${EXTENSIONS[@]}"; do
         continue
     fi
     sql_name="${EXT_SQL_NAMES[$ext]:-$ext}"
-    # Handle extension dependencies
-    deps=""
-    case "$sql_name" in
-        pgjwt) deps="pgcrypto" ;;
-        pgrouting) deps="postgis" ;;
-        vectorscale) deps="vector" ;;
-    esac
+    # Handle extension dependencies (read from extension.conf DEPENDS field)
+    deps="$(bash -c "source extensions/${ext}/extension.conf && echo \${DEPENDS:-}")"
     if [ -n "$deps" ]; then
-        docker exec pgx-func-test psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS ${deps};" >/dev/null 2>&1 || true
+        # DEPENDS is a comma-separated list of SQL extension names
+        IFS=',' read -ra dep_arr <<< "$deps"
+        for dep in "${dep_arr[@]}"; do
+            docker exec pgx-func-test psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS ${dep};" >/dev/null 2>&1 || true
+        done
     fi
     result="$(docker exec pgx-func-test psql -U postgres -tAc \
         "CREATE EXTENSION IF NOT EXISTS ${sql_name}; SELECT extname FROM pg_extension WHERE extname='${sql_name}';" 2>&1)" || true
