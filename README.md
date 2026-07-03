@@ -24,7 +24,7 @@ Pre-built combined images with `shared_preload_libraries` already
 configured:
 
 ```bash
-# All 55 extensions
+# All 50+ extensions
 docker run -d -e POSTGRES_PASSWORD=secret ghcr.io/pglayers/pglayers-full:17
 
 # Azure Database for PostgreSQL compatible (28 extensions)
@@ -613,7 +613,7 @@ pglayers/
 │   │   └── test.sql                  Integration tests (PASS/FAIL assertions)
 │   ├── pg_cron/
 │   ├── postgis/                      (complex: bundles runtime libs)
-│   ├── ... (55 extensions total)
+│   ├── ... (50+ extensions)
 │   └── wal2json/
 ├── profiles/
 │   ├── azure.txt                     Azure PostgreSQL Flexible Server extensions
