@@ -270,6 +270,36 @@ check-profiles: ## Verify profiles/full.txt matches extensions/ directory
 			fi; \
 		done < "$$f"; \
 	done
+	@# Check that extension dependencies are satisfied within each profile
+	@bash -c '\
+		declare -A sql_to_dir; \
+		for dir in extensions/*/; do \
+			ext=$$(basename "$$dir"); \
+			sql_to_dir[$$ext]=$$ext; \
+		done; \
+		while IFS= read -r line; do \
+			dir=$$(echo "$$line" | sed "s/.*\[//;s/\].*//"); \
+			sql=$$(echo "$$line" | sed "s/.*=\"//;s/\".*//"); \
+			sql_to_dir[$$sql]=$$dir; \
+		done < <(grep -E "^\s*\[.*\]=\"" tests/test-layers.sh | grep -v SKIP); \
+		for f in profiles/*.txt; do \
+			profile=$$(basename "$$f"); \
+			while IFS= read -r ext; do \
+				[ -z "$$ext" ] && continue; \
+				echo "$$ext" | grep -q "^#" && continue; \
+				deps=$$(bash -c "source extensions/$$ext/extension.conf && echo \$${DEPENDS:-}"); \
+				[ -z "$$deps" ] && continue; \
+				IFS="," read -ra dep_arr <<< "$$deps"; \
+				for dep in "$${dep_arr[@]}"; do \
+					dep_dir="$${sql_to_dir[$$dep]:-}"; \
+					[ -z "$$dep_dir" ] && continue; \
+					if ! grep -v "^#" "$$f" | grep -qx "$$dep_dir"; then \
+						echo "Error: profile $$profile includes '\''$$ext'\'' but is missing dependency '\''$$dep_dir'\'' (provides $$dep)"; \
+						exit 1; \
+					fi; \
+				done; \
+			done < "$$f"; \
+		done'
 	@echo "All profiles valid."
 
 _check-ext:
