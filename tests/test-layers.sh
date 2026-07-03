@@ -304,6 +304,7 @@ declare -A EXT_SQL_NAMES=(
     [pgtap]="pgtap"
     [pgtt]="pgtt"
     [pgvector]="vector"
+    [pgvectorscale]="vectorscale"
     [plpgsql_check]="plpgsql_check"
     [plprofiler]="plprofiler"
     [plv8]="plv8"
@@ -358,6 +359,7 @@ for ext in "${EXTENSIONS[@]}"; do
     case "$sql_name" in
         pgjwt) deps="pgcrypto" ;;
         pgrouting) deps="postgis" ;;
+        vectorscale) deps="vector" ;;
     esac
     if [ -n "$deps" ]; then
         docker exec pgx-func-test psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS ${deps};" >/dev/null 2>&1 || true
@@ -479,6 +481,8 @@ has_ext pglogical && smoke_test "pglogical version" \
     "SELECT pglogical.pglogical_version();"
 has_ext pgvector && smoke_test "pgvector similarity" \
     "SELECT '[1,2,3]'::vector <-> '[4,5,6]'::vector;"
+has_ext pgvectorscale && smoke_test "pgvectorscale diskann" \
+    "SELECT count(*) FROM pg_am WHERE amname = 'diskann';"
 has_ext pgfincore && smoke_test "pgfincore loaded" \
     "SELECT count(*) FROM pg_proc WHERE proname = 'pgfincore';"
 has_ext plpgsql_check && smoke_test "plpgsql_check lint" \

@@ -24,7 +24,7 @@ Pre-built combined images with `shared_preload_libraries` already
 configured:
 
 ```bash
-# All 53 extensions
+# All 54 extensions
 docker run -d -e POSTGRES_PASSWORD=secret ghcr.io/pglayers/pglayers-full:17
 
 # Azure Database for PostgreSQL compatible (28 extensions)
@@ -127,6 +127,7 @@ promoted to stable.
 | [pgtap](https://github.com/theory/pgtap) | 1.3.4 | 17, 18, 19 | Unit testing framework for PostgreSQL |
 | [pgtt](https://github.com/darold/pgtt) | 4.5 | 17, 18, 19 | Oracle-style Global Temporary Tables |
 | [pgvector](https://github.com/pgvector/pgvector) | 0.8.3 | 17, 18, 19 | Vector similarity search for AI/embeddings |
+| [pgvectorscale](https://github.com/timescale/pgvectorscale) | 0.9.0 | 17, 18 | High-performance vector search with DiskANN (complements pgvector) |
 | [plpgsql_check](https://github.com/okbob/plpgsql_check) | 2.9.1 | 17, 18, 19 | PL/pgSQL linter and validator |
 | [plprofiler](https://github.com/bigsql/plprofiler) | 4.2.5 | 17, 18 | Performance profiler for PL/pgSQL functions |
 | [plv8](https://github.com/plv8/plv8) | 3.2.4 | 17, 18 | JavaScript (V8) procedural language |
@@ -558,7 +559,7 @@ pglayers/
 │   │   └── test.sql                  Integration tests (PASS/FAIL assertions)
 │   ├── pg_cron/
 │   ├── postgis/                      (complex: bundles runtime libs)
-│   ├── ... (53 extensions total)
+│   ├── ... (54 extensions total)
 │   └── wal2json/
 ├── profiles/
 │   ├── azure.txt                     Azure PostgreSQL Flexible Server extensions
