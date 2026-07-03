@@ -4,6 +4,7 @@
 age
 anon
 credcheck
+documentdb
 hll
 hypopg
 ip4r
