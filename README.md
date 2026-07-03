@@ -27,13 +27,16 @@ configured:
 # All 50+ extensions
 docker run -d -e POSTGRES_PASSWORD=secret ghcr.io/pglayers/pglayers-full:17
 
-# Azure Database for PostgreSQL compatible (28 extensions)
+# Azure Database for PostgreSQL compatible (30+ extensions)
 docker run -d -e POSTGRES_PASSWORD=secret ghcr.io/pglayers/pglayers-azure:17
 ```
 
 Available profiles: `full`, `azure`. Each is published for PG 17, 18,
 and 19. See [Profiles](#profiles) for details and how to create custom
 ones.
+
+The `azure` profile includes DocumentDB, providing MongoDB wire protocol
+compatibility on port 10260 -- the same engine behind Azure DocumentDB.
 
 > **Note:** Vendor profiles (e.g., `azure`) are a best-effort
 > approximation for local development. They are not a replacement for
