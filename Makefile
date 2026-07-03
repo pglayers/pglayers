@@ -174,6 +174,21 @@ image: ## Build a combined image with all extensions
 			[ -n "$$spl" ] && preloads="$${preloads:+$$preloads,}$$spl"; \
 		done; \
 		[ -n "$$preloads" ] && echo "RUN echo \"shared_preload_libraries = '$$preloads'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
+		for ext in $(EXTENSIONS); do \
+			ver=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo $${VERSION_'"$(PG)"'}'); \
+			[ -z "$$ver" ] && continue; \
+			if [ "$(REGISTRY)" = "local" ]; then \
+				docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
+			else \
+				docker buildx imagetools inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
+			fi; \
+			pgconf=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$${PG_CONF:-}"'); \
+			[ -z "$$pgconf" ] && continue; \
+			echo "$$pgconf" | tr '|' '\n' | while IFS= read -r line; do \
+				[ -z "$$line" ] && continue; \
+				echo "RUN echo \"$$line\" >> /usr/share/postgresql/postgresql.conf.sample"; \
+			done; \
+		done; \
 		companions=""; \
 		for ext in $(EXTENSIONS); do \
 			ver=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo $${VERSION_'"$(PG)"'}'); \
