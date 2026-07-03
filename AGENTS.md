@@ -287,6 +287,34 @@ must be updated in the same commit**:
    running `CREATE EXTENSION`. Both pglayers extensions and built-in
    contrib extensions are valid values.
 
+7. **`extension.conf` PG_CONF field** -- If the extension requires
+   GUC settings in `postgresql.conf` beyond `shared_preload_libraries`,
+   add a `PG_CONF` field with pipe-delimited config lines:
+   ```bash
+   PG_CONF="documentdb_gateway.database = 'postgres'|documentdb_gateway.setup_configuration_file = '/etc/documentdb/gateway_config.json'"
+   PG_CONF="pg_durable.database = 'postgres'|pg_durable.worker_role = 'postgres'"
+   ```
+   These lines are appended to `postgresql.conf.sample` in both the
+   test suite and combined profile images (`make image`). Use this for
+   any GUC that the extension requires at startup (background worker
+   config, database names, feature flags).
+
+8. **`extension.conf` COMPANION_CMD field** -- If the extension
+   requires a standalone background process running alongside
+   PostgreSQL, add a `COMPANION_CMD` field:
+   ```bash
+   COMPANION_CMD="pgduck_server --cache_dir /tmp/pg_lake_cache"
+   ```
+   In combined profile images (`make image`), this generates an
+   entrypoint wrapper (`/usr/local/bin/pglayers-entrypoint.sh`) that
+   starts the process in the background before delegating to the
+   standard postgres entrypoint. For individual layers, the extension
+   should also include its own entrypoint script (e.g.,
+   `/usr/local/bin/pg-lake-entrypoint.sh`). Use `COMPANION_CMD` only
+   when the process cannot be a PostgreSQL background worker (e.g.,
+   because it embeds a multi-threaded engine incompatible with
+   PostgreSQL's process model).
+
 Do not merge a PR that adds an extension to `extensions/` without
 updating the README table and tests. Stale documentation is a bug.
 

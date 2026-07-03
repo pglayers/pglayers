@@ -300,6 +300,23 @@ CREATE EXTENSION pg_lake CASCADE;
 **Note:** pg_lake conflicts with pg_duckdb (both bundle `libduckdb.so`).
 Do not use both in the same image.
 
+### Profile images (auto-configuration)
+
+The pre-built combined images (`pglayers-full`, `pglayers-azure`)
+automatically handle all runtime configuration:
+
+- **`shared_preload_libraries`** -- set from each extension's
+  `SHARED_PRELOAD` field.
+- **postgresql.conf settings** -- GUC parameters required by extensions
+  (e.g., `documentdb_gateway.database`) are appended automatically from
+  each extension's `PG_CONF` field.
+- **Companion processes** -- extensions that need a background process
+  (e.g., pg_lake's `pgduck_server`) are started automatically via a
+  generated entrypoint wrapper. No manual process management required.
+
+When using profile images, you don't need to configure any of the above
+manually -- just `docker run` and `CREATE EXTENSION`.
+
 ## How it works
 
 The project publishes one Docker image per extension per PostgreSQL
