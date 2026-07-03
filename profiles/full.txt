@@ -20,6 +20,7 @@ pg_hashids
 pg_hint_plan
 pg_ivm
 pg_jsonschema
+pg_lake
 pg_net
 pg_partman
 pg_qualstats

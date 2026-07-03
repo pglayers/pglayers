@@ -24,7 +24,7 @@ Pre-built combined images with `shared_preload_libraries` already
 configured:
 
 ```bash
-# All 54 extensions
+# All 55 extensions
 docker run -d -e POSTGRES_PASSWORD=secret ghcr.io/pglayers/pglayers-full:17
 
 # Azure Database for PostgreSQL compatible (28 extensions)
@@ -108,6 +108,7 @@ promoted to stable.
 | [pg_hint_plan](https://github.com/ossc-db/pg_hint_plan) | 1.7.1 | 17, 18 | Tweak execution plans using hints in SQL comments |
 | [pg_ivm](https://github.com/sraoss/pg_ivm) | 1.13 | 17, 18 | Incremental View Maintenance for materialized views |
 | [pg_jsonschema](https://github.com/supabase/pg_jsonschema) | 0.3.4 | 17, 18 | JSON Schema validation |
+| [pg_lake](https://github.com/Snowflake-Labs/pg_lake) | 3.3.4 | 17, 18 | Iceberg and data lake access (Parquet, CSV, JSON via DuckDB) |
 | [pg_net](https://github.com/supabase/pg_net) | 0.20.3 | 17, 18, 19 | Async non-blocking HTTP/HTTPS requests |
 | [pg_partman](https://github.com/pgpartman/pg_partman) | 5.4.3 | 17, 18, 19 | Automated table partition management |
 | [pg_qualstats](https://github.com/powa-team/pg_qualstats) | 2.1.4 | 17, 18, 19 | Statistics collector for WHERE clause predicates |
@@ -179,6 +180,7 @@ Extensions that need this:
 | pg_durable | `pg_durable` |
 | pg_failover_slots | `pg_failover_slots` |
 | pg_hint_plan | `pg_hint_plan` |
+| pg_lake | `pg_extension_base` |
 | pg_net | `pg_net` |
 | pg_partman | `pg_partman_bgw` |
 | pg_qualstats | `pg_qualstats` |
@@ -262,6 +264,41 @@ A default configuration file is bundled in the layer at
 auto-generated self-signed TLS certificates (clients can connect with or
 without TLS). Override with your own file to customize ports, TLS, or
 blocked roles.
+
+### pg_lake
+
+pg_lake provides Iceberg table support and data lake file access
+(Parquet, CSV, JSON) for PostgreSQL. It uses DuckDB as its query engine
+via a companion process.
+
+The layer includes:
+- Multiple PostgreSQL extensions (`pg_lake`, `pg_lake_table`,
+  `pg_lake_engine`, `pg_lake_iceberg`, `pg_lake_copy`,
+  `pg_extension_base`, `pg_map`)
+- `pgduck_server` binary (standalone DuckDB-backed process)
+- Auto-start entrypoint wrapper
+
+**Setup:**
+
+```dockerfile
+FROM postgres:17
+COPY --from=ghcr.io/pglayers/pgx-pg_lake:17 / /
+RUN echo "shared_preload_libraries = 'pg_extension_base'" \
+    >> /usr/share/postgresql/postgresql.conf.sample
+ENTRYPOINT ["/usr/local/bin/pg-lake-entrypoint.sh"]
+CMD ["postgres"]
+```
+
+The entrypoint wrapper starts `pgduck_server` in the background (Unix
+socket on port 5332, no external port exposed) then delegates to the
+standard postgres entrypoint. No manual process management required.
+
+```sql
+CREATE EXTENSION pg_lake CASCADE;
+```
+
+**Note:** pg_lake conflicts with pg_duckdb (both bundle `libduckdb.so`).
+Do not use both in the same image.
 
 ## How it works
 
@@ -559,7 +596,7 @@ pglayers/
 │   │   └── test.sql                  Integration tests (PASS/FAIL assertions)
 │   ├── pg_cron/
 │   ├── postgis/                      (complex: bundles runtime libs)
-│   ├── ... (54 extensions total)
+│   ├── ... (55 extensions total)
 │   └── wal2json/
 ├── profiles/
 │   ├── azure.txt                     Azure PostgreSQL Flexible Server extensions

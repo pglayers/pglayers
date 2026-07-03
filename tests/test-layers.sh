@@ -285,6 +285,7 @@ declare -A EXT_SQL_NAMES=(
     [pg_hint_plan]="pg_hint_plan"
     [pg_ivm]="pg_ivm"
     [pg_jsonschema]="pg_jsonschema"
+    [pg_lake]="pg_lake"
     [pg_net]="pg_net"
     [pg_partman]="pg_partman"
     [pg_qualstats]="pg_qualstats"
@@ -442,6 +443,8 @@ has_ext pg_ivm && smoke_test "pg_ivm functions" \
     "SELECT count(*) FROM pg_proc WHERE proname = 'create_immv';"
 has_ext pg_jsonschema && smoke_test "pg_jsonschema validate" \
     "SELECT json_matches_schema('{\"type\":\"object\"}'::json, '{}'::json);"
+has_ext pg_lake && smoke_test "pg_lake fdw" \
+    "SELECT count(*) FROM pg_foreign_data_wrapper WHERE fdwname = 'pg_lake';"
 has_ext pg_net && smoke_test "pg_net schema" \
     "SELECT count(*) FROM pg_namespace WHERE nspname = 'net';"
 has_ext pg_qualstats && smoke_test "pg_qualstats view" \
