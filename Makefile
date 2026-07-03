@@ -174,6 +174,29 @@ image: ## Build a combined image with all extensions
 			[ -n "$$spl" ] && preloads="$${preloads:+$$preloads,}$$spl"; \
 		done; \
 		[ -n "$$preloads" ] && echo "RUN echo \"shared_preload_libraries = '$$preloads'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
+		companions=""; \
+		for ext in $(EXTENSIONS); do \
+			ver=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo $${VERSION_'"$(PG)"'}'); \
+			[ -z "$$ver" ] && continue; \
+			if [ "$(REGISTRY)" = "local" ]; then \
+				docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
+			else \
+				docker buildx imagetools inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
+			fi; \
+			cmd=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$${COMPANION_CMD:-}"'); \
+			[ -n "$$cmd" ] && companions="$${companions:+$$companions|}$$cmd"; \
+		done; \
+		if [ -n "$$companions" ]; then \
+			echo "RUN { echo '#!/bin/bash'; \\"; \
+			echo "$${companions}" | tr '|' '\n' | while IFS= read -r c; do \
+				[ -z "$$c" ] && continue; \
+				echo "     echo '$$c &'; \\"; \
+			done; \
+			echo "     echo 'exec docker-entrypoint.sh \"\$$@\"'; \\"; \
+			echo "   } > /usr/local/bin/pglayers-entrypoint.sh && chmod +x /usr/local/bin/pglayers-entrypoint.sh"; \
+			echo "ENTRYPOINT [\"/usr/local/bin/pglayers-entrypoint.sh\"]"; \
+			echo "CMD [\"postgres\"]"; \
+		fi; \
 		echo "RUN mkdir -p /etc/pglayers && echo '{' > /etc/pglayers/manifest.json \\"; \
 		echo "  && echo '  \"pg_version\": \"$(PG)\",' >> /etc/pglayers/manifest.json \\"; \
 		echo "  && echo '  \"profile\": \"$(or $(PROFILE),full)\",' >> /etc/pglayers/manifest.json \\"; \
