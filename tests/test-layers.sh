@@ -246,6 +246,8 @@ echo
 # Phase 6: Functional tests -- load all extensions
 # ============================================================
 info "Phase 6: Functional tests (CREATE EXTENSION + smoke tests)..."
+info "Disk usage before starting test container:"
+df -h / 2>/dev/null | tail -1 | sed 's/^/       /'
 
 # Start a test container
 docker rm -f pgx-func-test 2>/dev/null || true
