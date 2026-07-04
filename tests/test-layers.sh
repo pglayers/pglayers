@@ -256,12 +256,31 @@ docker run -d --name pgx-func-test \
 
 # Wait for postgres to be ready (use TCP -- only available after final restart,
 # not during the init phase which listens on Unix socket only)
+pg_ready=false
 for i in $(seq 1 90); do
     if docker exec pgx-func-test pg_isready -U postgres -h 127.0.0.1 >/dev/null 2>&1; then
+        pg_ready=true
+        break
+    fi
+    # Early exit if the container stopped (crash during startup)
+    if ! docker inspect --format='{{.State.Running}}' pgx-func-test 2>/dev/null | grep -q true; then
         break
     fi
     sleep 1
 done
+
+if [ "$pg_ready" = false ]; then
+    fail "PostgreSQL failed to start within 90s"
+    echo "       Container logs (last 40 lines):"
+    docker logs pgx-func-test 2>&1 | tail -40 | sed 's/^/       /'
+    docker rm -f pgx-func-test >/dev/null 2>&1
+    echo
+    echo "========================================"
+    printf -- "Results: ${GREEN}%d passed${NC}, ${RED}%d failed${NC}, ${YELLOW}%d warnings${NC}\n" \
+        "$PASS" "$FAIL" "$WARN"
+    echo "========================================"
+    exit 1
+fi
 
 # Test CREATE EXTENSION for each
 # Map directory names to SQL extension names where they differ.
