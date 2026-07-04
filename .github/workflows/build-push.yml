@@ -70,6 +70,7 @@ jobs:
             fi
             CI_SKIP=""
             APT_PACKAGE=""
+            VCPKG_VERSION=""
             source "$ext_dir/extension.conf"
             [ "${CI_SKIP:-}" = "1" ] && continue
             for pg in 17 18 19; do
@@ -86,7 +87,8 @@ jobs:
                 for arch in amd64 arm64; do
                   build=$(echo "$build" | jq -c \
                     --arg ext "$ext" --arg pg "$pg" --arg ver "$ver" --arg arch "$arch" \
-                    '. + [{"extension": $ext, "pg": $pg, "version": $ver, "arch": $arch, "native": true}]')
+                    --arg vcpkg "${VCPKG_VERSION:-}" \
+                    '. + [{"extension": $ext, "pg": $pg, "version": $ver, "arch": $arch, "native": true, "vcpkg_version": $vcpkg}]')
                 done
               else
                 build=$(echo "$build" | jq -c \
@@ -147,6 +149,7 @@ jobs:
             type=gha,scope=${{ matrix.extension }}-${{ matrix.pg }}-${{ matrix.arch }}
             type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-${{ matrix.arch }}
             ${{ matrix.extension == 'plv8' && format('type=registry,ref={0}/{1}/plv8-v8:{2}', env.REGISTRY, github.repository_owner, matrix.version) || '' }}
+            ${{ matrix.vcpkg_version != '' && format('type=registry,ref={0}/{1}/pg-lake-vcpkg:{2}', env.REGISTRY, github.repository_owner, matrix.vcpkg_version) || '' }}
           cache-to: |
             type=gha,mode=max,scope=${{ matrix.extension }}-${{ matrix.pg }}-${{ matrix.arch }}
             type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-${{ matrix.arch }},mode=max

@@ -1,0 +1,24 @@
+# syntax=docker/dockerfile:1
+#
+# Builds vcpkg + Azure SDK libraries for pg_lake.
+# This is PG-independent and architecture-specific.
+# Used by: .github/workflows/build-pg-lake-vcpkg.yml
+# Result is referenced by: extensions/pg_lake/Dockerfile
+ARG VCPKG_VERSION=2025.10.17
+
+FROM debian:bookworm
+ARG VCPKG_VERSION
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+    build-essential git ca-certificates pkg-config curl zip unzip \
+    cmake ninja-build libssl-dev libcurl4-openssl-dev
+
+RUN git clone --branch ${VCPKG_VERSION} --depth 1 \
+    https://github.com/Microsoft/vcpkg.git /opt/vcpkg \
+    && /opt/vcpkg/bootstrap-vcpkg.sh
+
+RUN /opt/vcpkg/vcpkg install \
+    azure-identity-cpp azure-storage-blobs-cpp \
+    azure-storage-files-datalake-cpp openssl

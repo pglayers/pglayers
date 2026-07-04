@@ -10,6 +10,14 @@ RUN find /usr/lib -name '*.so*' \( -type f -o -type l \) 2>/dev/null \
     | sed 's|.*/||' | sort -u > /tmp/base-libs.txt
 
 # Stage 1: Build vcpkg + Azure SDK (PG-independent, heavily cached)
+#
+# In CI, this stage is fully cached via the pre-built multi-arch image
+# ghcr.io/pglayers/pg-lake-vcpkg:<version> (built by
+# build-pg-lake-vcpkg.yml on native amd64/arm64 runners).
+# BuildKit skips compilation entirely.
+#
+# For local builds, vcpkg compiles from source on the first run (~30 min)
+# and is cached by BuildKit for subsequent builds.
 FROM debian:bookworm AS vcpkg-builder
 ARG VCPKG_VERSION
 

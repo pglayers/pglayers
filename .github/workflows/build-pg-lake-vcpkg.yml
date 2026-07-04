@@ -1,0 +1,56 @@
+name: Build pg_lake vcpkg Cache
+
+# Builds vcpkg + Azure SDK natively on amd64 and arm64 runners,
+# then pushes the result as a registry cache image. The main pg_lake
+# build uses this as cache-from so it never has to compile vcpkg/Azure
+# SDK from scratch (saves ~30-40 min per arch).
+#
+# Trigger manually when VCPKG_VERSION changes in extension.conf.
+
+on:
+  workflow_dispatch:
+    inputs:
+      vcpkg_version:
+        description: 'vcpkg version tag (e.g., 2025.10.17)'
+        required: true
+        default: '2025.10.17'
+
+env:
+  REGISTRY: ghcr.io
+  CACHE_IMAGE: ghcr.io/${{ github.repository_owner }}/pg-lake-vcpkg
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux/amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build vcpkg + Azure SDK and push cache (${{ matrix.platform }})
+        uses: docker/build-push-action@v7
+        with:
+          context: extensions/pg_lake
+          file: extensions/pg_lake/Dockerfile.vcpkg
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            VCPKG_VERSION=${{ inputs.vcpkg_version }}
+          # Push as a cache image (not a runnable image)
+          push: false
+          cache-to: type=registry,ref=${{ env.CACHE_IMAGE }}:${{ inputs.vcpkg_version }},mode=max
