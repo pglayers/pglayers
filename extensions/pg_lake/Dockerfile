@@ -40,7 +40,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libssl-dev libcurl4-openssl-dev libjansson-dev \
     liblz4-dev liblzma-dev libsnappy-dev \
     libxml2-dev libxslt1-dev libicu-dev libpam0g-dev \
-    libreadline-dev libselinux1-dev patch python3-dev curl
+    libreadline-dev libselinux1-dev libnuma-dev patch python3-dev curl
 
 COPY --from=vcpkg-builder /opt/vcpkg /opt/vcpkg
 ENV VCPKG_TOOLCHAIN_PATH="/opt/vcpkg/scripts/buildsystems/vcpkg.cmake"
