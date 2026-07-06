@@ -435,6 +435,66 @@ spec:
     - name: postgis
 ```
 
+### Kubernetes ImageVolumes (without CNPG)
+
+pglayers extension images also work as
+[Kubernetes ImageVolumes](https://kubernetes.io/docs/concepts/storage/volumes/#image)
+with the stock `postgres:18` image -- no operator required. This gives
+you runtime extension composition on any Kubernetes 1.33+ cluster:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: postgres-with-extensions
+spec:
+  volumes:
+    - name: ext-pgvector
+      image:
+        reference: ghcr.io/pglayers/pgx-pgvector:18-0.8.4
+    - name: ext-postgis
+      image:
+        reference: ghcr.io/pglayers/pgx-postgis:18-3.6.4
+    - name: ext-pg-cron
+      image:
+        reference: ghcr.io/pglayers/pgx-pg_cron:18-v1.6.7
+  containers:
+    - name: postgres
+      image: postgres:18
+      env:
+        - name: POSTGRES_PASSWORD
+          value: "secret"
+        - name: LD_LIBRARY_PATH
+          value: "/extensions/postgis/lib"
+      args:
+        - "postgres"
+        - "-c"
+        - "extension_control_path=/extensions/pgvector/share:/extensions/pg_cron/share:/extensions/postgis/share:$$system"
+        - "-c"
+        - "dynamic_library_path=/extensions/pgvector/lib:/extensions/pg_cron/lib:/extensions/postgis/lib:$$libdir"
+        - "-c"
+        - "shared_preload_libraries=pg_cron"
+      volumeMounts:
+        - name: ext-pgvector
+          mountPath: /extensions/pgvector
+          readOnly: true
+        - name: ext-postgis
+          mountPath: /extensions/postgis
+          readOnly: true
+        - name: ext-pg-cron
+          mountPath: /extensions/pg_cron
+          readOnly: true
+```
+
+Each extension image is mounted as a read-only volume at
+`/extensions/<name>/`. PostgreSQL discovers them via
+`extension_control_path` and `dynamic_library_path`. No image rebuild
+needed -- add or remove extensions by changing volume definitions.
+
+> **Requirements:** Kubernetes 1.33+ (ImageVolume GA). The `$$system`
+> and `$$libdir` suffixes ensure built-in contrib extensions remain
+> available.
+
 ### OCI image labels
 
 Every extension image includes standard OCI labels for machine-readable
@@ -538,6 +598,9 @@ make test REGISTRY=local PG=17
 # Quick integration tests against an already-built combined image
 make image PG=17 REGISTRY=local
 make test-image PG=17
+
+# Kubernetes ImageVolume integration test (requires k3d, PG 18+)
+make test-k8s REGISTRY=local PG=18
 ```
 
 Tests must pass for all supported PG versions (17, 18, 19).
