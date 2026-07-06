@@ -1,0 +1,46 @@
+name: Test Kubernetes ImageVolumes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'extensions/**'
+      - 'tests/test-k8s.sh'
+      - 'Makefile'
+      - '.github/workflows/test-k8s.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'extensions/**'
+      - 'tests/test-k8s.sh'
+      - 'Makefile'
+      - '.github/workflows/test-k8s.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-k8s:
+    runs-on: ubuntu-latest
+    name: ImageVolume test (PG 18, k3s 1.33)
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build test extensions (pgvector, pg_cron, postgis)
+        env:
+          DOCKER_BUILDKIT: 1
+        run: |
+          make build EXT=pgvector PG=18 REGISTRY=local
+          make build EXT=pg_cron PG=18 REGISTRY=local
+          make build EXT=postgis PG=18 REGISTRY=local
+
+      - name: Install k3d
+        run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+
+      - name: Run Kubernetes ImageVolume test
+        run: make test-k8s REGISTRY=local PG=18
