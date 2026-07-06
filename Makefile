@@ -66,6 +66,9 @@ CACHE_SCOPE ?=
 
 build: _check-ext ## Build a single extension image
 	$(eval EXT_VERSION := $(shell bash -c 'source extensions/$(EXT)/extension.conf && echo $${VERSION_$(PG)}'))
+	$(eval EXT_DESC := $(shell bash -c 'source extensions/$(EXT)/extension.conf && echo "$$DESCRIPTION"'))
+	$(eval EXT_REPO := $(shell bash -c 'source extensions/$(EXT)/extension.conf && echo "$$REPO"'))
+	$(eval EXT_LICENSE := $(shell bash -c 'source extensions/$(EXT)/extension.conf && echo "$$LICENSE"'))
 	@test -n "$(EXT_VERSION)" || { echo "Error: $(EXT) has no version defined for PG $(PG)"; exit 1; }
 	@echo "Building $(PREFIX)-$(EXT):$(PG) (extension $(EXT_VERSION))..."
 	docker buildx build \
@@ -77,6 +80,17 @@ build: _check-ext ## Build a single extension image
 		--build-arg PG_TAG=$(or $(PG_TAG),$(PG)) \
 		--build-arg EXT_VERSION=$(EXT_VERSION) \
 		--build-arg LAYOUT=$(if $(filter 17,$(PG)),classic,isolated) \
+		--label "org.opencontainers.image.title=$(EXT)" \
+		--label "org.opencontainers.image.description=$(EXT_DESC)" \
+		--label "org.opencontainers.image.version=$(EXT_VERSION)" \
+		--label "org.opencontainers.image.source=$(EXT_REPO)" \
+		--label "org.opencontainers.image.licenses=$(EXT_LICENSE)" \
+		--label "org.opencontainers.image.vendor=pglayers" \
+		--label "org.opencontainers.image.base.name=scratch" \
+		--label "io.pglayers.extension.name=$(EXT)" \
+		--label "io.pglayers.extension.version=$(EXT_VERSION)" \
+		--label "io.pglayers.pg.major=$(PG)" \
+		--label "io.pglayers.layout=$(if $(filter 17,$(PG)),classic,isolated)" \
 		-t $(REGISTRY)/$(PREFIX)-$(EXT):$(PG) \
 		-t $(REGISTRY)/$(PREFIX)-$(EXT):$(PG)-$(EXT_VERSION) \
 		-f extensions/$(EXT)/Dockerfile \
@@ -362,6 +376,46 @@ check-profiles: ## Verify profiles/full.txt matches extensions/ directory
 			done < "$$f"; \
 		done'
 	@echo "All profiles valid."
+
+cnpg-catalog: ## Generate CloudNativePG ClusterImageCatalog YAML (PG 18+)
+	@PG=$${PG:-18}; \
+	if [ "$$PG" -lt 18 ] 2>/dev/null; then \
+		echo "Error: CNPG catalog requires PG >= 18 (isolated layout)"; exit 1; \
+	fi; \
+	echo "apiVersion: postgresql.cnpg.io/v1"; \
+	echo "kind: ClusterImageCatalog"; \
+	echo "metadata:"; \
+	echo "  name: pglayers$(if $(PROFILE),-$(PROFILE))"; \
+	echo "  labels:"; \
+	echo "    io.pglayers.pg.major: \"$$PG\""; \
+	echo "    io.pglayers.profile: \"$(or $(PROFILE),full)\""; \
+	echo "spec:"; \
+	echo "  images:"; \
+	echo "    - major: $$PG"; \
+	echo "      image: postgres:$$PG"; \
+	echo "      extensions:"; \
+	for ext in $(EXTENSIONS); do \
+		ver=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo $${VERSION_'"$$PG"'}'); \
+		[ -z "$$ver" ] && continue; \
+		spl=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$$SHARED_PRELOAD"'); \
+		deps=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$${DEPENDS:-}"'); \
+		echo "        - name: $$ext"; \
+		echo "          image:"; \
+		echo "            reference: $(REGISTRY)/$(PREFIX)-$$ext:$$PG-$$ver"; \
+		if [ -n "$$spl" ]; then \
+			echo "          shared_preload_libraries:"; \
+			echo "            - $$spl"; \
+		fi; \
+		echo "          ld_library_path:"; \
+		echo "            - lib"; \
+		if [ -n "$$deps" ]; then \
+			echo "          required_extensions:"; \
+			echo "$$deps" | tr ',' '\n' | while IFS= read -r d; do \
+				[ -z "$$d" ] && continue; \
+				echo "            - $$d"; \
+			done; \
+		fi; \
+	done
 
 _check-ext:
 	@test -n "$(EXT)" || { echo "Error: EXT is required. Usage: make build EXT=pgvector [PG=17]"; exit 1; }

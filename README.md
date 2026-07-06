@@ -398,6 +398,66 @@ approach:
 - **Is CNPG-native** -- pglayers `:18` images are directly usable as
   CloudNativePG `ClusterImageCatalog` entries without modification
 
+### CloudNativePG usage
+
+pglayers PG 18+ images are directly compatible with
+[CloudNativePG ImageVolume extensions](https://cloudnative-pg.io/docs/1.30/imagevolume_extensions/)
+(requires CNPG >= 1.27 and Kubernetes >= 1.33).
+
+Generate a `ClusterImageCatalog` for your cluster:
+
+```bash
+make cnpg-catalog PG=18 REGISTRY=ghcr.io/pglayers > catalog.yaml
+kubectl apply -f catalog.yaml
+```
+
+Or for a specific profile:
+
+```bash
+make cnpg-catalog PG=18 PROFILE=azure REGISTRY=ghcr.io/pglayers > catalog-azure.yaml
+```
+
+Then reference extensions in your CNPG `Cluster` spec:
+
+```yaml
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: my-cluster
+spec:
+  imageCatalogRef:
+    apiGroup: postgresql.cnpg.io
+    kind: ClusterImageCatalog
+    name: pglayers
+    major: 18
+  extensions:
+    - name: pgvector
+    - name: postgis
+```
+
+### OCI image labels
+
+Every extension image includes standard OCI labels for machine-readable
+discovery:
+
+| Label | Description |
+|-------|-------------|
+| `org.opencontainers.image.title` | Extension name |
+| `org.opencontainers.image.description` | Short description |
+| `org.opencontainers.image.version` | Extension version |
+| `org.opencontainers.image.source` | Upstream repository URL |
+| `org.opencontainers.image.licenses` | SPDX license identifier |
+| `io.pglayers.pg.major` | PostgreSQL major version |
+| `io.pglayers.layout` | `classic` or `isolated` |
+| `io.pglayers.extension.name` | Extension name |
+| `io.pglayers.extension.version` | Extension version |
+
+Query labels with:
+
+```bash
+docker inspect ghcr.io/pglayers/pgx-pgvector:18 --format '{{json .Config.Labels}}'
+```
+
 ## Building locally
 
 ### Prerequisites
