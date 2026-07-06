@@ -313,6 +313,9 @@ test-image: ## Run integration tests against the combined image
 test-k8s: ## Run Kubernetes ImageVolume integration test (requires k3d, PG 18+)
 	@./tests/test-k8s.sh $(REGISTRY) $(PG)
 
+test-cnpg: ## Run CloudNativePG integration test (requires k3d, PG 18+)
+	@./tests/test-cnpg.sh $(REGISTRY) $(PG)
+
 list-profiles: ## List available profiles
 	@printf "%-12s %-6s %s\n" "PROFILE" "COUNT" "DESCRIPTION"
 	@printf "%-12s %-6s %s\n" "-------" "-----" "-----------"
