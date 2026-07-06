@@ -404,6 +404,19 @@ pglayers PG 18+ images are directly compatible with
 [CloudNativePG ImageVolume extensions](https://cloudnative-pg.io/docs/1.30/imagevolume_extensions/)
 (requires CNPG >= 1.27 and Kubernetes >= 1.33).
 
+> **Important: OS compatibility.** pglayers extensions are built against
+> `postgres:18` (Debian Trixie, glibc 2.38). When using CNPG, the
+> operand image must also be Trixie-based:
+>
+> ```yaml
+> imageName: ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie
+> ```
+>
+> The Bullseye/Bookworm variants (`ghcr.io/cloudnative-pg/postgresql:18`)
+> have an older glibc and will fail with `GLIBC_2.38 not found`. This is
+> the same constraint that applies to CNPG's own extension images --
+> extensions must match the operand's OS distribution.
+
 Generate a `ClusterImageCatalog` for your cluster:
 
 ```bash
@@ -425,15 +438,44 @@ kind: Cluster
 metadata:
   name: my-cluster
 spec:
+  instances: 3
+  imageName: ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie
+
   imageCatalogRef:
     apiGroup: postgresql.cnpg.io
     kind: ClusterImageCatalog
     name: pglayers
     major: 18
-  extensions:
-    - name: pgvector
-    - name: postgis
+
+  postgresql:
+    shared_preload_libraries:
+      - pg_cron
+    extensions:
+      - name: pgvector
+      - name: pg-cron
+      - name: postgis
+        ld_library_path:
+          - lib
 ```
+
+You can also define extensions directly without a catalog:
+
+```yaml
+  postgresql:
+    extensions:
+      - name: pgvector
+        image:
+          reference: ghcr.io/pglayers/pgx-pgvector:18-0.8.4
+      - name: postgis
+        image:
+          reference: ghcr.io/pglayers/pgx-postgis:18-3.6.4
+        ld_library_path:
+          - lib
+```
+
+Extensions with bundled runtime dependencies (PostGIS, pgRouting) need
+`ld_library_path: ["lib"]` so the system linker can find their shared
+libraries at `/extensions/<name>/lib/`.
 
 ### Kubernetes ImageVolumes (without CNPG)
 
