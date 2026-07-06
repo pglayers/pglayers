@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 ARG PG_MAJOR=17
 ARG PG_TAG=${PG_MAJOR}
+ARG LAYOUT=classic
 ARG EXT_VERSION=v0.113-0
 
 # ── Stage 1: Snapshot base image libs (for dep-bundling) ────────────
@@ -96,7 +97,35 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     && find /output -name '*.so' -exec strip --strip-unneeded {} \;
 
 # ── Final: Combine all artifacts ────────────────────────────────────
-FROM scratch
+# --- Layout selection ---
+# Classic: files at standard PG paths (PG 17)
+FROM scratch AS classic
 COPY --from=deb-stage /output/ /
 COPY --from=rust-builder /output/ /
 COPY documentdb_gw_config.json /etc/documentdb/gateway_config.json
+
+# Isolated: flat /lib/ + /share/extension/ layout (PG 18+, CNPG-compatible)
+FROM deb-stage AS normalizer
+ARG PG_MAJOR
+COPY --from=rust-builder /output/ /output/
+COPY documentdb_gw_config.json /output/etc/documentdb/gateway_config.json
+RUN mkdir -p /isolated/lib /isolated/share/extension /isolated/etc/documentdb && \
+    # Extension .so files
+    find /output/usr/lib/postgresql/${PG_MAJOR}/lib -maxdepth 1 -type f \
+        -exec cp -a {} /isolated/lib/ \; && \
+    # Control + SQL files
+    cp -a /output/usr/share/postgresql/${PG_MAJOR}/extension/* \
+        /isolated/share/extension/ && \
+    # Bundled runtime deps (system libs not in base image)
+    find /output/usr/lib -name '*.so*' ! -path '*/postgresql/*' \
+        \( -type f -o -type l \) -exec cp -a {} /isolated/lib/ \; && \
+    # Config files
+    cp -a /output/etc/documentdb/* /isolated/etc/documentdb/ && \
+    # Bitcode (optional, for JIT)
+    cp -a /output/usr/lib/postgresql/${PG_MAJOR}/lib/bitcode /isolated/lib/bitcode \
+        2>/dev/null || true
+
+FROM scratch AS isolated
+COPY --from=normalizer /isolated/ /
+
+FROM ${LAYOUT}

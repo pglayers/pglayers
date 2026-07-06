@@ -141,6 +141,7 @@ jobs:
             PG_MAJOR=${{ matrix.pg }}
             PG_TAG=${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
             EXT_VERSION=${{ matrix.version }}
+            LAYOUT=${{ matrix.pg >= 18 && 'isolated' || 'classic' }}
           push: true
           tags: |
             ${{ matrix.native && format('{0}/{1}/{2}-{3}:{4}-{5}', env.REGISTRY, github.repository_owner, env.PREFIX, matrix.extension, matrix.pg, matrix.arch) || format('{0}/{1}/{2}-{3}:{4}', env.REGISTRY, github.repository_owner, env.PREFIX, matrix.extension, matrix.pg) }}
@@ -220,6 +221,7 @@ jobs:
             PG_MAJOR=${{ matrix.pg }}
             PG_TAG=${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
             EXT_VERSION=${{ matrix.version }}
+            LAYOUT=${{ matrix.pg >= 18 && 'isolated' || 'classic' }}
           push: false
           cache-from: type=gha,scope=${{ matrix.extension }}-${{ matrix.pg }}-amd64
           cache-to: type=gha,mode=max,scope=${{ matrix.extension }}-${{ matrix.pg }}-amd64

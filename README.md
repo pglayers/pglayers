@@ -70,6 +70,39 @@ layers from the registry and overlays them onto the official image.
 The result is a single image with exactly the extensions you chose,
 composed layer by layer.
 
+#### PG 18+ isolated layout
+
+Starting with PostgreSQL 18, pglayers uses an **isolated extension
+layout** that leverages PostgreSQL's `extension_control_path` GUC. Each
+extension lives in its own `/extensions/<name>/` namespace, eliminating
+file collision risk entirely:
+
+```dockerfile
+FROM postgres:18
+
+COPY --from=ghcr.io/pglayers/pgx-pgvector:18  / /extensions/pgvector/
+COPY --from=ghcr.io/pglayers/pgx-pg_cron:18   / /extensions/pg_cron/
+COPY --from=ghcr.io/pglayers/pgx-postgis:18   / /extensions/postgis/
+
+# Tell PostgreSQL where to find isolated extensions
+RUN echo "extension_control_path = '/extensions/pgvector/share:/extensions/pg_cron/share:/extensions/postgis/share:\$system'" \
+    >> /usr/share/postgresql/postgresql.conf.sample && \
+    echo "dynamic_library_path = '/extensions/pgvector/lib:/extensions/pg_cron/lib:/extensions/postgis/lib:\$libdir'" \
+    >> /usr/share/postgresql/postgresql.conf.sample
+
+# Resolve bundled shared library dependencies
+RUN for d in /extensions/*/lib; do echo "$d"; done \
+    > /etc/ld.so.conf.d/pglayers.conf && ldconfig
+```
+
+The `$system` and `$libdir` suffixes ensure built-in contrib extensions
+(hstore, pg_stat_statements, etc.) remain discoverable.
+
+> **Note:** The pre-built profile images (`pglayers-full:18`,
+> `pglayers-azure:18`) handle all GUC and linker configuration
+> automatically. The manual setup above is only needed when composing
+> your own image with Option 2.
+
 > **New to Docker?** See [Verifying your container](#verifying-your-container)
 > for how to check it's running and handle port conflicts.
 
@@ -324,19 +357,46 @@ manually -- just `docker run` and `CREATE EXTENSION`.
 
 The project publishes one Docker image per extension per PostgreSQL
 version. These are not runnable containers -- they are `FROM scratch`
-images containing only the extension artifacts laid out at the
-correct filesystem paths:
+images containing only the extension artifacts.
+
+### PG 17: Classic layout
+
+Extension files are at their standard PostgreSQL filesystem paths:
 
 ```
 /usr/lib/postgresql/17/lib/vector.so
 /usr/share/postgresql/17/extension/vector.control
-/usr/share/postgresql/17/extension/vector--0.8.3.sql
+/usr/share/postgresql/17/extension/vector--0.8.4.sql
 ```
 
 When you write `COPY --from=ghcr.io/pglayers/pgx-pgvector:17 / /` in
 your Dockerfile, Docker copies these files into the official `postgres`
 image at exactly the right locations. PostgreSQL finds them and you can
 `CREATE EXTENSION`.
+
+### PG 18+: Isolated layout
+
+Extension files use a flat layout compatible with PostgreSQL's
+`extension_control_path` GUC and [CloudNativePG ImageVolumes](https://cloudnative-pg.io/docs/1.30/imagevolume_extensions/):
+
+```
+/lib/vector.so
+/lib/bitcode/vector/...
+/share/extension/vector.control
+/share/extension/vector--0.8.4.sql
+```
+
+Each extension image is mounted into its own namespace
+(`/extensions/<name>/`) in the combined image. PostgreSQL discovers them
+via the `extension_control_path` and `dynamic_library_path` GUCs. This
+approach:
+
+- **Eliminates file collisions** -- two extensions can bundle different
+  versions of the same library without conflict
+- **Enables runtime composability** -- extensions can be mounted at
+  deploy time via Docker volumes or Kubernetes ImageVolumes
+- **Is CNPG-native** -- pglayers `:18` images are directly usable as
+  CloudNativePG `ClusterImageCatalog` entries without modification
 
 ## Building locally
 

@@ -76,6 +76,7 @@ build: _check-ext ## Build a single extension image
 		--build-arg PG_MAJOR=$(PG) \
 		--build-arg PG_TAG=$(or $(PG_TAG),$(PG)) \
 		--build-arg EXT_VERSION=$(EXT_VERSION) \
+		--build-arg LAYOUT=$(if $(filter 17,$(PG)),classic,isolated) \
 		-t $(REGISTRY)/$(PREFIX)-$(EXT):$(PG) \
 		-t $(REGISTRY)/$(PREFIX)-$(EXT):$(PG)-$(EXT_VERSION) \
 		-f extensions/$(EXT)/Dockerfile \
@@ -145,6 +146,7 @@ image: ## Build a combined image with all extensions
 	included_label=""; \
 	included=0; \
 	total=0; \
+	included_exts=""; \
 	{ \
 		echo "FROM postgres:$(PG)"; \
 		for ext in $(EXTENSIONS); do \
@@ -156,11 +158,27 @@ image: ## Build a combined image with all extensions
 			else \
 				docker buildx imagetools inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || { skipped="$${skipped:+$$skipped }$$ext"; continue; }; \
 			fi; \
-			echo "COPY --from=$(REGISTRY)/$(PREFIX)-$$ext:$(PG) / /"; \
+			if [ "$(PG)" -ge 18 ] 2>/dev/null; then \
+				echo "COPY --from=$(REGISTRY)/$(PREFIX)-$$ext:$(PG) / /extensions/$$ext/"; \
+			else \
+				echo "COPY --from=$(REGISTRY)/$(PREFIX)-$$ext:$(PG) / /"; \
+			fi; \
 			included=$$((included + 1)); \
 			included_list="$${included_list:+$$included_list,}\"$$ext\""; \
 			included_label="$${included_label:+$$included_label }$$ext"; \
+			included_exts="$${included_exts:+$$included_exts }$$ext"; \
 		done; \
+		if [ "$(PG)" -ge 18 ] 2>/dev/null; then \
+			ext_paths=""; lib_paths=""; \
+			for ext in $$included_exts; do \
+				ext_paths="$${ext_paths}/extensions/$$ext/share:"; \
+				lib_paths="$${lib_paths}/extensions/$$ext/lib:"; \
+			done; \
+			echo "RUN echo \"extension_control_path = '$${ext_paths}\\\$$system'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
+			echo "RUN echo \"dynamic_library_path = '$${lib_paths}\\\$$libdir'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
+			echo "RUN for d in /extensions/*/lib; do echo \"\$$d\"; done > /etc/ld.so.conf.d/pglayers.conf && ldconfig"; \
+			echo "ENV LD_LIBRARY_PATH=\"$${lib_paths%:}\""; \
+		fi; \
 		preloads=""; \
 		for ext in $(EXTENSIONS); do \
 			ver=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo $${VERSION_'"$(PG)"'}'); \
@@ -215,6 +233,11 @@ image: ## Build a combined image with all extensions
 		echo "RUN mkdir -p /etc/pglayers && echo '{' > /etc/pglayers/manifest.json \\"; \
 		echo "  && echo '  \"pg_version\": \"$(PG)\",' >> /etc/pglayers/manifest.json \\"; \
 		echo "  && echo '  \"profile\": \"$(or $(PROFILE),full)\",' >> /etc/pglayers/manifest.json \\"; \
+		if [ "$(PG)" -ge 18 ] 2>/dev/null; then \
+			echo "  && echo '  \"layout\": \"isolated\",' >> /etc/pglayers/manifest.json \\"; \
+		else \
+			echo "  && echo '  \"layout\": \"classic\",' >> /etc/pglayers/manifest.json \\"; \
+		fi; \
 		echo "  && echo '  \"count\": '$$included',' >> /etc/pglayers/manifest.json \\"; \
 		echo "  && echo '  \"total\": '$$total',' >> /etc/pglayers/manifest.json \\"; \
 		echo "  && echo '  \"included\": [$$included_list],' >> /etc/pglayers/manifest.json \\"; \

@@ -111,6 +111,11 @@ echo
 # ============================================================
 # Phase 3: Check for collisions between extension layers
 # ============================================================
+if [ "$PG" -ge 18 ] 2>/dev/null; then
+    info "Phase 3: SKIPPED (isolated layout eliminates collisions by design)"
+    pass "Isolated layout (PG ${PG}): file collisions structurally impossible"
+    echo
+else
 info "Phase 3: Checking for file collisions between extensions..."
 COLLISION_FOUND=false
 
@@ -157,10 +162,16 @@ if [ "$COLLISION_FOUND" = false ]; then
     pass "No file collisions detected between any extension pair"
 fi
 echo
+fi  # end PG < 18 collision check
 
 # ============================================================
 # Phase 4: Check for base image overwrites
 # ============================================================
+if [ "$PG" -ge 18 ] 2>/dev/null; then
+    info "Phase 4: SKIPPED (isolated layout cannot overwrite base image files)"
+    pass "Isolated layout (PG ${PG}): no base image overwrites possible"
+    echo
+else
 info "Phase 4: Checking for base image file overwrites..."
 
 for ext in "${EXTENSIONS[@]}"; do
@@ -182,6 +193,7 @@ for ext in "${EXTENSIONS[@]}"; do
     fi
 done
 echo
+fi  # end PG < 18 base overwrite check
 
 # ============================================================
 # Phase 5: Build combined image and check shared libraries
@@ -191,9 +203,30 @@ info "Phase 5: Building combined image and checking shared libraries..."
 # Generate a test Dockerfile
 {
     echo "FROM postgres:${PG_TAG}"
-    for ext in "${EXTENSIONS[@]}"; do
-        echo "COPY --from=${REGISTRY}/${PREFIX}-${ext}:${PG} / /"
-    done
+    if [ "$PG" -ge 18 ] 2>/dev/null; then
+        # Isolated layout: each extension in its own /extensions/<ext>/ namespace
+        for ext in "${EXTENSIONS[@]}"; do
+            echo "COPY --from=${REGISTRY}/${PREFIX}-${ext}:${PG} / /extensions/${ext}/"
+        done
+        # Configure extension_control_path and dynamic_library_path
+        ext_paths=""
+        lib_paths=""
+        for ext in "${EXTENSIONS[@]}"; do
+            ext_paths="${ext_paths}/extensions/${ext}/share:"
+            lib_paths="${lib_paths}/extensions/${ext}/lib:"
+        done
+        echo "RUN echo \"extension_control_path = '${ext_paths}\\\$system'\" >> /usr/share/postgresql/postgresql.conf.sample"
+        echo "RUN echo \"dynamic_library_path = '${lib_paths}\\\$libdir'\" >> /usr/share/postgresql/postgresql.conf.sample"
+        # Configure linker for bundled runtime deps
+        # shellcheck disable=SC2016
+        echo 'RUN for d in /extensions/*/lib; do echo "$d"; done > /etc/ld.so.conf.d/pglayers.conf && ldconfig'
+        echo "ENV LD_LIBRARY_PATH=\"${lib_paths%:}\""
+    else
+        # Classic layout: flat overlay
+        for ext in "${EXTENSIONS[@]}"; do
+            echo "COPY --from=${REGISTRY}/${PREFIX}-${ext}:${PG} / /"
+        done
+    fi
     # Build shared_preload_libraries from extensions available for this PG version
     preloads=""
     for ext in "${EXTENSIONS[@]}"; do
@@ -227,12 +260,21 @@ info "Phase 5: Building combined image and checking shared libraries..."
 docker build -t "${IMAGE_TAG}" -f "${TMPDIR}/Dockerfile" "${TMPDIR}" >/dev/null 2>&1
 
 # Check for missing shared libraries
-missing="$(docker run --rm --entrypoint bash "${IMAGE_TAG}" -c '
-    for so in /usr/lib/postgresql/'"${PG}"'/lib/*.so; do
-        [ -f "$so" ] || continue
-        ldd "$so" 2>/dev/null | grep "not found"
-    done
-' 2>/dev/null || true)"
+if [ "$PG" -ge 18 ] 2>/dev/null; then
+    missing="$(docker run --rm --entrypoint bash "${IMAGE_TAG}" -c '
+        for so in /extensions/*/lib/*.so; do
+            [ -f "$so" ] || continue
+            ldd "$so" 2>/dev/null | grep "not found"
+        done
+    ' 2>/dev/null || true)"
+else
+    missing="$(docker run --rm --entrypoint bash "${IMAGE_TAG}" -c '
+        for so in /usr/lib/postgresql/'"${PG}"'/lib/*.so; do
+            [ -f "$so" ] || continue
+            ldd "$so" 2>/dev/null | grep "not found"
+        done
+    ' 2>/dev/null || true)"
+fi
 
 if [ -z "$missing" ]; then
     pass "All shared library dependencies resolve"

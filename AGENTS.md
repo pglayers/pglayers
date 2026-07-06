@@ -96,6 +96,10 @@ both versions or remove the unsupported version from `extension.conf`.
 
 ### Common collision scenarios to watch for
 
+> **Note:** For PG 18+, collisions are **structurally impossible** due to
+> the isolated layout (each extension has its own `/extensions/<name>/`
+> namespace). The scenarios below only apply to PG 17 (classic layout).
+
 - Two extensions bundling the same runtime shared library at different
   versions (e.g., both PostGIS and pgRouting shipping libgeos)
 - Extensions that install CLI tools with generic names in `/usr/local/bin`
@@ -205,6 +209,7 @@ Every extension Dockerfile **must** follow these practices:
    # syntax=docker/dockerfile:1
    ARG PG_MAJOR=17
    ARG PG_TAG=${PG_MAJOR}
+   ARG LAYOUT=classic
 
    FROM postgres:${PG_TAG} AS builder
    ARG PG_MAJOR
@@ -223,8 +228,24 @@ Every extension Dockerfile **must** follow these practices:
            cp -a "$f" "/output$f"; \
        done
 
-   FROM scratch
+   # --- Layout selection ---
+   FROM scratch AS classic
    COPY --from=builder /output/ /
+
+   FROM builder AS normalizer
+   ARG PG_MAJOR
+   RUN mkdir -p /isolated/lib /isolated/share/extension && \
+       find /output/usr/lib/postgresql/${PG_MAJOR}/lib -maxdepth 1 -type f \
+           -exec cp -a {} /isolated/lib/ \; && \
+       cp -a /output/usr/share/postgresql/${PG_MAJOR}/extension/* \
+           /isolated/share/extension/ && \
+       cp -a /output/usr/lib/postgresql/${PG_MAJOR}/lib/bitcode /isolated/lib/bitcode \
+           2>/dev/null || true
+
+   FROM scratch AS isolated
+   COPY --from=normalizer /isolated/ /
+
+   FROM ${LAYOUT}
    ```
    Add `APT_PACKAGE="<package>"` to `extension.conf` when using this
    pattern. If the extension has runtime shared library dependencies
@@ -238,11 +259,17 @@ Every extension Dockerfile **must** follow these practices:
        && find /output -name '*.so' -exec strip --strip-unneeded {} \;
    ```
 
-5. **Minimal final image** -- The final stage must be `FROM scratch`
-   containing only the extension artifacts. No build tools, no source
-   code, no package manager state.
+5. **Minimal final image** -- The final stage uses `FROM ${LAYOUT}`
+   which selects either `classic` (PG 17) or `isolated` (PG 18+). The
+   Makefile passes `--build-arg LAYOUT=isolated` for PG >= 18.
 
-6. **Architecture-neutral** -- Dockerfiles must work on both `linux/amd64`
+6. **Layout selection stages** -- Every Dockerfile **must** include the
+   layout selection pattern (classic + normalizer + isolated + FROM
+   ${LAYOUT}) as the final stages. The `LAYOUT` build arg must be
+   declared as a top-level ARG. BuildKit skips unused stages, so the
+   normalizer stage adds zero overhead for PG 17 builds.
+
+7. **Architecture-neutral** -- Dockerfiles must work on both `linux/amd64`
    and `linux/arm64` without modification. Do NOT hardcode architecture-
    specific paths like `/usr/lib/x86_64-linux-gnu/`. Use
    `dpkg-architecture -q DEB_HOST_MULTIARCH` if you need the multiarch

@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 ARG PG_MAJOR=17
 ARG PG_TAG=${PG_MAJOR}
+ARG LAYOUT=classic
 ARG EXT_VERSION=v3.3.4
 ARG VCPKG_VERSION=2025.10.17
 
@@ -129,5 +130,33 @@ RUN set -eux; \
         cp -aL "$lib" "/output$dest" 2>/dev/null || true; \
     done < /tmp/all-deps.txt
 
-FROM scratch
+# --- Layout selection ---
+# Classic: files at standard PG paths (PG 17)
+FROM scratch AS classic
 COPY --from=builder /output/ /
+
+# Isolated: flat /lib/ + /share/extension/ layout (PG 18+, CNPG-compatible)
+FROM builder AS normalizer
+ARG PG_MAJOR
+RUN mkdir -p /isolated/lib /isolated/share/extension && \
+    # Extension .so files
+    find /output/usr/lib/postgresql/${PG_MAJOR}/lib -maxdepth 1 -type f \
+        -exec cp -a {} /isolated/lib/ \; && \
+    # Control + SQL files
+    cp -a /output/usr/share/postgresql/${PG_MAJOR}/extension/* \
+        /isolated/share/extension/ && \
+    # Bundled runtime deps (system libs not in base image)
+    find /output/usr/lib -name '*.so*' ! -path '*/postgresql/*' \
+        \( -type f -o -type l \) -exec cp -a {} /isolated/lib/ \; && \
+    # Companion binaries
+    find /output/usr/local/bin -type f \
+        -exec sh -c 'mkdir -p /isolated/bin && cp -a "$1" /isolated/bin/' _ {} \; \
+        2>/dev/null || true && \
+    # Bitcode (optional, for JIT)
+    cp -a /output/usr/lib/postgresql/${PG_MAJOR}/lib/bitcode /isolated/lib/bitcode \
+        2>/dev/null || true
+
+FROM scratch AS isolated
+COPY --from=normalizer /isolated/ /
+
+FROM ${LAYOUT}
