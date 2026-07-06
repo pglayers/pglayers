@@ -30,12 +30,12 @@ Extensions we explicitly exclude:
 ## Version Policy
 
 Always use the **latest stable release** of each extension that is
-compatible with our supported PostgreSQL versions (currently 17 and 18).
-When a new upstream release is published:
+compatible with our supported PostgreSQL versions (currently 17, 18,
+and 19). When a new upstream release is published:
 
-1. Update `VERSION_17` and `VERSION_18` in `extension.conf`.
+1. Update `VERSION_17`, `VERSION_18`, and `VERSION_19` in `extension.conf`.
 2. Update the `ARG EXT_VERSION` default in the Dockerfile.
-3. Run `make test REGISTRY=local PG=17` and `PG=18`.
+3. Run `make test REGISTRY=local PG=17`, `PG=18`, and `PG=19`.
 4. Update the README if the version appears in any examples.
 
 Do not pin to old versions unless the latest has a known incompatibility
@@ -52,16 +52,18 @@ make test REGISTRY=local PG=17
 
 This test suite validates:
 
-1. **No file collisions between extension layers** -- If two extensions
-   install a file at the same path, the last `COPY --from` silently
-   overwrites the first. This can break extensions at runtime with no
-   warning from Docker. The test compares file lists across all extension
-   pairs and fails on any overlap.
+1. **No file collisions between extension layers** (PG 17 only; the
+   isolated layout on PG 18+ eliminates this structurally) -- If two
+   extensions install a file at the same path, the last `COPY --from`
+   silently overwrites the first. This can break extensions at runtime
+   with no warning from Docker. The test compares file lists across all
+   extension pairs and fails on any overlap.
 
-2. **No base image overwrites** -- Extensions must not replace files
-   already present in the official `postgres:XX` image (shared libs,
-   config files, binaries). The test diffs each extension's file list
-   against the base image.
+2. **No base image overwrites** (PG 17 only; isolated layout on PG 18+
+   installs into a separate `/extensions/` namespace) -- Extensions must
+   not replace files already present in the official `postgres:XX` image
+   (shared libs, config files, binaries). The test diffs each extension's
+   file list against the base image.
 
 3. **No missing shared library dependencies** -- Runs `ldd` on every
    `.so` in the combined image. Catches transitive runtime deps that
@@ -90,9 +92,10 @@ make test REGISTRY=local PG=18
 make test REGISTRY=local PG=19
 ```
 
-Both must pass before merging. An extension that builds on PG 17 but
-fails on PG 18 (or vice versa) is not acceptable -- either fix it for
-both versions or remove the unsupported version from `extension.conf`.
+All must pass before merging. An extension that builds on one PG
+version but fails on another is not acceptable -- either fix it for
+all supported versions or remove the unsupported version from
+`extension.conf`.
 
 ### Common collision scenarios to watch for
 
@@ -128,8 +131,10 @@ This means updating `tests/test-layers.sh` to include:
    The smoke test must produce non-empty output on success.
 
 4. **shared_preload_libraries** -- If the extension requires preloading,
-   add it to the `shared_preload_libraries` line in the test Dockerfile
-   generator (Phase 5 of `test-layers.sh`).
+   add `SHARED_PRELOAD="<library>"` to `extension.conf`. Phase 5 of
+   `test-layers.sh` auto-generates the `shared_preload_libraries` line
+   from this field for both classic (PG 17) and isolated (PG 18+)
+   layouts.
 
 5. **Integration test file** -- Create `extensions/<name>/test.sql` with
    multi-step validation. Each test outputs a line starting with `PASS`
@@ -149,7 +154,8 @@ This means updating `tests/test-layers.sh` to include:
 
 The collision, overwrite, and ldd checks are automatic for all
 extensions in the `extensions/` directory -- no manual update needed
-for those.
+for those. (Collision and overwrite checks are skipped for PG 18+ since
+the isolated layout eliminates them by design.)
 
 ### Version monitoring
 
