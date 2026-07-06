@@ -102,8 +102,11 @@ for ext in "${EXTENSIONS[@]}"; do
     tar -tf "${TMPDIR}/${ext}.tar" 2>/dev/null \
         | grep -v '/$' \
         | sed 's|^|/|' \
-        | grep -v -E '^/\.dockerenv|^/dev/|^/proc/|^/sys/|^/etc/(hostname|hosts|resolv\.conf|mtab)$' \
+        | { grep -v -E '^/\.dockerenv|^/dev/|^/proc/|^/sys/|^/etc/(hostname|hosts|resolv\.conf|mtab)$' || true; } \
         | LC_ALL=C sort > "${TMPDIR}/${ext}.txt"
+    if [ ! -s "${TMPDIR}/${ext}.txt" ]; then
+        fail "Extension ${ext} image contains no extension files (broken normalizer?)"
+    fi
     docker rm "pgx-extract-${ext}" >/dev/null 2>&1
 done
 echo

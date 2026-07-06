@@ -30,8 +30,8 @@ COPY --from=builder /output/ /
 FROM builder AS normalizer
 ARG PG_MAJOR
 RUN mkdir -p /isolated/lib /isolated/share/extension && \
-    find /output/usr/lib/postgresql/${PG_MAJOR}/lib -maxdepth 1 -type f \
-        -exec cp -a {} /isolated/lib/ \; && \
+    (find /output/usr/lib/postgresql/${PG_MAJOR}/lib -maxdepth 1 -type f \
+        -exec cp -a {} /isolated/lib/ \; 2>/dev/null || true) && \
     cp -a /output/usr/share/postgresql/${PG_MAJOR}/extension/* \
         /isolated/share/extension/ && \
     cp -a /output/usr/lib/postgresql/${PG_MAJOR}/lib/bitcode /isolated/lib/bitcode \
