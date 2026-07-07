@@ -92,6 +92,22 @@ jobs:
             [ -z "$ver" ] && continue
             img="${REGISTRY}/${PREFIX}-${ext}:${{ matrix.pg }}"
             if docker pull "$img" 2>/dev/null; then
+              # For PG 18+, verify the image uses the isolated layout.
+              # Stale images built before isolated layout was introduced have
+              # files at /usr/lib/... (classic) instead of /lib/ (isolated).
+              # Note: isolated images are FROM scratch (no shell), so we check
+              # via docker export + tar.
+              if [ "${{ matrix.pg }}" -ge 18 ]; then
+                cid=$(docker create "$img" true 2>/dev/null)
+                has_isolated=$(docker export "$cid" 2>/dev/null \
+                  | tar -t 2>/dev/null | grep -q '^lib/\|^share/extension/' && echo yes || echo no)
+                docker rm "$cid" >/dev/null 2>&1
+                if [ "$has_isolated" != "yes" ]; then
+                  echo "SKIP $ext (stale classic-layout image, will rebuild)"
+                  docker rmi "$img" 2>/dev/null || true
+                  continue
+                fi
+              fi
               # Re-tag as local/ so make test finds it
               docker tag "$img" "local/${PREFIX}-${ext}:${{ matrix.pg }}"
             else
@@ -103,6 +119,7 @@ jobs:
         if: steps.changes.outputs.changed != ''
         env:
           DOCKER_BUILDKIT: 1
+          PG_TAG: ${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
         run: |
           for ext in ${{ steps.changes.outputs.changed }}; do
             ver=$(bash -c "source extensions/$ext/extension.conf && echo \${VERSION_${{ matrix.pg }}}")
@@ -110,17 +127,20 @@ jobs:
               echo "SKIP $ext (no version for PG ${{ matrix.pg }})"
               continue
             fi
-            make build EXT="$ext" PG=${{ matrix.pg }} REGISTRY=local CACHE_SCOPE=ci || exit 1
+            make build EXT="$ext" PG=${{ matrix.pg }} PG_TAG="$PG_TAG" REGISTRY=local CACHE_SCOPE=ci || exit 1
           done
 
       - name: Build all extensions (PG ${{ matrix.pg }})
         if: steps.changes.outputs.changed == ''
         env:
           DOCKER_BUILDKIT: 1
-        run: make build-all PG=${{ matrix.pg }} REGISTRY=local CACHE_SCOPE=ci
+          PG_TAG: ${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
+        run: make build-all PG=${{ matrix.pg }} PG_TAG="$PG_TAG" REGISTRY=local CACHE_SCOPE=ci
 
       - name: Run test suite (PG ${{ matrix.pg }})
-        run: make test REGISTRY=local PG=${{ matrix.pg }}
+        env:
+          PG_TAG: ${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
+        run: make test REGISTRY=local PG=${{ matrix.pg }} PG_TAG="$PG_TAG"
 
       - name: Check profiles
         run: make check-profiles
