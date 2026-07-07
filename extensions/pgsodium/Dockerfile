@@ -55,6 +55,9 @@ RUN mkdir -p /isolated/lib /isolated/share/extension && \
         -exec cp -a {} /isolated/lib/ \; && \
     cp -a /output/usr/share/postgresql/${PG_MAJOR}/extension/* \
         /isolated/share/extension/ && \
+    # Bundled runtime deps (system libs not in base image)
+    find /output/usr/lib -name '*.so*' ! -path '*/postgresql/*' \
+        \( -type f -o -type l \) -exec cp -a {} /isolated/lib/ \; && \
     cp -a /output/usr/lib/postgresql/${PG_MAJOR}/lib/bitcode /isolated/lib/bitcode \
         2>/dev/null || true
 
