@@ -113,6 +113,8 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJson(needs.matrix.outputs.build) }}
+    # PG 19 is still in beta; allow failures without blocking the pipeline
+    continue-on-error: ${{ matrix.pg == '19' }}
     name: build (${{ matrix.extension }}, ${{ matrix.pg }}, ${{ matrix.arch }})
     steps:
       - uses: actions/checkout@v7
@@ -166,6 +168,8 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJson(needs.matrix.outputs.extensions) }}
+    # PG 19 is still in beta; allow failures without blocking the pipeline
+    continue-on-error: ${{ matrix.pg == '19' }}
     name: manifest (${{ matrix.extension }}, ${{ matrix.pg }})
     steps:
       - uses: docker/login-action@v4
@@ -204,6 +208,8 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJson(needs.matrix.outputs.extensions) }}
+    # PG 19 is still in beta; allow failures without blocking PRs
+    continue-on-error: ${{ matrix.pg == '19' }}
     name: build-pr (${{ matrix.extension }}, ${{ matrix.pg }})
     steps:
       - uses: actions/checkout@v7
@@ -240,6 +246,8 @@ jobs:
       matrix:
         profile: [azure, full]
         pg: [17, 18, 19]
+    # PG 19 is still in beta; allow failures without blocking the pipeline
+    continue-on-error: ${{ matrix.pg == '19' }}
     name: Profile ${{ matrix.profile }} (PG ${{ matrix.pg }})
     steps:
       - uses: actions/checkout@v7
