@@ -25,6 +25,7 @@ pgvector
 plv8
 postgis
 postgres_protobuf
+rum
 semver
 tdigest
 tds_fdw
