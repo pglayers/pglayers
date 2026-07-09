@@ -57,7 +57,7 @@ jobs:
 
           echo "changed=${CHANGED_VERSIONS}" >> "$GITHUB_OUTPUT"
 
-      - name: Create PR with updated digests
+      - name: Create or update PR with updated digests
         if: steps.check.outputs.changed != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -65,29 +65,45 @@ jobs:
           changed="${{ steps.check.outputs.changed }}"
           branch="auto/base-image-update"
 
-          # Close any existing PR from a previous run
-          existing_pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')
-          if [ -n "$existing_pr" ]; then
-            echo "Closing existing PR #${existing_pr}"
-            gh pr close "$existing_pr" --delete-branch
-          fi
-
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$branch"
-          git add .github/base-image-digests.json
-          git commit -m "chore: base image updated (PG ${changed})"
-          git push --force origin "$branch"
 
-          gh pr create \
-            --title "chore: base image updated (PG ${changed})" \
-            --body "The official \`postgres\` Docker images have been rebuilt for PG ${changed}.
+          # Check if an open PR already exists for this branch
+          existing_pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')
+
+          if [ -n "$existing_pr" ]; then
+            # Update the existing branch: fetch it, apply changes on top
+            git fetch origin "$branch"
+            git checkout "$branch"
+            git merge origin/main --no-edit || git merge --abort
+            git add .github/base-image-digests.json
+            # Only commit if there are actual changes
+            if ! git diff --cached --quiet; then
+              git commit -m "chore: base image updated (PG ${changed})"
+              git push origin "$branch"
+            else
+              echo "No new changes to commit"
+            fi
+            # Update PR title/body if versions changed
+            gh pr edit "$existing_pr" \
+              --title "chore: base image updated (PG ${changed})"
+          else
+            # Create a new branch and PR
+            git checkout -b "$branch"
+            git add .github/base-image-digests.json
+            git commit -m "chore: base image updated (PG ${changed})"
+            git push origin "$branch"
+
+            gh pr create \
+              --title "chore: base image updated (PG ${changed})" \
+              --body "The official \`postgres\` Docker images have been rebuilt for PG ${changed}.
 
           This PR updates the tracked digests. Once status checks pass, it will auto-merge and trigger a rebuild." \
-            --head "$branch" \
-            --base main
+              --head "$branch" \
+              --base main
 
-          gh pr merge "$branch" --auto --squash
+            gh pr merge "$branch" --auto --squash
+          fi
 
       - name: Trigger rebuild for changed versions
         if: steps.check.outputs.changed != ''
