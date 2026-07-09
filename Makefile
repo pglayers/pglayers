@@ -221,6 +221,9 @@ image: ## Build a combined image with all extensions
 				echo "RUN echo \"$$line\" >> /usr/share/postgresql/postgresql.conf.sample"; \
 			done; \
 		done; \
+		if [ "$(PG)" -ge 18 ] 2>/dev/null && echo " $$included_exts " | grep -q ' pgsodium '; then \
+			echo "RUN echo \"pgsodium.getkey_script = '/extensions/pgsodium/share/extension/pgsodium_getkey'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
+		fi; \
 		companions=""; \
 		for ext in $(EXTENSIONS); do \
 			ver=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo $${VERSION_'"$(PG)"'}'); \

@@ -182,17 +182,14 @@ jobs:
         run: |
           IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}"
           # Only create manifest if per-arch tags exist (native builds)
-          if docker manifest inspect "${IMAGE}:${{ matrix.pg }}-amd64" >/dev/null 2>&1 && \
-             docker manifest inspect "${IMAGE}:${{ matrix.pg }}-arm64" >/dev/null 2>&1; then
-            docker manifest create "${IMAGE}:${{ matrix.pg }}" \
+          if docker buildx imagetools inspect "${IMAGE}:${{ matrix.pg }}-amd64" >/dev/null 2>&1 && \
+             docker buildx imagetools inspect "${IMAGE}:${{ matrix.pg }}-arm64" >/dev/null 2>&1; then
+            docker buildx imagetools create -t "${IMAGE}:${{ matrix.pg }}" \
               "${IMAGE}:${{ matrix.pg }}-amd64" \
               "${IMAGE}:${{ matrix.pg }}-arm64"
-            docker manifest push "${IMAGE}:${{ matrix.pg }}"
-
-            docker manifest create "${IMAGE}:${{ matrix.pg }}-${{ matrix.version }}" \
+            docker buildx imagetools create -t "${IMAGE}:${{ matrix.pg }}-${{ matrix.version }}" \
               "${IMAGE}:${{ matrix.pg }}-amd64" \
               "${IMAGE}:${{ matrix.pg }}-arm64"
-            docker manifest push "${IMAGE}:${{ matrix.pg }}-${{ matrix.version }}"
           else
             echo "Skipping manifest (APT-based extension, already multi-arch)"
           fi
