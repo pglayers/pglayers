@@ -6,6 +6,7 @@ on:
     paths:
       - 'extensions/**'
       - 'profiles/**'
+      - '.github/base-image-digests.json'
       - '.github/workflows/build-push.yml'
   pull_request:
     branches: [main]
