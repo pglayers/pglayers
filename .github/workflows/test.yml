@@ -208,4 +208,4 @@ jobs:
         run: make image PG=${{ matrix.pg }} PROFILE=${{ matrix.profile }} REGISTRY=local
 
       - name: Test profile image
-        run: make test-image PG=${{ matrix.pg }}
+        run: make test-image PG=${{ matrix.pg }} PROFILE=${{ matrix.profile }}
