@@ -71,7 +71,6 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Pull pre-built extension images
-        if: steps.changes.outputs.changed != ''
         env:
           REGISTRY: ghcr.io/pglayers
           PREFIX: pgx
@@ -80,7 +79,7 @@ jobs:
           for ext in extensions/*/; do
             ext="$(basename "$ext")"
             changed="${{ steps.changes.outputs.changed }}"
-            if echo "$changed" | grep -qw "$ext"; then
+            if [ -n "$changed" ] && echo "$changed" | grep -qw "$ext"; then
               echo "SKIP pull $ext (will build from source)"
               continue
             fi
@@ -113,7 +112,7 @@ jobs:
               # Re-tag as local/ so make test finds it
               docker tag "$img" "local/${PREFIX}-${ext}:${{ matrix.pg }}"
             else
-              echo "WARN: $img not available, will skip in tests"
+              echo "WARN: $img not available, will build from source"
             fi
           done
 
@@ -132,12 +131,24 @@ jobs:
             make build EXT="$ext" PG=${{ matrix.pg }} PG_TAG="$PG_TAG" REGISTRY=local CACHE_SCOPE=ci || exit 1
           done
 
-      - name: Build all extensions (PG ${{ matrix.pg }})
-        if: steps.changes.outputs.changed == ''
+      - name: Build unpulled extensions (PG ${{ matrix.pg }})
         env:
           DOCKER_BUILDKIT: 1
           PG_TAG: ${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
-        run: make build-all PG=${{ matrix.pg }} PG_TAG="$PG_TAG" REGISTRY=local CACHE_SCOPE=ci
+        run: |
+          # Build any extension that wasn't pulled from the registry
+          # (new extensions, CI_SKIP extensions not in GHCR, etc.)
+          for ext in extensions/*/; do
+            ext="$(basename "$ext")"
+            ver=$(bash -c "source extensions/$ext/extension.conf && echo \${VERSION_${{ matrix.pg }}}")
+            [ -z "$ver" ] && continue
+            # Already have it (pulled or built above)
+            if docker image inspect "local/pgx-${ext}:${{ matrix.pg }}" >/dev/null 2>&1; then
+              continue
+            fi
+            echo "Building $ext (not available in registry)"
+            make build EXT="$ext" PG=${{ matrix.pg }} PG_TAG="$PG_TAG" REGISTRY=local CACHE_SCOPE=ci || exit 1
+          done
 
       - name: Run test suite (PG ${{ matrix.pg }})
         env:
