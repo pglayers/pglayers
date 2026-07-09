@@ -252,6 +252,14 @@ info "Phase 5: Building combined image and checking shared libraries..."
             echo "RUN echo \"${line}\" >> /usr/share/postgresql/postgresql.conf.sample"
         done
     done
+    # pgsodium getkey script: in isolated layout, pgsodium expects it at
+    # /usr/share/postgresql/<PG>/extension/pgsodium_getkey but it lives
+    # at /extensions/pgsodium/share/extension/pgsodium_getkey
+    if printf '%s\n' "${EXTENSIONS[@]}" | grep -qx pgsodium; then
+        if [ "$PG" -ge 18 ] 2>/dev/null; then
+            echo "RUN echo \"pgsodium.getkey_script = '/extensions/pgsodium/share/extension/pgsodium_getkey'\" >> /usr/share/postgresql/postgresql.conf.sample"
+        fi
+    fi
     # documentdb gateway config file (already bundled in layer, but needed for test image)
     if printf '%s\n' "${EXTENSIONS[@]}" | grep -qx documentdb; then
         if [ "$PG" -ge 18 ] 2>/dev/null; then
