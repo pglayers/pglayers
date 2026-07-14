@@ -125,6 +125,9 @@ CNPG_PG_IMAGE="ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie"
 docker pull "$CNPG_PG_IMAGE" >/dev/null 2>&1 || true
 k3d image import "$CNPG_PG_IMAGE" -c "$CLUSTER_NAME" 2>/dev/null
 
+# Wait for containerd to fully register imported images (avoids ErrImageNeverPull race)
+sleep 5
+
 pass "Images imported: CNPG PG 18 + ${TEST_EXTENSIONS[*]}"
 
 # ============================================================
