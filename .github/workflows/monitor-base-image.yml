@@ -68,32 +68,40 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Check if an open PR already exists for this branch
-          existing_pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')
+          # Preserve the freshly-computed digest file. The checkout below may
+          # switch branches, and we want exactly this content on the branch.
+          cp .github/base-image-digests.json /tmp/base-image-digests.json
 
-          if [ -n "$existing_pr" ]; then
-            # Update the existing branch: fetch it, apply changes on top
+          # Always build on top of the remote branch when it exists so the
+          # push is a fast-forward. This never force-pushes and never deletes
+          # a branch, so an open PR (even one this workflow failed to detect)
+          # can never be clobbered. A leftover branch from a previously
+          # merged/closed PR is simply reused; the PR diff against main only
+          # shows the new digest change.
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
             git fetch origin "$branch"
-            git checkout "$branch"
+            git checkout -B "$branch" "origin/$branch"
             git merge origin/main --no-edit || git merge --abort
-            git add .github/base-image-digests.json
-            # Only commit if there are actual changes
-            if ! git diff --cached --quiet; then
-              git commit -m "chore: base image updated (PG ${changed})"
-              git push origin "$branch"
-            else
-              echo "No new changes to commit"
-            fi
-            # Update PR title/body if versions changed
+          else
+            git checkout -b "$branch"
+          fi
+
+          cp /tmp/base-image-digests.json .github/base-image-digests.json
+          git add .github/base-image-digests.json
+
+          if git diff --cached --quiet; then
+            echo "No new changes to commit"
+          else
+            git commit -m "chore: base image updated (PG ${changed})"
+            git push origin "$branch"
+          fi
+
+          # Ensure a PR exists and its title reflects the changed versions.
+          existing_pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')
+          if [ -n "$existing_pr" ]; then
             gh pr edit "$existing_pr" \
               --title "chore: base image updated (PG ${changed})"
           else
-            # Create a new branch and PR
-            git checkout -b "$branch"
-            git add .github/base-image-digests.json
-            git commit -m "chore: base image updated (PG ${changed})"
-            git push origin "$branch"
-
             gh pr create \
               --title "chore: base image updated (PG ${changed})" \
               --body "The official \`postgres\` Docker images have been rebuilt for PG ${changed}.
