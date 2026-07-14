@@ -15,6 +15,10 @@ jobs:
       actions: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history so we can merge main into a divergent auto-update
+          # branch without hitting "refusing to merge unrelated histories".
+          fetch-depth: 0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -81,7 +85,7 @@ jobs:
           if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
             git fetch origin "$branch"
             git checkout -B "$branch" "origin/$branch"
-            git merge origin/main --no-edit || git merge --abort
+            git merge origin/main --no-edit || { git merge --abort || true; }
           else
             git checkout -b "$branch"
           fi
