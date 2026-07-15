@@ -74,12 +74,13 @@ jobs:
         env:
           REGISTRY: ghcr.io/pglayers
           PREFIX: pgx
+          PG: ${{ matrix.pg }}
+          CHANGED: ${{ steps.changes.outputs.changed }}
         run: |
           # Pull pre-built images for unchanged extensions from the registry
           for ext in extensions/*/; do
             ext="$(basename "$ext")"
-            changed="${{ steps.changes.outputs.changed }}"
-            if [ -n "$changed" ] && echo "$changed" | grep -qw "$ext"; then
+            if [ -n "$CHANGED" ] && echo "$CHANGED" | grep -qw "$ext"; then
               echo "SKIP pull $ext (will build from source)"
               continue
             fi
@@ -89,16 +90,16 @@ jobs:
               echo "SKIP pull $ext (CI_SKIP=1)"
               continue
             fi
-            ver=$(bash -c "source extensions/$ext/extension.conf && echo \${VERSION_${{ matrix.pg }}}")
+            ver=$(bash -c "source extensions/$ext/extension.conf && echo \${VERSION_${PG}}")
             [ -z "$ver" ] && continue
-            img="${REGISTRY}/${PREFIX}-${ext}:${{ matrix.pg }}"
+            img="${REGISTRY}/${PREFIX}-${ext}:${PG}"
             if docker pull "$img" 2>/dev/null; then
               # For PG 18+, verify the image uses the isolated layout.
               # Stale images built before isolated layout was introduced have
               # files at /usr/lib/... (classic) instead of /lib/ (isolated).
               # Note: isolated images are FROM scratch (no shell), so we check
               # via docker export + tar.
-              if [ "${{ matrix.pg }}" -ge 18 ]; then
+              if [ "$PG" -ge 18 ]; then
                 cid=$(docker create "$img" true 2>/dev/null)
                 has_isolated=$(docker export "$cid" 2>/dev/null \
                   | tar -t 2>/dev/null | grep -q '^lib/\|^share/extension/' && echo yes || echo no)
@@ -110,7 +111,7 @@ jobs:
                 fi
               fi
               # Re-tag as local/ so make test finds it
-              docker tag "$img" "local/${PREFIX}-${ext}:${{ matrix.pg }}"
+              docker tag "$img" "local/${PREFIX}-${ext}:${PG}"
             else
               echo "WARN: $img not available, will build from source"
             fi
@@ -187,18 +188,21 @@ jobs:
         env:
           REGISTRY: ghcr.io/pglayers
           PREFIX: pgx
+          PG: ${{ matrix.pg }}
+          PROFILE: ${{ matrix.profile }}
         run: |
-          for ext in $(grep -v '^\#' profiles/${{ matrix.profile }}.txt | grep -v '^$'); do
+          grep -v '^\#' "profiles/${PROFILE}.txt" | grep -v '^$' \
+            | while IFS= read -r ext; do
             ci_skip=$(bash -c "source extensions/$ext/extension.conf && echo \${CI_SKIP:-}")
             if [ "$ci_skip" = "1" ]; then
               echo "SKIP $ext (CI_SKIP=1)"
               continue
             fi
-            ver=$(bash -c "source extensions/$ext/extension.conf && echo \${VERSION_${{ matrix.pg }}}")
+            ver=$(bash -c "source extensions/$ext/extension.conf && echo \${VERSION_${PG}}")
             [ -z "$ver" ] && continue
-            img="${REGISTRY}/${PREFIX}-${ext}:${{ matrix.pg }}"
+            img="${REGISTRY}/${PREFIX}-${ext}:${PG}"
             if docker pull "$img" 2>/dev/null; then
-              docker tag "$img" "local/${PREFIX}-${ext}:${{ matrix.pg }}"
+              docker tag "$img" "local/${PREFIX}-${ext}:${PG}"
             else
               echo "WARN: $img not available, will skip"
             fi
