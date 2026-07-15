@@ -318,11 +318,25 @@ Every extension Dockerfile **must** follow these practices:
      into an extension-private directory
      (`/usr/lib/postgresql/<pg>/lib/<ext>-deps/`) and point each ELF
      object's `RUNPATH` at it via `$ORIGIN` using `patchelf`. The private
-     dir name is unique per extension, so there is no collision, and the
-     layer stays self-contained. See the `classic-relocate` stage in
-     `extensions/http/Dockerfile`, `extensions/pg_duckdb/Dockerfile`, and
+     dir name is unique per extension, so there is no file collision, and
+     the layer stays self-contained.
+
+     A private dir + RUNPATH alone is **not** enough, though: sonames are
+     process-global. In a combined image several extensions load into the
+     same postgres backend, and if one (e.g. via `shared_preload_libraries`)
+     loads its own `libssh2.so.1` first, another layer's `libcurl` -- or
+     postgis's -- will bind to that already-loaded soname and may hit
+     undefined symbols. So also **mangle each bundled dep's soname** with a
+     per-extension prefix (`patchelf --set-soname pglx_<ext>_<soname>`,
+     rename the file to match) and rewrite the `NEEDED` entries of every ELF
+     object you ship (`patchelf --replace-needed`). Unique sonames make
+     cross-layer symbol clashes impossible.
+
+     See the `classic-relocate` stage in `extensions/http/Dockerfile`,
+     `extensions/pg_net/Dockerfile`, `extensions/pg_duckdb/Dockerfile`, and
      `extensions/pg_lake/Dockerfile` for the reference pattern (the last
-     also relocates the `pgduck_server` binary via `$ORIGIN/../lib`).
+     also relocates and rewrites the `pgduck_server` binary via
+     `$ORIGIN/../lib`).
 
    Never introduce a `skip-libs` list that omits a real runtime dependency
    in the hope that another layer provides it.

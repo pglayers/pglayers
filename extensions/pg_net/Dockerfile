@@ -54,15 +54,35 @@ FROM builder AS classic-relocate
 ARG PG_MAJOR
 RUN set -eux; \
     PG=${PG_MAJOR}; \
+    EXT=pg_net; \
     LIBDIR="/output/usr/lib/postgresql/${PG}/lib"; \
-    DEPS_DIR="${LIBDIR}/pg_net-deps"; \
+    DEPS_DIR="${LIBDIR}/${EXT}-deps"; \
+    tag="pglx_${EXT}_"; \
     mkdir -p "$DEPS_DIR"; \
     find /output/usr/lib -path '/output/usr/lib/postgresql' -prune -o \
         -name '*.so*' \( -type f -o -type l \) -print \
         | while IFS= read -r lib; do mv "$lib" "$DEPS_DIR/"; done; \
+    # Mangle bundled dep sonames with a per-extension prefix so they can never
+    # satisfy another layer's (or postgis's) soname in the shared postgres
+    # process. See extensions/pg_duckdb/Dockerfile for the rationale.
+    for dep in "$DEPS_DIR"/*.so*; do \
+        [ -f "$dep" ] || continue; \
+        bn="$(basename "$dep")"; \
+        patchelf --set-soname "${tag}${bn}" "$dep"; \
+        mv "$dep" "$DEPS_DIR/${tag}${bn}"; \
+    done; \
+    for obj in "$LIBDIR"/*.so* "$DEPS_DIR"/*.so*; do \
+        [ -f "$obj" ] || continue; \
+        for need in $(patchelf --print-needed "$obj" 2>/dev/null); do \
+            case "$need" in "${tag}"*) continue ;; esac; \
+            if [ -f "$DEPS_DIR/${tag}${need}" ]; then \
+                patchelf --replace-needed "$need" "${tag}${need}" "$obj"; \
+            fi; \
+        done; \
+    done; \
     for so in "$LIBDIR"/*.so*; do \
         [ -f "$so" ] || continue; \
-        patchelf --set-rpath '$ORIGIN:$ORIGIN/pg_net-deps' "$so"; \
+        patchelf --set-rpath "\$ORIGIN:\$ORIGIN/${EXT}-deps" "$so"; \
     done; \
     for dep in "$DEPS_DIR"/*.so*; do \
         [ -f "$dep" ] || continue; \

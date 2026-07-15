@@ -55,18 +55,42 @@ FROM builder AS classic-relocate
 ARG PG_MAJOR
 RUN set -eux; \
     PG=${PG_MAJOR}; \
+    EXT=http; \
     LIBDIR="/output/usr/lib/postgresql/${PG}/lib"; \
-    DEPS_DIR="${LIBDIR}/http-deps"; \
+    DEPS_DIR="${LIBDIR}/${EXT}-deps"; \
+    tag="pglx_${EXT}_"; \
     mkdir -p "$DEPS_DIR"; \
     # Move every bundled system lib (all of /output/usr/lib except the
     # postgresql tree) into the private deps dir.
     find /output/usr/lib -path '/output/usr/lib/postgresql' -prune -o \
         -name '*.so*' \( -type f -o -type l \) -print \
         | while IFS= read -r lib; do mv "$lib" "$DEPS_DIR/"; done; \
+    # Mangle each bundled dep's soname with a per-extension prefix. sonames
+    # are process-global, so a private dir + RUNPATH alone does NOT isolate
+    # symbols: if a sibling extension (e.g. via shared_preload_libraries)
+    # loads its own libssh2.so.1 first, postgis's libcurl would bind to it
+    # and hit undefined symbols. Unique sonames make cross-layer clashes
+    # impossible while keeping the layer self-contained.
+    for dep in "$DEPS_DIR"/*.so*; do \
+        [ -f "$dep" ] || continue; \
+        bn="$(basename "$dep")"; \
+        patchelf --set-soname "${tag}${bn}" "$dep"; \
+        mv "$dep" "$DEPS_DIR/${tag}${bn}"; \
+    done; \
+    # Rewrite NEEDED refs to bundled libs across every ELF object we ship.
+    for obj in "$LIBDIR"/*.so* "$DEPS_DIR"/*.so*; do \
+        [ -f "$obj" ] || continue; \
+        for need in $(patchelf --print-needed "$obj" 2>/dev/null); do \
+            case "$need" in "${tag}"*) continue ;; esac; \
+            if [ -f "$DEPS_DIR/${tag}${need}" ]; then \
+                patchelf --replace-needed "$need" "${tag}${need}" "$obj"; \
+            fi; \
+        done; \
+    done; \
     # Extension .so files resolve siblings ($ORIGIN) and bundled deps.
     for so in "$LIBDIR"/*.so*; do \
         [ -f "$so" ] || continue; \
-        patchelf --set-rpath '$ORIGIN:$ORIGIN/http-deps' "$so"; \
+        patchelf --set-rpath "\$ORIGIN:\$ORIGIN/${EXT}-deps" "$so"; \
     done; \
     # Bundled deps resolve each other from within the private dir.
     for dep in "$DEPS_DIR"/*.so*; do \
