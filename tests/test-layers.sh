@@ -199,9 +199,61 @@ echo
 fi  # end PG < 18 base overwrite check
 
 # ============================================================
-# Phase 5: Build combined image and check shared libraries
+# Phase 5: Self-containment (each extension resolves its own deps alone)
 # ============================================================
-info "Phase 5: Building combined image and checking shared libraries..."
+info "Phase 5: Checking extension self-containment..."
+
+# Every extension layer MUST be self-contained: overlaid on the *bare* base
+# image -- with no sibling extension layers present -- each of its ELF objects
+# must resolve all of its dynamic dependencies. This catches extensions that
+# rely on a sibling layer (e.g. postgis) to provide a shared library such as
+# libcurl. In the classic (PG 17) layout, bundled deps live in a private
+# <ext>-deps/ dir reached via RUNPATH; in the isolated (PG 18+) layout they
+# live flat in the extension's own /extensions/<ext>/lib.
+for ext in "${EXTENSIONS[@]}"; do
+    img="${REGISTRY}/${PREFIX}-${ext}:${PG}"
+    sc_dockerfile="${TMPDIR}/Dockerfile.selftest"
+    if [ "$PG" -ge 18 ] 2>/dev/null; then
+        {
+            echo "FROM postgres:${PG_TAG}"
+            echo "COPY --from=${img} / /extensions/${ext}/"
+            echo "RUN echo /extensions/${ext}/lib > /etc/ld.so.conf.d/pglayers-selftest.conf && ldconfig"
+        } > "$sc_dockerfile"
+        sc_libroot="/extensions/${ext}/lib"
+    else
+        {
+            echo "FROM postgres:${PG_TAG}"
+            echo "COPY --from=${img} / /"
+        } > "$sc_dockerfile"
+        sc_libroot="/usr/lib/postgresql/${PG}/lib"
+    fi
+    sc_img="pglayers-selftest:${PG}"
+    if ! docker build -t "$sc_img" -f "$sc_dockerfile" "${TMPDIR}" >/dev/null 2>&1; then
+        warn "${ext}: could not build self-containment test image (skipping)"
+        continue
+    fi
+    # ldd every ELF object the extension ships (its .so files AND its bundled
+    # private deps) and collect any unresolved sonames.
+    sc_missing="$(docker run --rm --entrypoint bash "$sc_img" -c '
+        find "'"$sc_libroot"'" -name "*.so*" -type f 2>/dev/null \
+            | while IFS= read -r so; do
+                ldd "$so" 2>/dev/null | awk "/not found/ {print \$1}"
+            done | sort -u
+    ' 2>/dev/null || true)"
+    docker rmi "$sc_img" >/dev/null 2>&1 || true
+    if [ -z "$sc_missing" ]; then
+        pass "${ext}: self-contained (all deps resolve standalone)"
+    else
+        fail "${ext}: NOT self-contained -- unresolved dependencies standalone:"
+        echo "$sc_missing" | sort -u | sed 's/^/       /'
+    fi
+done
+echo
+
+# ============================================================
+# Phase 6: Build combined image and check shared libraries
+# ============================================================
+info "Phase 6: Building combined image and checking shared libraries..."
 
 # Generate a test Dockerfile
 {
@@ -302,9 +354,9 @@ fi
 echo
 
 # ============================================================
-# Phase 6: Functional tests -- load all extensions
+# Phase 7: Functional tests -- load all extensions
 # ============================================================
-info "Phase 6: Functional tests (CREATE EXTENSION + smoke tests)..."
+info "Phase 7: Functional tests (CREATE EXTENSION + smoke tests)..."
 info "Disk usage before starting test container:"
 df -h / 2>/dev/null | tail -1 | sed 's/^/       /'
 
@@ -599,9 +651,9 @@ has_ext wrappers && smoke_test "wrappers loaded" \
 echo
 
 # ============================================================
-# Phase 7: Integration tests (per-extension test.sql files)
+# Phase 8: Integration tests (per-extension test.sql files)
 # ============================================================
-info "Phase 7: Integration tests (extensions/*/test.sql)..."
+info "Phase 8: Integration tests (extensions/*/test.sql)..."
 
 # Ensure container is healthy before starting integration tests
 wait_for_ready
@@ -635,10 +687,10 @@ for ext in "${EXTENSIONS[@]}"; do
 done
 
 # ============================================================
-# Phase 8: MongoDB wire protocol test (documentdb gateway)
+# Phase 9: MongoDB wire protocol test (documentdb gateway)
 # ============================================================
 if has_ext documentdb; then
-    info "Phase 8: DocumentDB MongoDB wire protocol test..."
+    info "Phase 9: DocumentDB MongoDB wire protocol test..."
     wait_for_ready
 
     # Create a test user (BlockedRolePrefixes blocks 'pg*' prefix)

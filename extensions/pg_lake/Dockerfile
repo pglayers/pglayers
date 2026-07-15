@@ -49,7 +49,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libssl-dev libcurl4-openssl-dev libjansson-dev \
     liblz4-dev liblzma-dev libsnappy-dev \
     libxml2-dev libxslt1-dev libicu-dev libpam0g-dev \
-    libreadline-dev libselinux1-dev libnuma-dev patch python3-dev curl
+    libreadline-dev libselinux1-dev libnuma-dev patch python3-dev curl patchelf
 
 COPY --from=vcpkg-builder /opt/vcpkg /opt/vcpkg
 ENV VCPKG_TOOLCHAIN_PATH="/opt/vcpkg/scripts/buildsystems/vcpkg.cmake"
@@ -131,9 +131,42 @@ RUN set -eux; \
     done < /tmp/all-deps.txt
 
 # --- Layout selection ---
+# Classic (PG 17): relocate bundled deps into an extension-private directory
+# and point every ELF object's RUNPATH at it via $ORIGIN. Keeps the flat
+# layout self-contained AND collision-free (private dir name is unique per
+# ext). Covers the extension .so files, the bundled support libs
+# (libduckdb/libavro) and the standalone pgduck_server binary in bin/.
+FROM builder AS classic-relocate
+ARG PG_MAJOR
+RUN set -eux; \
+    PG=${PG_MAJOR}; \
+    LIBDIR="/output/usr/lib/postgresql/${PG}/lib"; \
+    BINDIR="/output/usr/lib/postgresql/${PG}/bin"; \
+    DEPS_DIR="${LIBDIR}/pg_lake-deps"; \
+    mkdir -p "$DEPS_DIR"; \
+    find /output/usr/lib -path '/output/usr/lib/postgresql' -prune -o \
+        -name '*.so*' \( -type f -o -type l \) -print \
+        | while IFS= read -r lib; do mv "$lib" "$DEPS_DIR/"; done; \
+    # Libraries in the PG lib dir: resolve siblings and the private deps dir.
+    for so in "$LIBDIR"/*.so*; do \
+        [ -f "$so" ] || continue; \
+        patchelf --set-rpath '$ORIGIN:$ORIGIN/pg_lake-deps' "$so"; \
+    done; \
+    # Bundled deps resolve each other from within the private dir.
+    for dep in "$DEPS_DIR"/*.so*; do \
+        [ -f "$dep" ] || continue; \
+        patchelf --set-rpath '$ORIGIN' "$dep"; \
+    done; \
+    # pgduck_server lives in bin/; reach the PG lib dir and deps via ../lib.
+    if [ -f "$BINDIR/pgduck_server" ]; then \
+        patchelf --set-rpath '$ORIGIN/../lib:$ORIGIN/../lib/pg_lake-deps' \
+            "$BINDIR/pgduck_server"; \
+    fi; \
+    find /output/usr/lib -type d -empty -delete 2>/dev/null || true
+
 # Classic: files at standard PG paths (PG 17)
 FROM scratch AS classic
-COPY --from=builder /output/ /
+COPY --from=classic-relocate /output/ /
 
 # Isolated: flat /lib/ + /share/extension/ layout (PG 18+, CNPG-compatible)
 FROM builder AS normalizer

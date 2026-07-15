@@ -69,10 +69,16 @@ This test suite validates:
    `.so` in the combined image. Catches transitive runtime deps that
    weren't bundled (e.g., PostGIS needing libtiff via libproj).
 
-4. **All extensions load** -- `CREATE EXTENSION` must succeed for every
+4. **Self-containment** -- Overlays each extension on the *bare* base
+   image alone (no sibling layers) and runs `ldd` on every ELF object it
+   ships. An extension must resolve all of its own runtime deps without
+   help from any other layer (e.g. `pg_net` must bundle its own
+   `libcurl.so.4`, not borrow postgis's). See Dockerfile requirement #8.
+
+5. **All extensions load** -- `CREATE EXTENSION` must succeed for every
    extension in the combined image.
 
-5. **Functional smoke tests** -- Basic operations per extension to catch
+6. **Functional smoke tests** -- Basic operations per extension to catch
    runtime failures that CREATE EXTENSION alone wouldn't surface.
 
 ### When to run tests
@@ -282,6 +288,44 @@ Every extension Dockerfile **must** follow these practices:
    tuple. APT packages and source builds (git clone + make) are
    inherently portable; only pre-built binary downloads need
    `TARGETARCH` handling.
+
+8. **Extensions MUST always be self-contained** -- Every extension layer
+   must carry *all* of its runtime shared-library dependencies that are
+   not already present in the official `postgres:XX` base image. An
+   extension must never rely on a *sibling* layer to provide a shared
+   library (e.g. `http`/`pg_net`/`pg_duckdb` must not depend on `postgis`
+   to supply `libcurl.so.4`). A layer must load successfully when overlaid
+   on the bare base image with no other extension layers present.
+
+   This is enforced by **Phase 5 of `tests/test-layers.sh`**, which
+   overlays each extension on the bare base image alone and runs `ldd` on
+   every ELF object it ships; any unresolved dependency fails the build.
+
+   The two layouts satisfy self-containment differently:
+
+   - **Isolated (PG 18+):** each extension lives in its own
+     `/extensions/<ext>/lib` namespace, so bundled deps sit flat next to
+     the extension `.so` and are found via the per-extension
+     `dynamic_library_path` / `ld.so.conf.d` entry. Bundling every
+     non-base dep (no skip lists) is sufficient -- collisions are
+     structurally impossible.
+
+   - **Classic (PG 17):** the flat overlay means every layer shares
+     `/usr/lib/<multiarch>/`, so two extensions bundling the same soname
+     (e.g. `libcurl.so.4`) at different versions would collide. Do **not**
+     solve this by dropping the dep and delegating to a sibling layer --
+     that breaks self-containment. Instead, **relocate** the bundled deps
+     into an extension-private directory
+     (`/usr/lib/postgresql/<pg>/lib/<ext>-deps/`) and point each ELF
+     object's `RUNPATH` at it via `$ORIGIN` using `patchelf`. The private
+     dir name is unique per extension, so there is no collision, and the
+     layer stays self-contained. See the `classic-relocate` stage in
+     `extensions/http/Dockerfile`, `extensions/pg_duckdb/Dockerfile`, and
+     `extensions/pg_lake/Dockerfile` for the reference pattern (the last
+     also relocates the `pgduck_server` binary via `$ORIGIN/../lib`).
+
+   Never introduce a `skip-libs` list that omits a real runtime dependency
+   in the hope that another layer provides it.
 
 ### Keeping documentation in sync
 
