@@ -76,6 +76,12 @@ jobs:
           # switch branches, and we want exactly this content on the branch.
           cp .github/base-image-digests.json /tmp/base-image-digests.json
 
+          # Discard the working-tree modification made by the check step. It is
+          # already preserved in /tmp and re-applied on the target branch below.
+          # Without this, "git checkout -B" aborts with "local changes would be
+          # overwritten by checkout".
+          git checkout -- .github/base-image-digests.json
+
           # Always build on top of the remote branch when it exists so the
           # push is a fast-forward. This never force-pushes and never deletes
           # a branch, so an open PR (even one this workflow failed to detect)
