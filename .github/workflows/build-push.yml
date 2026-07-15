@@ -69,9 +69,21 @@ jobs:
             if [ -n "$changed_exts" ] && ! echo "$changed_exts" | grep -qw "$ext"; then
               continue
             fi
+            # Reset all fields that may be absent from a given extension.conf,
+            # otherwise values bleed over from a previously-sourced extension
+            # (e.g. an ext without VERSION_19 would inherit the prior ext's,
+            # producing a spurious PG 19 build with the wrong version).
             CI_SKIP=""
             APT_PACKAGE=""
             VCPKG_VERSION=""
+            # Read below via indirect expansion (${!ver_var}), so shellcheck
+            # cannot see the use.
+            # shellcheck disable=SC2034
+            VERSION_17=""
+            # shellcheck disable=SC2034
+            VERSION_18=""
+            # shellcheck disable=SC2034
+            VERSION_19=""
             source "$ext_dir/extension.conf"
             [ "${CI_SKIP:-}" = "1" ] && continue
             for pg in 17 18 19; do
