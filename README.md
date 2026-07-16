@@ -137,6 +137,7 @@ promoted to stable.
 | [ip4r](https://github.com/RhodiumToad/ip4r) | 2.4.3 | 17, 18, 19 | IPv4/IPv6 range data types with GiST indexing |
 | [jsquery](https://github.com/postgrespro/jsquery) | 1.2 | 17, 18 | JSON query language with GIN indexing |
 | [orafce](https://github.com/orafce/orafce) | 4.16.7 | 17, 18, 19 | Oracle compatibility functions and packages |
+| [periods](https://github.com/xocolatl/periods) | 1.2.3 | 17, 18 | SQL:2016 application-time PERIODs and system versioning |
 | [pgaudit](https://github.com/pgaudit/pgaudit) | 17.1 | 17, 18 | Audit logging (session and object-level) |
 | [pg_bigm](https://github.com/pgbigm/pg_bigm) | 1.2 | 17, 18 | 2-gram full text search (better for CJK languages) |
 | [pg_cron](https://github.com/citusdata/pg_cron) | 1.6.7 | 17, 18 | Job scheduler (periodic jobs inside the database) |
@@ -151,6 +152,7 @@ promoted to stable.
 | [pg_lake](https://github.com/Snowflake-Labs/pg_lake) | 3.3.4 | 17, 18 | Iceberg and data lake access (Parquet, CSV, JSON via DuckDB) |
 | [pg_net](https://github.com/supabase/pg_net) | 0.20.3 | 17, 18, 19 | Async non-blocking HTTP/HTTPS requests |
 | [pg_partman](https://github.com/pgpartman/pg_partman) | 5.4.3 | 17, 18, 19 | Automated table partition management |
+| [pg_permissions](https://github.com/cybertec-postgresql/pg_permissions) | 1.4.1 | 17, 18, 19 | Review and audit object permissions against a desired state |
 | [pg_qualstats](https://github.com/powa-team/pg_qualstats) | 2.1.4 | 17, 18, 19 | Statistics collector for WHERE clause predicates |
 | [pg_repack](https://github.com/reorg/pg_repack) | 1.5.3 | 17, 18, 19 | Online table reorganization without heavy locks |
 | [pg_roaringbitmap](https://github.com/ChenHuajun/pg_roaringbitmap) | 1.1.0 | 17, 18 | Roaring bitmap data type for fast set operations |
@@ -164,6 +166,7 @@ promoted to stable.
 | [pgfincore](https://github.com/klando/pgfincore) | 1.4.0 | 17, 18, 19 | Inspect and manage OS page cache for data files |
 | [pgjwt](https://github.com/michelp/pgjwt) | master | 17, 18, 19 | JSON Web Token (JWT) generation and validation |
 | [pglogical](https://github.com/2ndQuadrant/pglogical) | 2.4.7 | 17, 18, 19 | Logical streaming replication using publish/subscribe model |
+| [pgnodemx](https://github.com/CrunchyData/pgnodemx) | 2.0.1 | 17, 18 | Expose node OS/cgroup metrics as SQL (container-aware monitoring) |
 | [pgpcre](https://github.com/petere/pgpcre) | 0.20190509 | 17, 18, 19 | Perl-compatible regular expression (PCRE) type and functions |
 | [pgrouting](https://github.com/pgRouting/pgrouting) | 4.0.1 | 17, 18, 19 | Geospatial routing and network analysis on PostGIS |
 | [pgsodium](https://github.com/michelp/pgsodium) | 3.1.11 | 17, 18, 19 | Modern cryptography using libsodium |
@@ -178,6 +181,7 @@ promoted to stable.
 | [PostGIS](https://github.com/postgis/postgis) | 3.6.4 | 17, 18, 19 | Geospatial extensions (geometry, geography, raster, MVT) |
 | [postgres_protobuf](https://github.com/mpartel/postgres-protobuf) | 0.3.2 | 17, 18, 19 | Protocol Buffer support (query, convert to/from JSON) |
 | [prefix](https://github.com/dimitri/prefix) | 1.2.11 | 17, 18, 19 | Prefix range data type for phone routing lookups |
+| [prioritize](https://github.com/cybertec-postgresql/prioritize) | 1.0.4 | 17, 18 | Get/set OS scheduling priority of backend processes |
 | [rational](https://github.com/begriffs/pg_rational) | 0.0.2 | 17, 18, 19 | Precise fractional (rational number) arithmetic |
 | [rum](https://github.com/postgrespro/rum) | 1.3.15 | 17, 18 | GIN-like index with ordering for full text search |
 | [semver](https://github.com/theory/pg-semver) | 0.41.0 | 17, 18, 19 | Semantic version data type |
@@ -236,6 +240,7 @@ Extensions that need this:
 | pg_wait_sampling | `pg_wait_sampling` |
 | pgaudit | `pgaudit` |
 | pglogical | `pglogical` |
+| pgnodemx | `pgnodemx` |
 | pgsodium | `pgsodium` |
 | pgtt | `pgtt` |
 | plprofiler | `plprofiler` |

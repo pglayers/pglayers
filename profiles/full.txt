@@ -14,6 +14,7 @@ icu_ext
 ip4r
 jsquery
 orafce
+periods
 pgaudit
 pg_bigm
 pg_cron
@@ -30,8 +31,10 @@ pgjwt
 pg_lake
 pglogical
 pg_net
+pgnodemx
 pg_partman
 pgpcre
+pg_permissions
 pg_qualstats
 pg_repack
 pg_roaringbitmap
@@ -55,6 +58,7 @@ plv8
 postgis
 postgres_protobuf
 prefix
+prioritize
 rational
 rum
 semver
