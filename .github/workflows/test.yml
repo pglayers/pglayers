@@ -8,6 +8,8 @@ on:
       - 'profiles/**'
       - 'tests/**'
       - 'Makefile'
+      - 'Dockerfile.apt'
+      - 'scripts/**'
       - '.github/workflows/test.yml'
   pull_request:
     branches: [main]
@@ -45,6 +47,16 @@ jobs:
           # For pushes, HEAD~1 is the previous commit. Both cases work with HEAD~1.
           changed=$(git diff --name-only HEAD~1 -- extensions/ \
             | grep -oP 'extensions/\K[^/]+' | sort -u | tr '\n' ' ')
+          # The shared APT template affects every extension that uses it (those
+          # without their own Dockerfile). If it changed, rebuild them all so
+          # the change is actually exercised instead of pulling stale images.
+          if git diff --name-only HEAD~1 | grep -qxF 'Dockerfile.apt'; then
+            for d in extensions/*/; do
+              e=$(basename "$d")
+              [ -f "$d/Dockerfile" ] || changed="$changed $e"
+            done
+          fi
+          changed=$(echo "$changed" | tr ' ' '\n' | sed '/^$/d' | sort -u | tr '\n' ' ')
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
           if [ -n "$changed" ]; then
             echo "Changed extensions: $changed"

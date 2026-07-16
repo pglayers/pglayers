@@ -6,6 +6,7 @@ on:
     paths:
       - 'extensions/**'
       - 'profiles/**'
+      - 'Dockerfile.apt'
       - '.github/base-image-digests.json'
       - '.github/workflows/build-push.yml'
   pull_request:
@@ -13,6 +14,7 @@ on:
     paths:
       - 'extensions/**'
       - 'profiles/**'
+      - 'Dockerfile.apt'
   schedule:
     # Weekly full rebuild (safety net): Sunday 04:00 UTC
     - cron: '0 4 * * 0'
@@ -55,9 +57,17 @@ jobs:
           if [ -z "$ext_filter" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ] && [ "${{ github.event_name }}" != "schedule" ]; then
             changed_exts=$(git diff --name-only HEAD~1 -- extensions/ \
               | grep -oP 'extensions/\K[^/]+' | sort -u | tr '\n' ' ')
-            # If workflow file changed, rebuild everything
+            # If the build workflow changed, rebuild everything.
             if git diff --name-only HEAD~1 | grep -q '.github/workflows/build-push.yml'; then
               changed_exts=""
+            # The shared APT template affects every extension that uses it
+            # (those without their own Dockerfile); rebuild those.
+            elif git diff --name-only HEAD~1 | grep -qxF 'Dockerfile.apt'; then
+              for d in extensions/*/; do
+                e=$(basename "$d")
+                [ -f "$d/Dockerfile" ] || changed_exts="$changed_exts $e"
+              done
+              changed_exts=$(echo "$changed_exts" | tr ' ' '\n' | sort -u | tr '\n' ' ')
             fi
           fi
 
