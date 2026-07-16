@@ -29,9 +29,18 @@ Extensions we explicitly exclude:
 
 ## Version Policy
 
-Always use the **latest stable release** of each extension that is
-compatible with our supported PostgreSQL versions (currently 17, 18,
-and 19). When a new upstream release is published:
+**APT-based extensions have no `VERSION_XX` fields.** Their version is
+whatever `apt.postgresql.org` (PGDG) currently ships: the build resolves
+it at build time (`scripts/apt-support.sh` / `scripts/ext-version.sh`),
+availability is probed per PG major (an extension "supports" a PG version
+iff PGDG publishes `postgresql-<pg>-<pkg>`), and `apt-get` always installs
+the latest patch. So there is nothing to bump -- do **not** add
+`VERSION_XX` to an APT extension.
+
+**Source-built extensions** pin the upstream git tag. Always use the
+**latest stable release** compatible with our supported PostgreSQL
+versions (currently 17, 18, and 19). When a new upstream release is
+published:
 
 1. Update `VERSION_17`, `VERSION_18`, and `VERSION_19` in `extension.conf`.
 2. Update the `ARG EXT_VERSION` default in the Dockerfile.
@@ -171,9 +180,15 @@ the isolated layout eliminates them by design.)
 
 ### Version monitoring
 
-Every extension **must** be handled by the version monitoring workflow
-(`.github/workflows/monitor-extensions.yml`). When adding a new
-extension:
+**APT-based extensions are not version-monitored** -- they carry no
+`VERSION_XX` and `apt-get` installs the latest PGDG package on every
+rebuild, so `monitor-extensions.yml` skips them automatically (no
+`TAG_FILTER` needed). The rest of this section applies to **source-built**
+extensions only.
+
+Every source-built extension **must** be handled by the version
+monitoring workflow (`.github/workflows/monitor-extensions.yml`). When
+adding a new source-built extension:
 
 1. **Standard semver tags** (e.g., `v1.0.0`, `1.0.0`) -- No action
    needed. The workflow detects these automatically via the GitHub

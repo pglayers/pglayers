@@ -62,6 +62,15 @@ jobs:
             # SC1091: dynamic path; SC2034: variables used indirectly
             source "$dir/extension.conf"
 
+            # APT-based extensions are not version-monitored: apt installs the
+            # latest PGDG package at build time and the version/tag is derived
+            # from PGDG, so there is no VERSION_XX to bump here.
+            if [ -n "${APT_PACKAGE:-}" ]; then
+              echo "SKIP $ext (APT-managed; version resolved from PGDG at build)"
+              APT_PACKAGE=""
+              continue
+            fi
+
             # Get the current version (use first available PG version)
             current=""
             for pg in 17 18 19; do

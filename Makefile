@@ -51,11 +51,15 @@ list: ## List available extensions
 		desc=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$$DESCRIPTION"'); \
 		ci_skip=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$${CI_SKIP:-}"'); \
 		versions=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && \
-			for v in $(PG_VERSIONS); do \
-				ver_var="VERSION_$$v"; \
-				ver="$${!ver_var}"; \
-				[ -n "$$ver" ] && printf "$$v "; \
-			done'); \
+			if [ -n "$${APT_PACKAGE:-}" ]; then \
+				printf "apt "; \
+			else \
+				for v in $(PG_VERSIONS); do \
+					ver_var="VERSION_$$v"; \
+					ver="$${!ver_var}"; \
+					[ -n "$$ver" ] && printf "$$v "; \
+				done; \
+			fi'); \
 		skip_marker=""; \
 		[ "$$ci_skip" = "1" ] && skip_marker=" [CI_SKIP]"; \
 		printf "%-15s %-6s %s%s\n" "$$ext" "$$versions" "$$desc" "$$skip_marker"; \
@@ -65,13 +69,13 @@ list: ## List available extensions
 CACHE_SCOPE ?=
 
 build: _check-ext ## Build a single extension image
-	$(eval EXT_VERSION := $(shell bash -c 'source extensions/$(EXT)/extension.conf && echo $${VERSION_$(PG)}'))
+	$(eval EXT_APT_PACKAGE := $(shell bash -c 'source extensions/$(EXT)/extension.conf && echo "$$APT_PACKAGE"'))
+	$(eval EXT_VERSION := $(shell ./scripts/ext-version.sh $(EXT) $(PG)))
 	$(eval EXT_DESC := $(shell bash -c 'source extensions/$(EXT)/extension.conf && echo "$$DESCRIPTION"'))
 	$(eval EXT_REPO := $(shell bash -c 'source extensions/$(EXT)/extension.conf && echo "$$REPO"'))
 	$(eval EXT_LICENSE := $(shell bash -c 'source extensions/$(EXT)/extension.conf && echo "$$LICENSE"'))
-	$(eval EXT_APT_PACKAGE := $(shell bash -c 'source extensions/$(EXT)/extension.conf && echo "$$APT_PACKAGE"'))
 	$(eval DOCKERFILE := $(if $(wildcard extensions/$(EXT)/Dockerfile),extensions/$(EXT)/Dockerfile,Dockerfile.apt))
-	@test -n "$(EXT_VERSION)" || { echo "Error: $(EXT) has no version defined for PG $(PG)"; exit 1; }
+	@test -n "$(EXT_VERSION)" || { echo "Error: $(EXT) is not available for PG $(PG) (no VERSION_$(PG), and $(if $(EXT_APT_PACKAGE),PGDG has no postgresql-$(PG)-$(EXT_APT_PACKAGE),no APT_PACKAGE set))"; exit 1; }
 	@test -f "$(DOCKERFILE)" || { echo "Error: $(EXT) has no Dockerfile and no APT_PACKAGE for the shared template"; exit 1; }
 	@test "$(DOCKERFILE)" = "extensions/$(EXT)/Dockerfile" -o -n "$(EXT_APT_PACKAGE)" || { echo "Error: $(EXT) uses the shared Dockerfile.apt but has no APT_PACKAGE set"; exit 1; }
 	@echo "Building $(PREFIX)-$(EXT):$(PG) (extension $(EXT_VERSION), $(if $(filter Dockerfile.apt,$(DOCKERFILE)),shared apt template,custom Dockerfile))..."
@@ -109,14 +113,14 @@ build-all: ## Build all extensions for PG version(s)
 	@failed=""; \
 	for pg in $(PG); do \
 		for ext in $(EXTENSIONS); do \
-			version=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo $${VERSION_'"$$pg"'}'); \
+			version=$$(./scripts/ext-version.sh "$$ext" "$$pg"); \
 			if [ -n "$$version" ]; then \
 				$(MAKE) --no-print-directory build EXT=$$ext PG=$$pg || { \
 					echo "FAILED: $$ext (PG $$pg)"; \
 					failed="$${failed:+$$failed }$$ext:$$pg"; \
 				}; \
 			else \
-				echo "Skipping $$ext (no version for PG $$pg)"; \
+				echo "Skipping $$ext (not available for PG $$pg)"; \
 			fi; \
 		done; \
 	done; \
@@ -127,13 +131,13 @@ build-all: ## Build all extensions for PG version(s)
 
 push: _check-ext ## Push a single extension image
 	docker push $(REGISTRY)/$(PREFIX)-$(EXT):$(PG)
-	$(eval EXT_VERSION := $(shell bash -c 'source extensions/$(EXT)/extension.conf && echo $${VERSION_$(PG)}'))
+	$(eval EXT_VERSION := $(shell ./scripts/ext-version.sh $(EXT) $(PG)))
 	@test -n "$(EXT_VERSION)" && docker push $(REGISTRY)/$(PREFIX)-$(EXT):$(PG)-$(EXT_VERSION) || true
 
 push-all: ## Push all extensions for PG version(s)
 	@for pg in $(PG); do \
 		for ext in $(EXTENSIONS); do \
-			version=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo $${VERSION_'"$$pg"'}'); \
+			version=$$(./scripts/ext-version.sh "$$ext" "$$pg"); \
 			if [ -n "$$version" ]; then \
 				$(MAKE) --no-print-directory push EXT=$$ext PG=$$pg || exit 1; \
 			fi; \
@@ -153,11 +157,15 @@ info: _check-ext ## Show details for an extension
 		echo "Extension: $(EXT)"; \
 		echo "Description: $$DESCRIPTION"; \
 		echo "Repository: $$REPO"; \
-		for v in $(PG_VERSIONS); do \
-			ver_var="VERSION_$$v"; \
-			ver="$${!ver_var}"; \
-			[ -n "$$ver" ] && echo "PG $$v: $$ver"; \
-		done; \
+		if [ -n "$${APT_PACKAGE:-}" ]; then \
+			echo "Source: PGDG apt (postgresql-<pg>-$$APT_PACKAGE); versions resolved at build"; \
+		else \
+			for v in $(PG_VERSIONS); do \
+				ver_var="VERSION_$$v"; \
+				ver="$${!ver_var}"; \
+				[ -n "$$ver" ] && echo "PG $$v: $$ver"; \
+			done; \
+		fi; \
 		[ -n "$$SHARED_PRELOAD" ] && echo "shared_preload_libraries: $$SHARED_PRELOAD"; \
 		[ -n "$$NOTES" ] && echo "Notes: $$NOTES"'
 
@@ -175,7 +183,7 @@ image: ## Build a combined image with all extensions
 	{ \
 		echo "FROM postgres:$(PG)"; \
 		for ext in $(EXTENSIONS); do \
-			ver=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo $${VERSION_'"$(PG)"'}'); \
+			ver=$(./scripts/ext-version.sh "$ext" "$(PG)"); \
 			[ -z "$$ver" ] && continue; \
 			total=$$((total + 1)); \
 			if [ "$(REGISTRY)" = "local" ]; then \
@@ -206,7 +214,7 @@ image: ## Build a combined image with all extensions
 		fi; \
 		preloads=""; \
 		for ext in $(EXTENSIONS); do \
-			ver=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo $${VERSION_'"$(PG)"'}'); \
+			ver=$(./scripts/ext-version.sh "$ext" "$(PG)"); \
 			[ -z "$$ver" ] && continue; \
 			if [ "$(REGISTRY)" = "local" ]; then \
 				docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
@@ -218,7 +226,7 @@ image: ## Build a combined image with all extensions
 		done; \
 		[ -n "$$preloads" ] && echo "RUN echo \"shared_preload_libraries = '$$preloads'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
 		for ext in $(EXTENSIONS); do \
-			ver=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo $${VERSION_'"$(PG)"'}'); \
+			ver=$(./scripts/ext-version.sh "$ext" "$(PG)"); \
 			[ -z "$$ver" ] && continue; \
 			if [ "$(REGISTRY)" = "local" ]; then \
 				docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
@@ -237,7 +245,7 @@ image: ## Build a combined image with all extensions
 		fi; \
 		companions=""; \
 		for ext in $(EXTENSIONS); do \
-			ver=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo $${VERSION_'"$(PG)"'}'); \
+			ver=$(./scripts/ext-version.sh "$ext" "$(PG)"); \
 			[ -z "$$ver" ] && continue; \
 			if [ "$(REGISTRY)" = "local" ]; then \
 				docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
@@ -415,7 +423,7 @@ cnpg-catalog: ## Generate CloudNativePG ClusterImageCatalog YAML (PG 18+)
 	echo "      image: postgres:$$PG"; \
 	echo "      extensions:"; \
 	for ext in $(EXTENSIONS); do \
-		ver=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo $${VERSION_'"$$PG"'}'); \
+		ver=$$(./scripts/ext-version.sh "$$ext" "$$PG"); \
 		[ -z "$$ver" ] && continue; \
 		spl=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$$SHARED_PRELOAD"'); \
 		deps=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$${DEPENDS:-}"'); \

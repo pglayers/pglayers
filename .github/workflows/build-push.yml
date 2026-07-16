@@ -93,6 +93,13 @@ jobs:
               [ -n "$pg_filter" ] && [ "$pg" != "$pg_filter" ] && continue
               ver_var="VERSION_${pg}"
               ver="${!ver_var}"
+              # APT extensions carry no VERSION_XX: derive availability + the
+              # version from PGDG. An empty result means the package is not
+              # published for this PG major, so the combo is skipped (this is
+              # what makes beta gaps like pglogical/tdigest on PG19 auto-skip).
+              if [ -z "$ver" ] && [ -n "${APT_PACKAGE:-}" ]; then
+                ver="$(./scripts/ext-version.sh "$ext" "$pg" 2>/dev/null || true)"
+              fi
               [ -z "$ver" ] && continue
               extensions=$(echo "$extensions" | jq -c \
                 --arg ext "$ext" --arg pg "$pg" --arg ver "$ver" \

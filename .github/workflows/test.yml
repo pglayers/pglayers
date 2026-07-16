@@ -90,7 +90,7 @@ jobs:
               echo "SKIP pull $ext (CI_SKIP=1)"
               continue
             fi
-            ver=$(bash -c "source extensions/$ext/extension.conf && echo \${VERSION_${PG}}")
+            ver=$(./scripts/ext-version.sh "$ext" "$PG")
             [ -z "$ver" ] && continue
             img="${REGISTRY}/${PREFIX}-${ext}:${PG}"
             if docker pull "$img" 2>/dev/null; then
@@ -124,7 +124,7 @@ jobs:
           PG_TAG: ${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
         run: |
           for ext in ${{ steps.changes.outputs.changed }}; do
-            ver=$(bash -c "source extensions/$ext/extension.conf && echo \${VERSION_${{ matrix.pg }}}")
+            ver=$(./scripts/ext-version.sh "$ext" "${{ matrix.pg }}")
             if [ -z "$ver" ]; then
               echo "SKIP $ext (no version for PG ${{ matrix.pg }})"
               continue
@@ -141,7 +141,7 @@ jobs:
           # (new extensions, CI_SKIP extensions not in GHCR, etc.)
           for ext in extensions/*/; do
             ext="$(basename "$ext")"
-            ver=$(bash -c "source extensions/$ext/extension.conf && echo \${VERSION_${{ matrix.pg }}}")
+            ver=$(./scripts/ext-version.sh "$ext" "${{ matrix.pg }}")
             [ -z "$ver" ] && continue
             # Already have it (pulled or built above)
             if docker image inspect "local/pgx-${ext}:${{ matrix.pg }}" >/dev/null 2>&1; then
@@ -198,7 +198,7 @@ jobs:
               echo "SKIP $ext (CI_SKIP=1)"
               continue
             fi
-            ver=$(bash -c "source extensions/$ext/extension.conf && echo \${VERSION_${PG}}")
+            ver=$(./scripts/ext-version.sh "$ext" "$PG")
             [ -z "$ver" ] && continue
             img="${REGISTRY}/${PREFIX}-${ext}:${PG}"
             if docker pull "$img" 2>/dev/null; then

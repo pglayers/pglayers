@@ -33,21 +33,22 @@ fail() { ((FAIL++)) || true; printf -- "${RED}FAIL${NC} %s\n" "$1"; }
 warn() { ((WARN++)) || true; printf -- "${YELLOW}WARN${NC} %s\n" "$1"; }
 info() { printf -- "---- %s\n" "$1"; }
 
-# Discover extensions
+# Discover extensions.
+# An extension is included for this PG major if it has a resolvable version:
+# VERSION_<pg> for source-built extensions, or an available PGDG package for
+# APT extensions (scripts/ext-version.sh handles both).
 EXTENSIONS=()
 if [ -n "${PGLAYERS_EXTENSIONS:-}" ]; then
     # Profile mode: use pre-filtered list from Makefile/environment
     for ext in $PGLAYERS_EXTENSIONS; do
-        ver_var="VERSION_${PG}"
-        ver="$(bash -c "source extensions/${ext}/extension.conf && echo \${${ver_var}}")"
+        ver="$(scripts/ext-version.sh "$ext" "$PG" 2>/dev/null || true)"
         [ -n "$ver" ] && EXTENSIONS+=("$ext")
     done
 else
     # Default: discover from filesystem
     for dir in extensions/*/; do
         ext="$(basename "$dir")"
-        ver_var="VERSION_${PG}"
-        ver="$(bash -c "source ${dir}/extension.conf && echo \${${ver_var}}")"
+        ver="$(scripts/ext-version.sh "$ext" "$PG" 2>/dev/null || true)"
         [ -n "$ver" ] && EXTENSIONS+=("$ext")
     done
 fi
