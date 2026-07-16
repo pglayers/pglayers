@@ -195,6 +195,20 @@ add-apt-ext: ## Scaffold a new APT extension (PKG=<apt package> [NAME=<dir>] [PG
 		echo "APT_PACKAGE=\"$(PKG)\""; \
 	} > "$$dir/extension.conf"; \
 	echo "Wrote $$dir/extension.conf"; \
+	{ \
+		echo "-- $$name integration tests (the single source of truth for"; \
+		echo "-- functional coverage). Each check MUST print a line starting"; \
+		echo "-- with PASS or FAIL. Replace the placeholder with real checks"; \
+		echo "-- (data type, function, index/operator behaviour), and clean up."; \
+		echo "CREATE EXTENSION IF NOT EXISTS $$name;"; \
+		echo ""; \
+		echo "SELECT CASE"; \
+		echo "    WHEN (SELECT count(*) FROM pg_extension WHERE extname = '$$name') = 1"; \
+		echo "    THEN 'PASS $$name: extension loads'"; \
+		echo "    ELSE 'FAIL $$name: extension loads'"; \
+		echo "END;"; \
+	} > "$$dir/test.sql"; \
+	echo "Wrote $$dir/test.sql (stub -- replace with real functional checks)"; \
 	echo; \
 	echo "Validating license policy..."; \
 	./scripts/check-licenses.sh "$$name" || { \
@@ -207,7 +221,8 @@ add-apt-ext: ## Scaffold a new APT extension (PKG=<apt package> [NAME=<dir>] [PG
 	echo; \
 	echo "Next steps:"; \
 	echo "  - review $$dir/extension.conf (REPO, SHARED_PRELOAD, NOTES, DEPENDS, PG_CONF)"; \
-	echo "  - add coverage in tests/test-layers.sh + extensions/$$name/test.sql"; \
+	echo "  - flesh out $$dir/test.sql with real functional checks"; \
+	echo "  - if the SQL name differs from '$$name', add it to EXT_SQL_NAMES in tests/test-layers.sh"; \
 	echo "  - build: make build EXT=$$name PG=$$pg REGISTRY=local"
 
 IMAGE_NAME ?= pglayers$(if $(PROFILE),-$(PROFILE))

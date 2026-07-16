@@ -106,8 +106,10 @@ This test suite validates:
 5. **All extensions load** -- `CREATE EXTENSION` must succeed for every
    extension in the combined image.
 
-6. **Functional smoke tests** -- Basic operations per extension to catch
-   runtime failures that CREATE EXTENSION alone wouldn't surface.
+6. **Functional integration tests** -- Each extension's
+   `extensions/<ext>/test.sql` runs multi-step `PASS`/`FAIL` checks in the
+   combined image, catching runtime failures that `CREATE EXTENSION` alone
+   wouldn't surface. `test.sql` is required for every extension.
 
 ### When to run tests
 
@@ -165,33 +167,29 @@ asks you to decide (fix `LICENSE`, extend `ALLOW_LICENSES`, or record an
 exception). You still add test coverage (below) and review the conf.
 
 Every new extension **must** have full test coverage before merging.
-This means updating `tests/test-layers.sh` to include:
+This means:
 
-1. **Extension name mapping** -- Add an entry to `EXT_SQL_NAMES` if the
-   SQL extension name differs from the directory name (e.g.,
-   `[pgvector]="vector"`).
+1. **Extension name mapping** -- Add an entry to `EXT_SQL_NAMES` in
+   `tests/test-layers.sh` if the SQL extension name differs from the
+   directory name (e.g., `[pgvector]="vector"`).
 
 2. **CREATE EXTENSION test** -- Automatically covered for all extensions
    in the `EXTENSIONS` list. If the extension is not loadable via
    `CREATE EXTENSION` (e.g., logical decoding output plugins like
    wal2json), add it to `SKIP_CREATE_EXT` instead.
 
-3. **Functional smoke test** -- Add a `smoke_test` call that exercises
-   the extension's core functionality (not just loading). Examples:
-   - Data type creation/cast
-   - A function call that returns a result
-   - An operator or index operation
-   The smoke test must produce non-empty output on success.
-
-4. **shared_preload_libraries** -- If the extension requires preloading,
+3. **shared_preload_libraries** -- If the extension requires preloading,
    add `SHARED_PRELOAD="<library>"` to `extension.conf`. Phase 5 of
    `test-layers.sh` auto-generates the `shared_preload_libraries` line
    from this field for both classic (PG 17) and isolated (PG 18+)
    layouts.
 
-5. **Integration test file** -- Create `extensions/<name>/test.sql` with
-   multi-step validation. Each test outputs a line starting with `PASS`
-   or `FAIL`. Format:
+4. **Integration test file (required)** -- Create
+   `extensions/<name>/test.sql` with multi-step validation. This is the
+   **single source of truth** for an extension's functional coverage
+   (Phase 8) -- there is no separate smoke test. A missing `test.sql`, or
+   one that produces no `PASS`/`FAIL` output, is a hard failure. Each test
+   outputs a line starting with `PASS` or `FAIL`. Format:
    ```sql
    SELECT CASE
        WHEN <condition>
@@ -200,10 +198,14 @@ This means updating `tests/test-layers.sh` to include:
    END;
    ```
    Tests must be self-contained (create own tables, clean up after).
-   Aim for 2-4 checks per extension covering:
+   Make the **first** check a minimal load/sanity assertion (it doubles as
+   the smoke test), then aim for 2-4 checks total covering:
    - Core data type or function works
    - Index or operator behavior
    - Integration with other PG features (e.g., triggers, aggregates)
+
+   `make add-apt-ext` generates a starter `test.sql` stub with the load
+   assertion; replace the placeholder with real checks.
 
 The collision, overwrite, and ldd checks are automatic for all
 extensions in the `extensions/` directory -- no manual update needed
@@ -396,7 +398,7 @@ must be updated in the same commit**:
    the PG version columns are correct.
 
 4. **`tests/test-layers.sh`** -- As described above (name mapping,
-   smoke test, shared_preload entry).
+   `SKIP_CREATE_EXT` if needed) plus a required `extensions/<ext>/test.sql`.
 
 5. **`extension.conf` LICENSE field** -- Every extension must document
    its license. Run `make list` and verify the new extension appears.
@@ -453,7 +455,6 @@ appear:
 - `README.md` `shared_preload_libraries` table
 - `tests/test-layers.sh` `EXT_SQL_NAMES` array
 - `tests/test-layers.sh` `SKIP_CREATE_EXT` array
-- `tests/test-layers.sh` smoke test calls
 
 This ensures consistency, makes diffs readable, and avoids merge
 conflicts when multiple extensions are added in parallel.
