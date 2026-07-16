@@ -117,6 +117,12 @@ all supported versions or remove the unsupported version from
 
 ### Adding a new extension checklist
 
+For an **APT-based** extension, you usually only need an
+`extensions/<ext>/extension.conf` with `APT_PACKAGE` set (no Dockerfile --
+the shared `Dockerfile.apt` handles it; see Dockerfile requirement #3).
+Source-built or special-case extensions add their own
+`extensions/<ext>/Dockerfile`.
+
 Every new extension **must** have full test coverage before merging.
 This means updating `tests/test-layers.sh` to include:
 
@@ -198,6 +204,11 @@ extension:
 
 ### Dockerfile requirements
 
+Most APT extensions have **no Dockerfile** -- they use the shared
+`Dockerfile.apt` (see requirement #3 below). The rules here apply to the
+shared template and to any **custom** `extensions/<ext>/Dockerfile` (source
+builds and special-case APT extensions).
+
 Every extension Dockerfile **must** follow these practices:
 
 1. **BuildKit syntax** -- Start with `# syntax=docker/dockerfile:1`.
@@ -212,57 +223,34 @@ Every extension Dockerfile **must** follow these practices:
    Do NOT add `rm -rf /var/lib/apt/lists/*` (unnecessary with cache
    mounts and it defeats the caching).
 
-3. **Prefer APT packages** -- If the extension is available in the PGDG
-   APT repository (`apt.postgresql.org`), install it via `apt-get`
-   rather than compiling from source. This is faster, more reproducible,
-   and automatically picks up security patches. The standard APT-based
-   Dockerfile pattern:
-   ```dockerfile
-   # syntax=docker/dockerfile:1
-   ARG PG_MAJOR=17
-   ARG PG_TAG=${PG_MAJOR}
-   ARG LAYOUT=classic
+3. **Prefer APT packages via the shared template** -- If the extension is
+   available in the PGDG APT repository (`apt.postgresql.org`), install it
+   via `apt-get` rather than compiling from source. This is faster, more
+   reproducible, and automatically picks up security patches.
 
-   FROM postgres:${PG_TAG} AS builder
-   ARG PG_MAJOR
+   **APT extensions do not need a Dockerfile.** The repo ships a single
+   shared `Dockerfile.apt` that handles the entire APT pattern -- file
+   extraction, generic runtime-dependency bundling, classic relocation +
+   soname mangling, and the classic/isolated layout selection. To add an
+   APT extension, create `extensions/<ext>/extension.conf` with
+   `APT_PACKAGE="<package>"` set (no `postgresql-<pg>-` prefix, no version)
+   and **no Dockerfile**. The Makefile routes any extension that lacks its
+   own `extensions/<ext>/Dockerfile` to `Dockerfile.apt`, passing
+   `APT_PACKAGE` and `EXT_NAME` as build args.
 
-   RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-       --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-       apt-get update && apt-get install -y --no-install-recommends \
-       postgresql-${PG_MAJOR}-<package>
+   The shared template is self-contained and collision-safe by
+   construction (it bundles every non-base runtime dep and, for the
+   classic layout, relocates + mangles them per requirement #8). For
+   SQL-only extensions or extensions whose deps are all in the base image,
+   the bundling/relocation stages are no-ops, so the output is identical to
+   the old hand-written boilerplate.
 
-   RUN mkdir -p /output && \
-       dpkg -L postgresql-${PG_MAJOR}-<package> \
-       | grep -E '^/usr/(lib|share)/postgresql/' \
-       | while IFS= read -r f; do \
-           [ -f "$f" ] || continue; \
-           mkdir -p "/output$(dirname "$f")"; \
-           cp -a "$f" "/output$f"; \
-       done
-
-   # --- Layout selection ---
-   FROM scratch AS classic
-   COPY --from=builder /output/ /
-
-   FROM builder AS normalizer
-   ARG PG_MAJOR
-   RUN mkdir -p /isolated/lib /isolated/share/extension && \
-       find /output/usr/lib/postgresql/${PG_MAJOR}/lib -maxdepth 1 -type f \
-           -exec cp -a {} /isolated/lib/ \; && \
-       cp -a /output/usr/share/postgresql/${PG_MAJOR}/extension/* \
-           /isolated/share/extension/ && \
-       cp -a /output/usr/lib/postgresql/${PG_MAJOR}/lib/bitcode /isolated/lib/bitcode \
-           2>/dev/null || true
-
-   FROM scratch AS isolated
-   COPY --from=normalizer /isolated/ /
-
-   FROM ${LAYOUT}
-   ```
-   Add `APT_PACKAGE="<package>"` to `extension.conf` when using this
-   pattern. If the extension has runtime shared library dependencies
-   not present in the base postgres image, add a dep-bundling stage
-   (see `extensions/postgis/Dockerfile` for the full pattern).
+   **Only write a custom `extensions/<ext>/Dockerfile` when the extension
+   needs something the template can't express** -- e.g. multiple/renamed
+   APT packages, `.control` update-alternatives symlinks, or extra build
+   steps. A custom Dockerfile always overrides the template. Current custom
+   APT Dockerfiles: `postgis` (postgis-3 + -scripts + control symlinks),
+   `pgrouting`, `h3_pg`, `tds_fdw`, `http`.
 
 4. **Source builds (when no APT package exists)** -- Strip `.so` files
    after `make install` to reduce image size (50-80% reduction):

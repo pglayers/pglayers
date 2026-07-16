@@ -1,0 +1,145 @@
+# syntax=docker/dockerfile:1
+#
+# Shared build for APT-based extensions.
+#
+# Extensions that fit the standard PGDG pattern need NO Dockerfile of their
+# own -- only an extension.conf with APT_PACKAGE set. The Makefile routes them
+# here automatically. Extensions with special needs keep their own
+# extensions/<ext>/Dockerfile, which overrides this template.
+#
+# This template is fully self-contained and collision-safe by construction:
+# it bundles every runtime dependency not already in the base postgres image,
+# and for the classic (PG 17) layout it relocates those deps into a private
+# per-extension directory with mangled sonames + RUNPATH (see AGENTS.md
+# "Extensions MUST always be self-contained"). For SQL-only extensions or
+# extensions whose only deps are already in the base image, the dep-bundling
+# and relocation stages are no-ops.
+
+ARG PG_MAJOR=17
+ARG PG_TAG=${PG_MAJOR}
+ARG LAYOUT=classic
+ARG APT_PACKAGE
+ARG EXT_NAME
+# Passed by the Makefile for all extensions; unused here (APT installs the
+# packaged version) but declared to avoid an unconsumed-build-arg warning.
+ARG EXT_VERSION
+
+# Snapshot base image libraries (by soname) so we only bundle what's missing.
+FROM postgres:${PG_TAG} AS base
+RUN find /usr/lib -name '*.so*' \( -type f -o -type l \) 2>/dev/null \
+    | sed 's|.*/||' | sort -u > /tmp/base-libs.txt
+
+FROM postgres:${PG_TAG} AS builder
+ARG PG_MAJOR
+ARG APT_PACKAGE
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+    patchelf "postgresql-${PG_MAJOR}-${APT_PACKAGE}"
+
+# Extract extension files (libs + SQL/control), excluding headers and docs.
+RUN set -eux; \
+    mkdir -p /output; \
+    dpkg -L "postgresql-${PG_MAJOR}-${APT_PACKAGE}" \
+    | grep -E '^/usr/(lib|share)/postgresql/' \
+    | while IFS= read -r f; do \
+        [ -f "$f" ] || continue; \
+        mkdir -p "/output$(dirname "$f")"; \
+        cp -a "$f" "/output$f"; \
+    done
+
+# Bundle ALL runtime shared libraries not present in the base postgres image
+# so the layer is fully self-contained. No-op when the extension has no .so
+# files or no non-base deps.
+COPY --from=base /tmp/base-libs.txt /tmp/base-libs.txt
+RUN set -eux; \
+    PG=${PG_MAJOR}; \
+    : > /tmp/all-deps.txt; \
+    if [ -d "/output/usr/lib/postgresql/${PG}/lib" ]; then \
+        find "/output/usr/lib/postgresql/${PG}/lib" -name '*.so' \
+            -exec ldd {} + 2>/dev/null \
+            | awk '/=>/ && /\// {print $3}' | sort -u > /tmp/all-deps.txt; \
+    fi; \
+    while IFS= read -r lib; do \
+        [ -n "$lib" ] || continue; \
+        soname="$(basename "$lib")"; \
+        if grep -qxF "$soname" /tmp/base-libs.txt 2>/dev/null; then continue; fi; \
+        dest="$(echo "$lib" | sed 's|^/lib/|/usr/lib/|')"; \
+        mkdir -p "/output$(dirname "$dest")"; \
+        cp -aL "$lib" "/output$dest" 2>/dev/null || true; \
+    done < /tmp/all-deps.txt
+
+# --- Layout selection ---
+# Classic (PG 17): relocate bundled deps into an extension-private directory
+# with mangled sonames + $ORIGIN RUNPATH, so the flat overlay stays
+# self-contained AND free of file/soname collisions with sibling layers.
+# No-op when there are no bundled deps.
+FROM builder AS classic-relocate
+ARG PG_MAJOR
+ARG EXT_NAME
+RUN set -eux; \
+    PG=${PG_MAJOR}; \
+    EXT="${EXT_NAME}"; \
+    LIBDIR="/output/usr/lib/postgresql/${PG}/lib"; \
+    DEPS_DIR="${LIBDIR}/${EXT}-deps"; \
+    tag="pglx_${EXT}_"; \
+    [ -d "$LIBDIR" ] || exit 0; \
+    mkdir -p "$DEPS_DIR"; \
+    find /output/usr/lib -path '/output/usr/lib/postgresql' -prune -o \
+        -name '*.so*' \( -type f -o -type l \) -print \
+        | while IFS= read -r lib; do mv "$lib" "$DEPS_DIR/"; done; \
+    if [ -z "$(ls -A "$DEPS_DIR" 2>/dev/null)" ]; then \
+        rmdir "$DEPS_DIR" 2>/dev/null || true; \
+        find /output/usr/lib -type d -empty -delete 2>/dev/null || true; \
+        exit 0; \
+    fi; \
+    for dep in "$DEPS_DIR"/*.so*; do \
+        [ -f "$dep" ] || continue; \
+        bn="$(basename "$dep")"; \
+        patchelf --set-soname "${tag}${bn}" "$dep"; \
+        mv "$dep" "$DEPS_DIR/${tag}${bn}"; \
+    done; \
+    for obj in "$LIBDIR"/*.so* "$DEPS_DIR"/*.so*; do \
+        [ -f "$obj" ] || continue; \
+        for need in $(patchelf --print-needed "$obj" 2>/dev/null); do \
+            case "$need" in "${tag}"*) continue ;; esac; \
+            if [ -f "$DEPS_DIR/${tag}${need}" ]; then \
+                patchelf --replace-needed "$need" "${tag}${need}" "$obj"; \
+            fi; \
+        done; \
+    done; \
+    for so in "$LIBDIR"/*.so*; do \
+        [ -f "$so" ] || continue; \
+        patchelf --set-rpath "\$ORIGIN:\$ORIGIN/${EXT}-deps" "$so"; \
+    done; \
+    for dep in "$DEPS_DIR"/*.so*; do \
+        [ -f "$dep" ] || continue; \
+        patchelf --set-rpath '$ORIGIN' "$dep"; \
+    done; \
+    find /output/usr/lib -type d -empty -delete 2>/dev/null || true
+
+FROM scratch AS classic
+COPY --from=classic-relocate /output/ /
+
+# Isolated (PG 18+): flat /lib/ + /share/extension/ namespace (CNPG-compatible).
+FROM builder AS normalizer
+ARG PG_MAJOR
+RUN set -eux; \
+    PG=${PG_MAJOR}; \
+    mkdir -p /isolated/lib /isolated/share/extension; \
+    if [ -d "/output/usr/lib/postgresql/${PG}/lib" ]; then \
+        find "/output/usr/lib/postgresql/${PG}/lib" -maxdepth 1 -type f \
+            -exec cp -a {} /isolated/lib/ \; ; \
+    fi; \
+    cp -a /output/usr/share/postgresql/${PG}/extension/* /isolated/share/extension/ \
+        2>/dev/null || true; \
+    find /output/usr/lib -name '*.so*' ! -path '*/postgresql/*' \
+        \( -type f -o -type l \) -exec cp -a {} /isolated/lib/ \; 2>/dev/null || true; \
+    cp -a /output/usr/lib/postgresql/${PG}/lib/bitcode /isolated/lib/bitcode \
+        2>/dev/null || true
+
+FROM scratch AS isolated
+COPY --from=normalizer /isolated/ /
+
+FROM ${LAYOUT}

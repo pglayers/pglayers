@@ -69,8 +69,12 @@ build: _check-ext ## Build a single extension image
 	$(eval EXT_DESC := $(shell bash -c 'source extensions/$(EXT)/extension.conf && echo "$$DESCRIPTION"'))
 	$(eval EXT_REPO := $(shell bash -c 'source extensions/$(EXT)/extension.conf && echo "$$REPO"'))
 	$(eval EXT_LICENSE := $(shell bash -c 'source extensions/$(EXT)/extension.conf && echo "$$LICENSE"'))
+	$(eval EXT_APT_PACKAGE := $(shell bash -c 'source extensions/$(EXT)/extension.conf && echo "$$APT_PACKAGE"'))
+	$(eval DOCKERFILE := $(if $(wildcard extensions/$(EXT)/Dockerfile),extensions/$(EXT)/Dockerfile,Dockerfile.apt))
 	@test -n "$(EXT_VERSION)" || { echo "Error: $(EXT) has no version defined for PG $(PG)"; exit 1; }
-	@echo "Building $(PREFIX)-$(EXT):$(PG) (extension $(EXT_VERSION))..."
+	@test -f "$(DOCKERFILE)" || { echo "Error: $(EXT) has no Dockerfile and no APT_PACKAGE for the shared template"; exit 1; }
+	@test "$(DOCKERFILE)" = "extensions/$(EXT)/Dockerfile" -o -n "$(EXT_APT_PACKAGE)" || { echo "Error: $(EXT) uses the shared Dockerfile.apt but has no APT_PACKAGE set"; exit 1; }
+	@echo "Building $(PREFIX)-$(EXT):$(PG) (extension $(EXT_VERSION), $(if $(filter Dockerfile.apt,$(DOCKERFILE)),shared apt template,custom Dockerfile))..."
 	docker buildx build \
 		$(if $(PLATFORM),--platform $(PLATFORM)) \
 		$(if $(CACHE_SCOPE),--cache-from type=gha$(comma)scope=$(EXT)-$(PG)) \
@@ -79,6 +83,8 @@ build: _check-ext ## Build a single extension image
 		--build-arg PG_MAJOR=$(PG) \
 		--build-arg PG_TAG=$(or $(PG_TAG),$(PG)) \
 		--build-arg EXT_VERSION=$(EXT_VERSION) \
+		--build-arg APT_PACKAGE=$(EXT_APT_PACKAGE) \
+		--build-arg EXT_NAME=$(EXT) \
 		--build-arg LAYOUT=$(if $(filter 17,$(PG)),classic,isolated) \
 		--label "org.opencontainers.image.title=$(EXT)" \
 		--label "org.opencontainers.image.description=$(EXT_DESC)" \
@@ -93,7 +99,7 @@ build: _check-ext ## Build a single extension image
 		--label "io.pglayers.layout=$(if $(filter 17,$(PG)),classic,isolated)" \
 		-t $(REGISTRY)/$(PREFIX)-$(EXT):$(PG) \
 		-t $(REGISTRY)/$(PREFIX)-$(EXT):$(PG)-$(EXT_VERSION) \
-		-f extensions/$(EXT)/Dockerfile \
+		-f $(DOCKERFILE) \
 		$(if $(PLATFORM),--push,--load) \
 		extensions/$(EXT)
 
@@ -135,7 +141,12 @@ push-all: ## Push all extensions for PG version(s)
 	done
 
 dockerfile: _check-ext ## Print the Dockerfile for an extension
-	@cat extensions/$(EXT)/Dockerfile
+	@if [ -f extensions/$(EXT)/Dockerfile ]; then \
+		cat extensions/$(EXT)/Dockerfile; \
+	else \
+		echo "# $(EXT) uses the shared Dockerfile.apt (APT_PACKAGE=$$(bash -c 'source extensions/$(EXT)/extension.conf && echo $$APT_PACKAGE'))"; \
+		cat Dockerfile.apt; \
+	fi
 
 info: _check-ext ## Show details for an extension
 	@bash -c 'source extensions/$(EXT)/extension.conf; \

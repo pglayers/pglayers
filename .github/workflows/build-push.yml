@@ -86,6 +86,9 @@ jobs:
             VERSION_19=""
             source "$ext_dir/extension.conf"
             [ "${CI_SKIP:-}" = "1" ] && continue
+            # APT extensions without their own Dockerfile use the shared template.
+            dockerfile="extensions/$ext/Dockerfile"
+            [ -f "$dockerfile" ] || dockerfile="Dockerfile.apt"
             for pg in 17 18 19; do
               [ -n "$pg_filter" ] && [ "$pg" != "$pg_filter" ] && continue
               ver_var="VERSION_${pg}"
@@ -93,20 +96,22 @@ jobs:
               [ -z "$ver" ] && continue
               extensions=$(echo "$extensions" | jq -c \
                 --arg ext "$ext" --arg pg "$pg" --arg ver "$ver" \
-                '. + [{"extension": $ext, "pg": $pg, "version": $ver}]')
+                --arg apt "${APT_PACKAGE:-}" --arg df "$dockerfile" \
+                '. + [{"extension": $ext, "pg": $pg, "version": $ver, "apt_package": $apt, "dockerfile": $df}]')
               # Source-built extensions: native build per arch (no QEMU)
               # APT-based extensions: single job with QEMU (fast enough)
               if [ -z "$APT_PACKAGE" ]; then
                 for arch in amd64 arm64; do
                   build=$(echo "$build" | jq -c \
                     --arg ext "$ext" --arg pg "$pg" --arg ver "$ver" --arg arch "$arch" \
-                    --arg vcpkg "${VCPKG_VERSION:-}" \
-                    '. + [{"extension": $ext, "pg": $pg, "version": $ver, "arch": $arch, "native": true, "vcpkg_version": $vcpkg}]')
+                    --arg vcpkg "${VCPKG_VERSION:-}" --arg df "$dockerfile" \
+                    '. + [{"extension": $ext, "pg": $pg, "version": $ver, "arch": $arch, "native": true, "vcpkg_version": $vcpkg, "apt_package": "", "dockerfile": $df}]')
                 done
               else
                 build=$(echo "$build" | jq -c \
                   --arg ext "$ext" --arg pg "$pg" --arg ver "$ver" \
-                  '. + [{"extension": $ext, "pg": $pg, "version": $ver, "arch": "all", "native": false}]')
+                  --arg apt "$APT_PACKAGE" --arg df "$dockerfile" \
+                  '. + [{"extension": $ext, "pg": $pg, "version": $ver, "arch": "all", "native": false, "apt_package": $apt, "dockerfile": $df}]')
               fi
             done
           done
@@ -150,12 +155,14 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: extensions/${{ matrix.extension }}
-          file: extensions/${{ matrix.extension }}/Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: ${{ matrix.native && format('linux/{0}', matrix.arch) || 'linux/amd64,linux/arm64' }}
           build-args: |
             PG_MAJOR=${{ matrix.pg }}
             PG_TAG=${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
             EXT_VERSION=${{ matrix.version }}
+            APT_PACKAGE=${{ matrix.apt_package }}
+            EXT_NAME=${{ matrix.extension }}
             LAYOUT=${{ matrix.pg >= 18 && 'isolated' || 'classic' }}
           push: true
           tags: |
@@ -231,12 +238,14 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: extensions/${{ matrix.extension }}
-          file: extensions/${{ matrix.extension }}/Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           build-args: |
             PG_MAJOR=${{ matrix.pg }}
             PG_TAG=${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
             EXT_VERSION=${{ matrix.version }}
+            APT_PACKAGE=${{ matrix.apt_package }}
+            EXT_NAME=${{ matrix.extension }}
             LAYOUT=${{ matrix.pg >= 18 && 'isolated' || 'classic' }}
           push: false
           cache-from: type=gha,scope=${{ matrix.extension }}-${{ matrix.pg }}-amd64
