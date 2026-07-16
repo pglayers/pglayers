@@ -214,11 +214,45 @@ the isolated layout eliminates them by design.)
 
 ### Version monitoring
 
-**APT-based extensions are not version-monitored** -- they carry no
-`VERSION_XX` and `apt-get` installs the latest PGDG package on every
-rebuild, so `monitor-extensions.yml` skips them automatically (no
-`TAG_FILTER` needed). The rest of this section applies to **source-built**
-extensions only.
+**APT-based extensions are tracked by an apt-versions lockfile, not by
+`VERSION_XX`.** They carry no `VERSION_XX` and `apt-get` installs the latest
+PGDG package on every rebuild, so `monitor-extensions.yml` (the source-build
+monitor) skips them automatically. Because that makes an apt version bump
+otherwise invisible in git, a second workflow makes it explicit:
+
+- **`.github/apt-versions.json`** -- a generated lockfile recording the
+  apt-resolved version of every APT extension per PG major. It is a
+  **record, not a pin** (PGDG is a rolling repo; builds always install the
+  latest patch). Regenerate it locally with `scripts/apt-lock.sh` (requires
+  Docker + jq).
+- **`.github/workflows/monitor-apt-versions.yml`** -- runs daily,
+  regenerates the lockfile, and opens a PR when PGDG has shipped new
+  versions. The PR diff + body (`- ext (PG NN): old -> new`) is the
+  explicit, git-visible changelog of the update. The scheduled run only
+  regenerates on a throwaway branch (`deps/apt-versions`) and opens/updates
+  the PR -- it **never commits directly to `main`**. The PR has
+  **auto-merge enabled** (`--auto --squash`), so it lands automatically once
+  required checks pass (no manual merge needed); it still respects branch
+  protection, so a failing check holds it open for review.
+- **`build-push.yml`** keys change detection off `.github/apt-versions.json`:
+  merging the monitor PR rebuilds **exactly** the extensions whose recorded
+  version changed, producing fresh `pgx-<ext>:<pg>-<version>` images.
+
+**When exactly is the lockfile updated?** Only at the moment the monitor PR
+is **merged** -- that single event both lands the new versions on `main` and
+triggers the rebuild. With auto-merge enabled the PR merges itself once
+checks pass, so no human step is required in the common (green) case; a
+failed check leaves it open for manual review. Because PGDG is rolling, a
+base-image or weekly-cron rebuild between monitor runs may publish images
+newer than the lockfile records; the next monitor run re-syncs the lockfile,
+so any drift is transient and self-healing.
+
+So an APT update flows: PGDG publishes -> monitor opens lockfile PR ->
+**auto-merge on green (lockfile updated on `main`)** -> rebuild affected
+layers. There is still no `VERSION_XX` to bump by hand, and no `TAG_FILTER`
+needed. **Never add `VERSION_XX` or `apt-lock.sh` output to an APT
+extension's `extension.conf`.** The rest of this section applies to
+**source-built** extensions only.
 
 Every source-built extension **must** be handled by the version
 monitoring workflow (`.github/workflows/monitor-extensions.yml`). When

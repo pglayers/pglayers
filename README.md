@@ -895,12 +895,14 @@ pglayers/
 ├── AGENTS.md                         Agent/CI instructions
 ├── scripts/
 │   ├── apt-support.sh                PGDG availability + version probing
+│   ├── apt-lock.sh                   Generate .github/apt-versions.json
 │   ├── ext-version.sh                Resolve an extension's build version
 │   ├── detect-license.sh             License detection from Debian copyright
 │   ├── check-licenses.sh             Enforce the licensing policy
 │   └── licenses.conf                 Allow/deny/exception license lists
 ├── .github/
 │   ├── base-image-digests.json       Tracked base image digests
+│   ├── apt-versions.json             Recorded apt versions (per PG major)
 │   ├── ISSUE_TEMPLATE/
 │   │   ├── bug_report.yml            Bug report form
 │   │   ├── new_extension.yml         Extension request form
@@ -910,6 +912,7 @@ pglayers/
 │       ├── test.yml                  CI: full test suite (PG 17, 18, 19)
 │       ├── monitor-base-image.yml    Detects base image updates (every 6h)
 │       ├── monitor-extensions.yml    Detects new source-build releases
+│       ├── monitor-apt-versions.yml  Tracks apt versions (apt-versions.json)
 │       └── cache-cleanup.yml         Prunes stale GHA caches
 ├── extensions/
 │   ├── pgvector/                     APT extension: conf + test only

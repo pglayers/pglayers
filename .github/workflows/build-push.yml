@@ -7,6 +7,7 @@ on:
       - 'extensions/**'
       - 'profiles/**'
       - 'Dockerfile.apt'
+      - '.github/apt-versions.json'
       - '.github/base-image-digests.json'
       - '.github/workflows/build-push.yml'
   pull_request:
@@ -68,6 +69,16 @@ jobs:
                 [ -f "$d/Dockerfile" ] || changed_exts="$changed_exts $e"
               done
               changed_exts=$(echo "$changed_exts" | tr ' ' '\n' | sort -u | tr '\n' ' ')
+            # The apt-versions lockfile is the explicit record of apt-shipped
+            # versions. When it changes, rebuild exactly the extensions whose
+            # recorded version changed -- this is what turns a PGDG apt update
+            # into a real, deliberate layer rebuild.
+            elif git diff --name-only HEAD~1 | grep -qxF '.github/apt-versions.json'; then
+              git show HEAD~1:.github/apt-versions.json > /tmp/old-apt.json 2>/dev/null \
+                || echo '{}' > /tmp/old-apt.json
+              changed_exts=$(jq -r --slurpfile old /tmp/old-apt.json \
+                'to_entries[] | select(.value != ($old[0][.key] // {})) | .key' \
+                .github/apt-versions.json | tr '\n' ' ')
             fi
           fi
 
