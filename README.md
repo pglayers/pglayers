@@ -126,6 +126,7 @@ promoted to stable.
 | [age](https://github.com/apache/age) | 1.7.0-rc0 | 17, 18 | Graph database with openCypher query language (Apache AGE) |
 | [anon](https://gitlab.com/dalibo/postgresql_anonymizer) | 3.1.1 | 17, 18 | Data anonymization and masking |
 | [credcheck](https://github.com/HexaCluster/credcheck) | 5.0 | 17, 18, 19 | Credential checks on user creation / password change |
+| [db2fce](https://github.com/credativ/db2fce) | 0.0.17 | 17, 18 | DB2 compatibility functions (date/time, string helpers) |
 | [documentdb](https://github.com/documentdb/documentdb) | 0.113-0 | 17, 18 | MongoDB-compatible document database engine (BSON types and CRUD API) |
 | [extra_window_functions](https://github.com/xocolatl/extra_window_functions) | 1.0 | 17, 18, 19 | Extra window functions (ignore-nulls variants, nth-from-last) |
 | [first_last_agg](https://github.com/wulczer/first_last_agg) | 0.1.4 | 17, 18 | first() and last() aggregate functions |
@@ -138,6 +139,10 @@ promoted to stable.
 | [jsquery](https://github.com/postgrespro/jsquery) | 1.2 | 17, 18 | JSON query language with GIN indexing |
 | [orafce](https://github.com/orafce/orafce) | 4.16.7 | 17, 18, 19 | Oracle compatibility functions and packages |
 | [periods](https://github.com/xocolatl/periods) | 1.2.3 | 17, 18 | SQL:2016 application-time PERIODs and system versioning |
+| [pg_background](https://github.com/vibhorkum/pg_background) | 2.0.2 | 17, 18, 19 | Run SQL in background worker processes |
+| [pg_csv](https://github.com/PostgREST/pg_csv) | 1.0.2 | 17, 18, 19 | Aggregate result rows into CSV text |
+| [pg_dirtyread](https://github.com/df7cb/pg_dirtyread) | 2.8 | 17, 18, 19 | Read dead (deleted, unvacuumed) tuples for forensics/recovery |
+| [pg_pwhash](https://github.com/cybertec-postgresql/pg_pwhash) | 1.0 | 17, 18, 19 | Password hashing (scrypt, argon2, yescrypt) |
 | [pgaudit](https://github.com/pgaudit/pgaudit) | 17.1 | 17, 18 | Audit logging (session and object-level) |
 | [pg_bigm](https://github.com/pgbigm/pg_bigm) | 1.2 | 17, 18 | 2-gram full text search (better for CJK languages) |
 | [pg_cron](https://github.com/citusdata/pg_cron) | 1.6.7 | 17, 18 | Job scheduler (periodic jobs inside the database) |

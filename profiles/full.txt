@@ -3,6 +3,7 @@
 age
 anon
 credcheck
+db2fce
 documentdb
 extra_window_functions
 first_last_agg
@@ -16,8 +17,11 @@ jsquery
 orafce
 periods
 pgaudit
+pg_background
 pg_bigm
 pg_cron
+pg_csv
+pg_dirtyread
 pg_duckdb
 pg_durable
 pg_failover_slots
@@ -35,6 +39,7 @@ pgnodemx
 pg_partman
 pgpcre
 pg_permissions
+pg_pwhash
 pg_qualstats
 pg_repack
 pg_roaringbitmap
