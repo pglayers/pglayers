@@ -123,7 +123,6 @@ promoted to stable.
 
 | Extension | Version | PG versions | Description |
 |-----------|---------|-------------|-------------|
-| [address_standardizer](https://github.com/postgis/address_standardizer) | 3.7.0 | 17, 18, 19 | Parse and normalize postal addresses into components |
 | [age](https://github.com/apache/age) | 1.7.0-rc0 | 17, 18 | Graph database with openCypher query language (Apache AGE) |
 | [anon](https://gitlab.com/dalibo/postgresql_anonymizer) | 3.1.1 | 17, 18 | Data anonymization and masking |
 | [credcheck](https://github.com/HexaCluster/credcheck) | 5.0 | 17, 18, 19 | Credential checks on user creation / password change |

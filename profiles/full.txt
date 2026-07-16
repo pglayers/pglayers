@@ -1,6 +1,5 @@
 # Full extension set -- all extensions provided by pglayers.
 # This file is auto-checked by CI. Run 'make check-profiles' to verify.
-address_standardizer
 age
 anon
 credcheck
