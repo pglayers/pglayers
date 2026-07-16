@@ -145,6 +145,7 @@ promoted to stable.
 | [pg_dirtyread](https://github.com/df7cb/pg_dirtyread) | 2.8 | 17, 18, 19 | Read dead (deleted, unvacuumed) tuples for forensics/recovery |
 | [pg_pwhash](https://github.com/cybertec-postgresql/pg_pwhash) | 1.0 | 17, 18, 19 | Password hashing (scrypt, argon2, yescrypt) |
 | [pg_show_plans](https://github.com/cybertec-postgresql/pg_show_plans) | 2.1.8 | 17, 18, 19 | Show execution plans of all currently running queries |
+| [pg_statviz](https://github.com/vyruss/pg_statviz) | 1.1 | 17, 18, 19 | Time-series snapshots of PostgreSQL statistics for visualization |
 | [pgaudit](https://github.com/pgaudit/pgaudit) | 17.1 | 17, 18 | Audit logging (session and object-level) |
 | [pg_bigm](https://github.com/pgbigm/pg_bigm) | 1.2 | 17, 18 | 2-gram full text search (better for CJK languages) |
 | [pg_cron](https://github.com/citusdata/pg_cron) | 1.6.7 | 17, 18 | Job scheduler (periodic jobs inside the database) |

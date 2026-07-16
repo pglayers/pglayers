@@ -52,6 +52,7 @@ pgsodium
 pgsphere
 pg_squeeze
 pg_stat_monitor
+pg_statviz
 pgtap
 pg_textsearch
 pgtt
