@@ -24,7 +24,7 @@ Pre-built combined images with `shared_preload_libraries` already
 configured:
 
 ```bash
-# All 50+ extensions
+# All 80+ extensions
 docker run -d -e POSTGRES_PASSWORD=secret ghcr.io/pglayers/pglayers-full:17
 
 # Azure Database for PostgreSQL compatible (30+ extensions)
@@ -637,7 +637,23 @@ make clean EXT=pgvector
 
 # Remove all built extension images (reclaim disk space)
 make clean-all
+
+# Scaffold a new APT-based extension (probes PGDG, detects license,
+# writes extension.conf + a test.sql stub)
+make add-apt-ext PKG=<apt-package> [NAME=<dir>] [PG=17]
+
+# Verify all extensions comply with the licensing policy
+make check-licenses
+
+# Verify profiles are in sync with the extensions/ directory
+make check-profiles
 ```
+
+> APT-based extensions have **no Dockerfile** -- they are built by the
+> shared `Dockerfile.apt`, with their version and PostgreSQL-version
+> support resolved from PGDG at build time. Adding one is usually just
+> `make add-apt-ext` + writing `test.sql`. See the
+> [Contributing guide](CONTRIBUTING.md#adding-a-new-extension).
 
 ### Skipping extensions from CI
 
@@ -847,8 +863,15 @@ extensions, reporting bugs, and submitting changes.
 pglayers/
 ├── Makefile                          Build interface
 ├── Dockerfile                        Combined image (all extensions)
+├── Dockerfile.apt                    Shared build for all APT extensions
 ├── CONTRIBUTING.md                   Contribution guide
 ├── AGENTS.md                         Agent/CI instructions
+├── scripts/
+│   ├── apt-support.sh                PGDG availability + version probing
+│   ├── ext-version.sh                Resolve an extension's build version
+│   ├── detect-license.sh             License detection from Debian copyright
+│   ├── check-licenses.sh             Enforce the licensing policy
+│   └── licenses.conf                 Allow/deny/exception license lists
 ├── .github/
 │   ├── base-image-digests.json       Tracked base image digests
 │   ├── ISSUE_TEMPLATE/
@@ -859,16 +882,15 @@ pglayers/
 │       ├── build-push.yml            CI: builds extensions, pushes to GHCR
 │       ├── test.yml                  CI: full test suite (PG 17, 18, 19)
 │       ├── monitor-base-image.yml    Detects base image updates (every 6h)
-│       ├── monitor-extensions.yml    Detects new extension releases (daily)
+│       ├── monitor-extensions.yml    Detects new source-build releases
 │       └── cache-cleanup.yml         Prunes stale GHA caches
 ├── extensions/
-│   ├── pgvector/
-│   │   ├── Dockerfile                Multi-stage build -> artifact image
-│   │   ├── extension.conf            Metadata and version mapping
+│   ├── pgvector/                     APT extension: conf + test only
+│   │   ├── extension.conf            Metadata (APT_PACKAGE, license, ...)
 │   │   └── test.sql                  Integration tests (PASS/FAIL assertions)
-│   ├── pg_cron/
-│   ├── postgis/                      (complex: bundles runtime libs)
-│   ├── ... (50+ extensions)
+│   ├── pg_net/                       Source-built: adds its own Dockerfile
+│   ├── postgis/                      Custom APT Dockerfile (bundles libs)
+│   ├── ... (80+ extensions)
 │   └── wal2json/
 ├── profiles/
 │   ├── azure.txt                     Azure PostgreSQL Flexible Server extensions
@@ -883,9 +905,18 @@ pglayers/
 ## Licensing policy
 
 This project ships extensions with **permissive open-source licenses**
-(PostgreSQL, MIT, BSD, Apache 2.0, ISC) and, where industry practice
-clearly supports it, **GPL-2.0 extensions loaded via PostgreSQL's
-dynamic extension mechanism**.
+(PostgreSQL, MIT, ISC, Zlib, Apache-2.0, the BSD family, plus the safe
+weak/file-level copyleft MPL-2.0 and permissive-classified Artistic-2.0)
+and, where industry practice clearly supports it, **GPL-2.0 extensions
+loaded via PostgreSQL's dynamic extension mechanism**.
+
+The policy is codified in [`scripts/licenses.conf`](scripts/licenses.conf)
+and enforced automatically by `make check-licenses` in CI: source-available
+licenses (BSL/BUSL, SSPL, FSL, Elastic-2.0/ELv2) and infectious copyleft
+(GPL/LGPL/AGPL) are denied, with `postgis` and `pgrouting` recorded as
+documented, deliberate exceptions. Every extension's license is
+auto-detected from its Debian copyright when it is added (see the
+[Contributing guide](CONTRIBUTING.md#licensing)).
 
 ### GPL-2.0 extensions (PostGIS, pgRouting)
 

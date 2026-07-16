@@ -28,8 +28,16 @@ We will review the license and feasibility before accepting.
 
 ## Adding a new extension
 
-This is the most common type of contribution. The full checklist is
-below -- every item is mandatory.
+There are two kinds of extension in pglayers:
+
+- **APT-based** (most of them): installed from the PGDG apt repo
+  (`apt.postgresql.org`). These need **no Dockerfile** and **no version
+  pins** -- a single shared `Dockerfile.apt` builds every one of them, and
+  the version + PostgreSQL-version support are resolved from PGDG at build
+  time. The `make add-apt-ext` scaffold does almost all of the work.
+- **Source-built**: compiled from upstream when no apt package exists.
+  These have their own `extensions/<name>/Dockerfile` and pin an upstream
+  tag.
 
 ### Prerequisites
 
@@ -38,228 +46,191 @@ below -- every item is mandatory.
 - Bash
 - `shellcheck` (for linting shell scripts)
 
-### Step 1: Check the license
+### Path A: APT-based extension (recommended)
 
-We ship extensions with permissive open-source licenses (PostgreSQL,
-MIT, BSD, Apache 2.0, ISC, MPL-2.0) and GPL-2.0 extensions loaded
-via PostgreSQL's dynamic extension mechanism. See the
-[licensing policy](README.md#licensing-policy) in the README.
+**1. Check availability.** An extension is apt-installable if PGDG ships
+`postgresql-<pg>-<pkg>`:
 
-**Rejected licenses:** GPL-3.0, AGPL, BSL, SSPL, ELv2, FSL, or any
-license requiring proprietary runtime dependencies.
-
-### Step 2: Create the extension directory
-
-```
-extensions/<name>/
-  Dockerfile        # Multi-stage build -> FROM scratch artifact
-  extension.conf    # Metadata, versions, license
-  test.sql          # Integration tests (PASS/FAIL assertions)
+```bash
+./scripts/apt-support.sh version 17 <pkg>   # prints the version, or nothing
 ```
 
-**`extension.conf` fields:**
+**2. Scaffold it:**
+
+```bash
+make add-apt-ext PKG=<apt-package> [NAME=<dir>] [PG=17]
+```
+
+This probes PGDG for the version, **auto-detects the license** from the
+Debian copyright, fills in the description, writes
+`extensions/<name>/extension.conf` and a starter `test.sql`, and runs
+`make check-licenses`. If the license is denied or undetected it stops and
+tells you what to do (see [Licensing](#licensing) below).
+
+The resulting `extension.conf` for an apt extension is small -- **no
+Dockerfile, no `VERSION_*`**:
 
 ```bash
 DESCRIPTION="Short description"
-REPO="https://github.com/org/extension.git"
-LICENSE="PostgreSQL"          # Required
-VERSION_17="1.0.0"
-VERSION_18="1.0.0"
-VERSION_19="1.0.0"
-SHARED_PRELOAD=""             # Library name if needed, empty otherwise
+REPO="https://github.com/org/extension"
+LICENSE="PostgreSQL"      # auto-detected; must pass the license gate
+SHARED_PRELOAD=""         # library name if the extension must be preloaded
 NOTES=""
-APT_PACKAGE=""                # PGDG package name suffix (if APT-based)
-TAG_FILTER=""                 # Optional: regex for non-standard tag formats
+APT_PACKAGE="<pkg>"       # PGDG suffix only: no "postgresql-<pg>-", no version
+# DEPENDS="btree_gist"    # optional: other extensions this one requires
+# PG_CONF="foo.bar = 'x'" # optional: extra postgresql.conf GUCs (pipe-delimited)
 ```
 
-### Step 3: Write the Dockerfile
+There is deliberately no `VERSION_*`: `apt-get` installs the latest, and an
+extension "supports" a PG major iff PGDG publishes the package for it
+(combos that don't exist yet are skipped automatically and re-appear when
+PGDG catches up).
 
-**Prefer APT packages** -- Check if the extension is available in the
-PGDG APT repository first:
+**3. Finish the config and tests.** Fill any fields the scaffold left blank
+(`REPO`, `SHARED_PRELOAD`, `DEPENDS`, `PG_CONF`) and replace the `test.sql`
+stub with real functional checks (see [Tests](#tests)).
 
-```bash
-docker run --rm postgres:17 bash -c \
-  "apt-get update && apt-cache search postgresql-17-<name>"
-```
-
-If a package exists, use the APT-based pattern:
-
-```dockerfile
-# syntax=docker/dockerfile:1
-ARG PG_MAJOR=17
-ARG PG_TAG=${PG_MAJOR}
-
-FROM postgres:${PG_TAG} AS builder
-ARG PG_MAJOR
-
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
-    postgresql-${PG_MAJOR}-<package>
-
-# Extract extension files
-RUN mkdir -p /output && \
-    dpkg -L postgresql-${PG_MAJOR}-<package> \
-    | grep -E '^/usr/(lib|share)/postgresql/' \
-    | while IFS= read -r f; do \
-        [ -f "$f" ] || continue; \
-        mkdir -p "/output$(dirname "$f")"; \
-        cp -a "$f" "/output$f"; \
-    done
-
-FROM scratch
-COPY --from=builder /output/ /
-```
-
-Set `APT_PACKAGE="<package>"` in `extension.conf`. The `VERSION_*`
-fields should reflect the upstream version shipped by the APT package
-(e.g., `1.0.0` without the `v` prefix or Debian revision suffix).
-
-**Source build** (when no APT package exists):
-
-```dockerfile
-# syntax=docker/dockerfile:1
-ARG PG_MAJOR=17
-ARG PG_TAG=${PG_MAJOR}
-ARG EXT_VERSION=v1.0.0
-
-FROM postgres:${PG_TAG} AS builder
-ARG PG_MAJOR
-ARG EXT_VERSION
-
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git ca-certificates \
-    postgresql-server-dev-${PG_MAJOR}
-
-RUN git clone --branch ${EXT_VERSION} --depth 1 \
-    https://github.com/org/extension.git /tmp/ext
-
-WORKDIR /tmp/ext
-RUN make -j"$(nproc)" && make install DESTDIR=/output \
-    && find /output -name '*.so' -exec strip --strip-unneeded {} \;
-
-FROM scratch
-COPY --from=builder /output/ /
-```
-
-**Runtime shared library dependencies** -- If the extension depends on
-libraries not present in the base `postgres` image (check with `ldd`),
-add a dep-bundling stage. See `extensions/postgis/Dockerfile` or
-`extensions/tds_fdw/Dockerfile` for the full pattern.
-
-**Architecture-neutral** -- Dockerfiles must work on both `linux/amd64`
-and `linux/arm64`. Do not hardcode paths like `/usr/lib/x86_64-linux-gnu/`.
-
-### Step 4: Build and verify locally
+**4. Build and verify:**
 
 ```bash
 make build EXT=<name> PG=17 REGISTRY=local
-make test REGISTRY=local PG=17
+PGLAYERS_EXTENSIONS="<name>" bash tests/test-layers.sh local 17
 ```
 
-Tests must also pass for PG 18. For PG 19 (beta), use:
+Only write a **custom** `extensions/<name>/Dockerfile` for an apt extension
+if the shared template can't express it -- e.g. multiple/renamed packages,
+`.control` update-alternatives symlinks, or extra build steps. See
+`extensions/postgis/`, `extensions/pgrouting/`, `extensions/http/`.
 
-```bash
-make build EXT=<name> PG=19 PG_TAG=19beta1 REGISTRY=local
-make test REGISTRY=local PG=19 PG_TAG=19beta1
+### Path B: Source-built extension
+
+When no apt package exists, add `extensions/<name>/Dockerfile` and pin the
+upstream tag in `extension.conf` via `VERSION_17/18/19`. Use
+`extensions/pg_net/Dockerfile` as the reference: strip `.so` files after
+`make install`, and include the classic/isolated layout-selection stages.
+
+If the extension bundles runtime libraries that aren't in the base
+`postgres` image, the layer **must stay self-contained** -- never rely on a
+sibling layer to provide a shared library. See the "Extensions MUST always
+be self-contained" section in [AGENTS.md](AGENTS.md) for the required
+relocation + soname-mangling pattern (`extensions/http/Dockerfile` is the
+reference).
+
+### Licensing
+
+The licensing policy is codified in `scripts/licenses.conf` and enforced
+automatically by `make check-licenses` (also run in CI):
+
+- **Allowed:** PostgreSQL, MIT, ISC, Zlib, Apache-2.0, the BSD family, plus
+  safe weak/file-level copyleft (MPL-2.0) and permissive-classified
+  (Artistic-2.0).
+- **Denied:** GPL / LGPL / AGPL, and source-available licenses
+  (BSL/BUSL, SSPL, FSL, Elastic-2.0/ELv2).
+- **Exceptions:** GPL geospatial extensions loaded at runtime (`postgis`,
+  `pgrouting`) are deliberate, documented exceptions in `licenses.conf`.
+  See the [Licensing policy](README.md#licensing-policy) for the rationale.
+
+`make add-apt-ext` auto-detects the license from the Debian DEP-5
+copyright file. If detection returns a **denied or unknown** license:
+
+1. Read the actual license text at
+   `/usr/share/doc/postgresql-<pg>-<pkg>/copyright`.
+2. If it is genuinely permissive under a non-standard label (Debian
+   sometimes labels the PostgreSQL license with the author's name), set
+   `LICENSE` explicitly to the canonical SPDX id and, if useful, add an
+   alias to `scripts/licenses.conf`.
+3. If it is genuinely a denied license, do not onboard it -- or, in rare,
+   well-justified cases, add a documented entry to `LICENSE_EXCEPTIONS`.
+
+### Tests
+
+Every extension **must** ship `extensions/<name>/test.sql` -- the single
+source of truth for functional coverage (there is no separate smoke test).
+Each check prints a line starting with `PASS` or `FAIL`:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS <sql_name>;
+
+SELECT CASE
+    WHEN <condition>
+    THEN 'PASS <name>: what this checks'
+    ELSE 'FAIL <name>: what this checks'
+END;
 ```
 
-### Step 5: Add test coverage
+- Make the **first** check a load/sanity assertion (it doubles as a smoke
+  test).
+- Aim for 2-4 checks total (core type/function, index/operator behaviour,
+  integration with another feature).
+- Tests must be self-contained: create and clean up their own objects.
+- A **missing** `test.sql`, or one that produces **no** `PASS`/`FAIL`
+  output, is a hard failure.
 
-Edit `tests/test-layers.sh`:
+In `tests/test-layers.sh`:
 
-1. **Name mapping** -- If the SQL extension name differs from the
-   directory name, add to `EXT_SQL_NAMES`:
-   ```bash
-   [my_ext]="my_extension"
-   ```
+- If the SQL extension name differs from the directory name, add it to
+  `EXT_SQL_NAMES` (e.g. `[pgsphere]="pg_sphere"`).
+- If the extension is not loadable via `CREATE EXTENSION` (e.g. logical
+  decoding output plugins like `wal2json`), add it to `SKIP_CREATE_EXT`
+  instead.
 
-2. **Skip list** -- If not loadable via `CREATE EXTENSION` (e.g.,
-   output plugins), add to `SKIP_CREATE_EXT`:
-   ```bash
-   [my_ext]=1
-   ```
+Everything else -- layer collisions, base-image overwrites, self-containment
+(`ldd`), and `CREATE EXTENSION` -- is checked automatically.
 
-3. **Smoke test** -- Add a `smoke_test` call that exercises the
-   extension (must produce non-empty output):
-   ```bash
-   has_ext my_ext && smoke_test "my_ext basic op" \
-       "SELECT my_function('test');"
-   ```
-
-4. **Integration tests** -- Create `extensions/<name>/test.sql`:
-   ```sql
-   SELECT CASE
-       WHEN <condition>
-       THEN 'PASS my_ext: description'
-       ELSE 'FAIL my_ext: description'
-   END;
-   ```
-   Aim for 2-4 checks per extension.
-
-### Step 6: Update documentation and profiles
+### Documentation and profiles
 
 In the **same commit**:
 
-- Add a row to the README "Available extensions" table
-- Add to the `shared_preload_libraries` table if applicable
-- Add to `profiles/full.txt` (alphabetical order)
-- Add to relevant service profiles (e.g., `profiles/azure.txt`) if
-  the extension is available in that service
-- Run `make check-profiles` to validate
+- Add a row to the README "Available extensions" table.
+- Add to the README `shared_preload_libraries` table if it needs
+  preloading.
+- Add to `profiles/full.txt` (alphabetical order); run `make check-profiles`.
+- Add to relevant service profiles (e.g. `profiles/azure.txt`) if the
+  extension is offered by that managed service.
 
-### Step 7: Set up version monitoring
+### Version monitoring
 
-The extension must be tracked by the
-[monitor-extensions workflow](.github/workflows/monitor-extensions.yml):
+- **APT-based extensions:** *not* version-monitored -- `apt-get` installs
+  the latest PGDG package on every rebuild, so there is nothing to bump.
+  No action needed.
+- **Source-built extensions:** tracked by
+  [monitor-extensions.yml](.github/workflows/monitor-extensions.yml).
+  Standard semver tags are auto-detected; non-standard tags need a
+  `TAG_FILTER` in `extension.conf`; branch-pinned extensions go in the
+  workflow's `SKIP_MONITOR` list.
 
-- **APT-based extensions** -- Automatically monitored via the PGDG
-  APT repository. No action needed beyond setting `APT_PACKAGE` in
-  `extension.conf`.
-- **Standard semver tags** (source-built) -- No action needed.
-- **Non-standard tags** (source-built) -- Add `TAG_FILTER` to
-  `extension.conf`.
-- **No tagged releases** (source-built) -- Add to `SKIP_MONITOR` in
-  the workflow.
-
-See [AGENTS.md](AGENTS.md#version-monitoring) for details.
-
-### Step 8: Pre-commit checks
-
-Before submitting:
+### Pre-commit checks
 
 ```bash
-# Lint shell scripts
-shellcheck tests/test-layers.sh tests/test-image.sh
+# Lint shell (fix all errors and warnings)
+shellcheck tests/*.sh scripts/*.sh
 
-# Validate workflow YAML (if modified)
-actionlint  # or: python3 -c "import yaml; ..."
+# Validate workflow YAML if you changed any (actionlint preferred)
+actionlint
 
-# Run tests for all supported PG versions
-make test REGISTRY=local PG=17
-make test REGISTRY=local PG=18
-
-# Verify profiles
+# Policy + profile gates
+make check-licenses
 make check-profiles
+
+# Functional tests (scope to your extension; also run PG 18)
+PGLAYERS_EXTENSIONS="<name>" bash tests/test-layers.sh local 17
 ```
 
-### Step 9: Submit
+### Submit
 
 ```bash
-git add extensions/<name>/ tests/test-layers.sh profiles/full.txt README.md
-git commit -m "Add <name> extension"
+git add extensions/<name>/ tests/test-layers.sh profiles/ README.md
+git commit -m "feat(extensions): add <name>"
 ```
 
-Open a PR against `main`. CI will run the full test suite
-automatically.
+Open a PR against `main`. CI runs the full test suite for PG 17, 18 and 19
+(19 is beta and non-blocking).
 
 ## Ordering convention
 
 All extension lists must be sorted **alphabetically** wherever they
-appear: README tables, test arrays, smoke tests, profile files. This
-avoids merge conflicts and keeps diffs readable.
+appear: README tables, `EXT_SQL_NAMES` / `SKIP_CREATE_EXT` arrays, profile
+files. This avoids merge conflicts and keeps diffs readable.
 
 ## Other contributions
 
