@@ -20,7 +20,7 @@ endif
 # Default: native architecture only (fast local builds).
 PLATFORM ?=
 
-.PHONY: help list build build-all image push push-all dockerfile clean clean-all test test-image list-profiles check-profiles check-licenses
+.PHONY: help list build build-all image push push-all dockerfile clean clean-all test test-image list-profiles check-profiles check-licenses add-apt-ext
 
 help: ## Show this help
 	@printf "Usage:\n"
@@ -36,6 +36,7 @@ help: ## Show this help
 	@printf "  make list-profiles                 List available profiles\n"
 	@printf "  make check-profiles                Verify profile files are in sync\n"
 	@printf "  make check-licenses               Verify extension licenses comply with policy\n"
+	@printf "  make add-apt-ext PKG=cron         Scaffold a new APT extension\n"
 	@printf "  make clean EXT=pgvector           Remove built image for one extension\n"
 	@printf "  make clean-all                    Remove all built extension images\n"
 	@printf "\nVariables:\n"
@@ -169,6 +170,45 @@ info: _check-ext ## Show details for an extension
 		fi; \
 		[ -n "$$SHARED_PRELOAD" ] && echo "shared_preload_libraries: $$SHARED_PRELOAD"; \
 		[ -n "$$NOTES" ] && echo "Notes: $$NOTES"'
+
+add-apt-ext: ## Scaffold a new APT extension (PKG=<apt package> [NAME=<dir>] [PG=17])
+	@test -n "$(PKG)" || { echo "Usage: make add-apt-ext PKG=<apt package> [NAME=<dir>] [PG=17]"; exit 1; }
+	@name="$(or $(NAME),$(subst -,_,$(PKG)))"; \
+	pg="$(or $(PG),17)"; \
+	dir="extensions/$$name"; \
+	if [ -e "$$dir" ]; then echo "Error: $$dir already exists"; exit 1; fi; \
+	echo "Probing PGDG for postgresql-$$pg-$(PKG)..."; \
+	ver=$$(./scripts/apt-support.sh version "$$pg" "$(PKG)"); \
+	if [ -z "$$ver" ]; then echo "Error: postgresql-$$pg-$(PKG) not found in PGDG"; exit 1; fi; \
+	echo "  version: $$ver"; \
+	echo "Detecting license from Debian copyright..."; \
+	lic=$$(./scripts/detect-license.sh "$$pg" "$(PKG)"); \
+	echo "  license: $$lic"; \
+	desc=$$(docker run --rm postgres:$$pg bash -c "apt-get update >/dev/null 2>&1; apt-cache show postgresql-$$pg-$(PKG) 2>/dev/null | awk '/^Description:/{sub(/^Description:[[:space:]]*/,\"\"); print; exit}'"); \
+	mkdir -p "$$dir"; \
+	{ \
+		echo "DESCRIPTION=\"$$desc\""; \
+		echo "REPO=\"\""; \
+		echo "LICENSE=\"$$lic\""; \
+		echo "SHARED_PRELOAD=\"\""; \
+		echo "NOTES=\"\""; \
+		echo "APT_PACKAGE=\"$(PKG)\""; \
+	} > "$$dir/extension.conf"; \
+	echo "Wrote $$dir/extension.conf"; \
+	echo; \
+	echo "Validating license policy..."; \
+	./scripts/check-licenses.sh "$$name" || { \
+		echo; \
+		echo "The detected license is not auto-accepted. Either fix LICENSE in"; \
+		echo "$$dir/extension.conf (if detection is wrong), add it to ALLOW_LICENSES,"; \
+		echo "or record an exception in scripts/licenses.conf."; \
+		exit 1; \
+	}; \
+	echo; \
+	echo "Next steps:"; \
+	echo "  - review $$dir/extension.conf (REPO, SHARED_PRELOAD, NOTES, DEPENDS, PG_CONF)"; \
+	echo "  - add coverage in tests/test-layers.sh + extensions/$$name/test.sql"; \
+	echo "  - build: make build EXT=$$name PG=$$pg REGISTRY=local"
 
 IMAGE_NAME ?= pglayers$(if $(PROFILE),-$(PROFILE))
 

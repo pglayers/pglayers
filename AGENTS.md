@@ -151,6 +151,19 @@ the shared `Dockerfile.apt` handles it; see Dockerfile requirement #3).
 Source-built or special-case extensions add their own
 `extensions/<ext>/Dockerfile`.
 
+The fastest way to add an APT extension is the scaffold:
+
+```bash
+make add-apt-ext PKG=<apt-package> [NAME=<dir>] [PG=17]
+```
+
+It probes PGDG for availability + version, detects the license from the
+Debian DEP-5 copyright (`scripts/detect-license.sh`), auto-fills the
+description, writes `extensions/<name>/extension.conf`, and runs
+`make check-licenses`. If the license is denied or undetected it stops and
+asks you to decide (fix `LICENSE`, extend `ALLOW_LICENSES`, or record an
+exception). You still add test coverage (below) and review the conf.
+
 Every new extension **must** have full test coverage before merging.
 This means updating `tests/test-layers.sh` to include:
 
