@@ -386,6 +386,33 @@ The project publishes one Docker image per extension per PostgreSQL
 version. These are not runnable containers -- they are `FROM scratch`
 images containing only the extension artifacts.
 
+### How extensions are built
+
+Extensions fall into four build families (in order of preference):
+
+1. **APT via the shared template** -- the default for most extensions.
+   They have no Dockerfile at all: a single shared `Dockerfile.apt`
+   installs `postgresql-<pg>-<pkg>` from PGDG, extracts the files, bundles
+   any non-base runtime libraries, and relocates them for the classic
+   layout. You only write an `extension.conf` (with `APT_PACKAGE`) and a
+   `test.sql`. *(~56 extensions, e.g. pgvector, pg_cron.)*
+2. **APT with a custom Dockerfile** -- for apt packages the shared template
+   can't express: multiple/renamed packages, `.control` update-alternatives
+   symlinks, or extra steps. *(e.g. postgis, pgrouting, http, h3_pg,
+   tds_fdw.)*
+3. **Source-built from an upstream prebuilt image** -- for heavy builds
+   that ship an official image or a cached build stage, avoiding a long
+   compile in CI. *(e.g. pg_duckdb from `pgduckdb/pgduckdb`, pg_lake from a
+   prebuilt vcpkg image.)*
+4. **Source-built from git** -- `git clone` + `make` at a pinned upstream
+   tag, when no apt package exists. *(e.g. pg_net, pgsodium, the pgrx/Rust
+   extensions.)*
+
+Whatever the family, every layer must be **self-contained** (carry all of
+its own non-base runtime libraries) and collision-free -- enforced by the
+test suite. See [AGENTS.md](AGENTS.md) for the build requirements and
+[CONTRIBUTING.md](CONTRIBUTING.md) for how to add one.
+
 ### PG 17: Classic layout
 
 Extension files are at their standard PostgreSQL filesystem paths:

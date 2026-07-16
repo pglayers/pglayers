@@ -28,16 +28,24 @@ We will review the license and feasibility before accepting.
 
 ## Adding a new extension
 
-There are two kinds of extension in pglayers:
+Extensions fall into four build families. Which one applies decides how
+much work you do:
 
-- **APT-based** (most of them): installed from the PGDG apt repo
-  (`apt.postgresql.org`). These need **no Dockerfile** and **no version
-  pins** -- a single shared `Dockerfile.apt` builds every one of them, and
-  the version + PostgreSQL-version support are resolved from PGDG at build
-  time. The `make add-apt-ext` scaffold does almost all of the work.
-- **Source-built**: compiled from upstream when no apt package exists.
-  These have their own `extensions/<name>/Dockerfile` and pin an upstream
-  tag.
+- **APT via the shared template** *(Path A, most extensions)* -- installed
+  from the PGDG apt repo (`apt.postgresql.org`) by a single shared
+  `Dockerfile.apt`. **No Dockerfile, no version pins.** `make add-apt-ext`
+  does almost everything; you just write `test.sql`.
+- **APT with a custom Dockerfile** *(Path A, special cases)* -- an apt
+  package the shared template can't express (multiple/renamed packages,
+  `.control` symlinks, extra steps): e.g. `postgis`, `pgrouting`, `http`.
+- **Source-built from an upstream prebuilt image** *(Path B)* -- heavy
+  builds that reuse an official image or cached build stage to avoid a long
+  compile: e.g. `pg_duckdb`, `pg_lake`.
+- **Source-built from git** *(Path B)* -- `git clone` + `make` at a pinned
+  tag, when no apt package exists: e.g. `pg_net`, `pgsodium`.
+
+See [How extensions are built](README.md#how-extensions-are-built) for the
+overview. Prefer apt whenever PGDG ships the package.
 
 ### Prerequisites
 
@@ -105,9 +113,16 @@ if the shared template can't express it -- e.g. multiple/renamed packages,
 ### Path B: Source-built extension
 
 When no apt package exists, add `extensions/<name>/Dockerfile` and pin the
-upstream tag in `extension.conf` via `VERSION_17/18/19`. Use
-`extensions/pg_net/Dockerfile` as the reference: strip `.so` files after
-`make install`, and include the classic/isolated layout-selection stages.
+upstream tag in `extension.conf` via `VERSION_17/18/19`. Two variants:
+
+- **From git** -- `git clone` + `make`. Use `extensions/pg_net/Dockerfile`
+  as the reference: strip `.so` files after `make install`, and include the
+  classic/isolated layout-selection stages.
+- **From an upstream prebuilt image** -- for heavy builds (large native
+  deps, long compiles), `FROM` an official image or a cached build stage
+  instead of compiling in CI. See `extensions/pg_duckdb/Dockerfile`
+  (`FROM pgduckdb/pgduckdb`) and `extensions/pg_lake/Dockerfile` (prebuilt
+  vcpkg image).
 
 If the extension bundles runtime libraries that aren't in the base
 `postgres` image, the layer **must stay self-contained** -- never rely on a

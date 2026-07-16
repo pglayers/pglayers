@@ -253,10 +253,21 @@ adding a new source-built extension:
 
 ### Dockerfile requirements
 
-Most APT extensions have **no Dockerfile** -- they use the shared
-`Dockerfile.apt` (see requirement #3 below). The rules here apply to the
-shared template and to any **custom** `extensions/<ext>/Dockerfile` (source
-builds and special-case APT extensions).
+Extensions are built in one of four families:
+
+1. **APT via the shared `Dockerfile.apt`** -- no per-extension Dockerfile;
+   only an `extension.conf` with `APT_PACKAGE` (most extensions).
+2. **APT with a custom `extensions/<ext>/Dockerfile`** -- special-case apt
+   packages (multiple/renamed packages, `.control` symlinks): `postgis`,
+   `pgrouting`, `http`, `h3_pg`, `tds_fdw`.
+3. **Source-built from an upstream prebuilt image** -- heavy builds that
+   `FROM` an official image / cached stage: `pg_duckdb`, `pg_lake`.
+4. **Source-built from git** -- `git clone` + `make` at a pinned tag when no
+   apt package exists (`pg_net`, `pgsodium`, the Rust extensions, ...).
+
+Family 1 has no Dockerfile (see requirement #3 below). The rules here apply
+to the shared template and to any **custom** `extensions/<ext>/Dockerfile`
+(families 2-4).
 
 Every extension Dockerfile **must** follow these practices:
 
