@@ -159,6 +159,9 @@ jobs:
       - name: Check profiles
         run: make check-profiles
 
+      - name: Check licenses
+        run: make check-licenses
+
   test-profile:
     needs: test
     runs-on: ubuntu-latest

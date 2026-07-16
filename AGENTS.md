@@ -6,18 +6,37 @@ Composable PostgreSQL extension Docker layers on top of official images.
 
 ## Licensing Policy
 
-This project only ships extensions with **permissive open-source
-licenses** (PostgreSQL, MIT, BSD, Apache 2.0, ISC). Before adding any
-extension:
+This project only ships extensions with **permissive (or safe
+weak-copyleft) licenses**. The policy is codified in
+`scripts/licenses.conf` and enforced automatically by
+`make check-licenses` (run in CI):
 
-1. **Audit the license** -- Check the extension's LICENSE/COPYING file
-   in its repository. Reject anything that is:
-   - Proprietary or source-available (e.g., BSL, SSPL, FSL, ELv2)
-   - Copyleft that would infect the combined image (e.g., AGPL)
-   - Requires proprietary runtime dependencies (e.g., Oracle client)
+- **`ALLOW_LICENSES`** -- auto-accepted: PostgreSQL, MIT, ISC, Zlib,
+  Apache-2.0, the BSD family, plus safe weak/file-level copyleft (MPL-2.0)
+  and permissive-classified (Artistic-2.0). Safe because extensions are
+  separate `.so` files loaded at runtime, never statically linked into a
+  combined derivative work.
+- **`DENY_LICENSES`** -- never accepted: source-available (BSL/BUSL, SSPL,
+  FSL, Elastic-2.0/ELv2) and infectious copyleft (AGPL, GPL, LGPL).
+- **`LICENSE_EXCEPTIONS`** -- deliberate, documented deviations from the
+  deny list (currently `postgis` and `pgrouting`, GPL geospatial
+  extensions loaded at runtime -- mere aggregation, not derivative). Each
+  exception records a rationale for the audit trail.
 
-2. **Document the license** -- Add a `LICENSE` field to `extension.conf`
-   (e.g., `LICENSE="PostgreSQL"` or `LICENSE="MIT"`).
+When adding an extension:
+
+1. **Set the `LICENSE` field** in `extension.conf` (e.g.
+   `LICENSE="PostgreSQL"`). The value must resolve to `ALLOW_LICENSES`
+   (after alias normalization) or be recorded as an exception, or
+   `make check-licenses` fails. Debian ships a machine-readable DEP-5
+   copyright file per package
+   (`/usr/share/doc/postgresql-<pg>-<pkg>/copyright`) you can consult to
+   determine the license.
+
+2. **A denied or unknown license fails CI.** To ship a denied license
+   anyway (rare), add an entry to `LICENSE_EXCEPTIONS` **and**
+   `LICENSE_EXCEPTION_REASON` in `scripts/licenses.conf` with a written
+   justification.
 
 3. **When in doubt, skip it** -- If an extension's license is ambiguous
    or has changed recently (e.g., TimescaleDB moved to TSL for some

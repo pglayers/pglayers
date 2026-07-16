@@ -20,7 +20,7 @@ endif
 # Default: native architecture only (fast local builds).
 PLATFORM ?=
 
-.PHONY: help list build build-all image push push-all dockerfile clean clean-all test test-image list-profiles check-profiles
+.PHONY: help list build build-all image push push-all dockerfile clean clean-all test test-image list-profiles check-profiles check-licenses
 
 help: ## Show this help
 	@printf "Usage:\n"
@@ -35,6 +35,7 @@ help: ## Show this help
 	@printf "  make test-image [PG=17]            Run integration tests against combined image\n"
 	@printf "  make list-profiles                 List available profiles\n"
 	@printf "  make check-profiles                Verify profile files are in sync\n"
+	@printf "  make check-licenses               Verify extension licenses comply with policy\n"
 	@printf "  make clean EXT=pgvector           Remove built image for one extension\n"
 	@printf "  make clean-all                    Remove all built extension images\n"
 	@printf "\nVariables:\n"
@@ -347,6 +348,9 @@ list-profiles: ## List available profiles
 		desc=$$(head -1 "$$f" | sed 's/^# *//'); \
 		printf "%-12s %-6d %s\n" "$$name" "$$count" "$$desc"; \
 	done
+
+check-licenses: ## Verify all extensions comply with the licensing policy
+	@./scripts/check-licenses.sh
 
 check-profiles: ## Verify profiles/full.txt matches extensions/ directory
 	@expected=$$(for dir in extensions/*/; do \
