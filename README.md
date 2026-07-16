@@ -127,11 +127,14 @@ promoted to stable.
 | [anon](https://gitlab.com/dalibo/postgresql_anonymizer) | 3.1.1 | 17, 18 | Data anonymization and masking |
 | [credcheck](https://github.com/HexaCluster/credcheck) | 5.0 | 17, 18, 19 | Credential checks on user creation / password change |
 | [documentdb](https://github.com/documentdb/documentdb) | 0.113-0 | 17, 18 | MongoDB-compatible document database engine (BSON types and CRUD API) |
+| [extra_window_functions](https://github.com/xocolatl/extra_window_functions) | 1.0 | 17, 18, 19 | Extra window functions (ignore-nulls variants, nth-from-last) |
+| [first_last_agg](https://github.com/wulczer/first_last_agg) | 0.1.4 | 17, 18 | first() and last() aggregate functions |
 | [h3-pg](https://github.com/zachasme/h3-pg) | 4.2.3 | 17, 18 | Uber H3 hexagonal geospatial indexing |
 | [hll](https://github.com/citusdata/postgresql-hll) | 2.21 | 17, 18, 19 | HyperLogLog probabilistic distinct counting |
 | [http](https://github.com/pramsey/pgsql-http) | 1.7.1 | 17, 18, 19 | HTTP client for PostgreSQL (web requests from SQL) |
 | [hypopg](https://github.com/HypoPG/hypopg) | 1.4.3 | 17, 18, 19 | Hypothetical indexes for what-if analysis |
 | [ip4r](https://github.com/RhodiumToad/ip4r) | 2.4.3 | 17, 18, 19 | IPv4/IPv6 range data types with GiST indexing |
+| [jsquery](https://github.com/postgrespro/jsquery) | 1.2 | 17, 18 | JSON query language with GIN indexing |
 | [orafce](https://github.com/orafce/orafce) | 4.16.7 | 17, 18, 19 | Oracle compatibility functions and packages |
 | [pgaudit](https://github.com/pgaudit/pgaudit) | 17.1 | 17, 18 | Audit logging (session and object-level) |
 | [pg_bigm](https://github.com/pgbigm/pg_bigm) | 1.2 | 17, 18 | 2-gram full text search (better for CJK languages) |
@@ -161,6 +164,7 @@ promoted to stable.
 | [pglogical](https://github.com/2ndQuadrant/pglogical) | 2.4.7 | 17, 18, 19 | Logical streaming replication using publish/subscribe model |
 | [pgrouting](https://github.com/pgRouting/pgrouting) | 4.0.1 | 17, 18, 19 | Geospatial routing and network analysis on PostGIS |
 | [pgsodium](https://github.com/michelp/pgsodium) | 3.1.11 | 17, 18, 19 | Modern cryptography using libsodium |
+| [pgsphere](https://github.com/postgrespro/pgsphere) | 1.5.2 | 17, 18 | Spherical data types (points, circles, polygons) for astronomy/geo |
 | [pgtap](https://github.com/theory/pgtap) | 1.3.4 | 17, 18, 19 | Unit testing framework for PostgreSQL |
 | [pgtt](https://github.com/darold/pgtt) | 4.5 | 17, 18, 19 | Oracle-style Global Temporary Tables |
 | [pgvector](https://github.com/pgvector/pgvector) | 0.8.3 | 17, 18, 19 | Vector similarity search for AI/embeddings |
@@ -171,6 +175,7 @@ promoted to stable.
 | [PostGIS](https://github.com/postgis/postgis) | 3.6.4 | 17, 18, 19 | Geospatial extensions (geometry, geography, raster, MVT) |
 | [postgres_protobuf](https://github.com/mpartel/postgres-protobuf) | 0.3.2 | 17, 18, 19 | Protocol Buffer support (query, convert to/from JSON) |
 | [prefix](https://github.com/dimitri/prefix) | 1.2.11 | 17, 18, 19 | Prefix range data type for phone routing lookups |
+| [rational](https://github.com/begriffs/pg_rational) | 0.0.2 | 17, 18, 19 | Precise fractional (rational number) arithmetic |
 | [rum](https://github.com/postgrespro/rum) | 1.3.15 | 17, 18 | GIN-like index with ordering for full text search |
 | [semver](https://github.com/theory/pg-semver) | 0.41.0 | 17, 18, 19 | Semantic version data type |
 | [tdigest](https://github.com/tvondra/tdigest) | 1.4.3 | 17, 18, 19 | T-digest for quantile and percentile estimation |
