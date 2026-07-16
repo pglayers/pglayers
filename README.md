@@ -123,6 +123,7 @@ promoted to stable.
 
 | Extension | Version | PG versions | Description |
 |-----------|---------|-------------|-------------|
+| [address_standardizer](https://github.com/postgis/address_standardizer) | 3.7.0 | 17, 18, 19 | Parse and normalize postal addresses into components |
 | [age](https://github.com/apache/age) | 1.7.0-rc0 | 17, 18 | Graph database with openCypher query language (Apache AGE) |
 | [anon](https://gitlab.com/dalibo/postgresql_anonymizer) | 3.1.1 | 17, 18 | Data anonymization and masking |
 | [credcheck](https://github.com/HexaCluster/credcheck) | 5.0 | 17, 18, 19 | Credential checks on user creation / password change |
@@ -143,6 +144,7 @@ promoted to stable.
 | [pg_csv](https://github.com/PostgREST/pg_csv) | 1.0.2 | 17, 18, 19 | Aggregate result rows into CSV text |
 | [pg_dirtyread](https://github.com/df7cb/pg_dirtyread) | 2.8 | 17, 18, 19 | Read dead (deleted, unvacuumed) tuples for forensics/recovery |
 | [pg_pwhash](https://github.com/cybertec-postgresql/pg_pwhash) | 1.0 | 17, 18, 19 | Password hashing (scrypt, argon2, yescrypt) |
+| [pg_show_plans](https://github.com/cybertec-postgresql/pg_show_plans) | 2.1.8 | 17, 18, 19 | Show execution plans of all currently running queries |
 | [pgaudit](https://github.com/pgaudit/pgaudit) | 17.1 | 17, 18 | Audit logging (session and object-level) |
 | [pg_bigm](https://github.com/pgbigm/pg_bigm) | 1.2 | 17, 18 | 2-gram full text search (better for CJK languages) |
 | [pg_cron](https://github.com/citusdata/pg_cron) | 1.6.7 | 17, 18 | Job scheduler (periodic jobs inside the database) |
@@ -180,6 +182,7 @@ promoted to stable.
 | [pgtt](https://github.com/darold/pgtt) | 4.5 | 17, 18, 19 | Oracle-style Global Temporary Tables |
 | [pgvector](https://github.com/pgvector/pgvector) | 0.8.3 | 17, 18, 19 | Vector similarity search for AI/embeddings |
 | [pgvectorscale](https://github.com/timescale/pgvectorscale) | 0.9.0 | 17, 18 | High-performance vector search with DiskANN (complements pgvector) |
+| [pljs](https://github.com/plv8/pljs) | 1.0.5 | 17, 18 | JavaScript (QuickJS) procedural language |
 | [plpgsql_check](https://github.com/okbob/plpgsql_check) | 2.9.1 | 17, 18, 19 | PL/pgSQL linter and validator |
 | [plprofiler](https://github.com/bigsql/plprofiler) | 4.2.5 | 17, 18 | Performance profiler for PL/pgSQL functions |
 | [plv8](https://github.com/plv8/plv8) | 3.2.4 | 17, 18 | JavaScript (V8) procedural language |
@@ -190,6 +193,7 @@ promoted to stable.
 | [rational](https://github.com/begriffs/pg_rational) | 0.0.2 | 17, 18, 19 | Precise fractional (rational number) arithmetic |
 | [rum](https://github.com/postgrespro/rum) | 1.3.15 | 17, 18 | GIN-like index with ordering for full text search |
 | [semver](https://github.com/theory/pg-semver) | 0.41.0 | 17, 18, 19 | Semantic version data type |
+| [set_user](https://github.com/pgaudit/set_user) | 4.2.0 | 17, 18, 19 | Auditable privilege escalation control (set_user/reset_user) |
 | [tdigest](https://github.com/tvondra/tdigest) | 1.4.3 | 17, 18, 19 | T-digest for quantile and percentile estimation |
 | [tds_fdw](https://github.com/tds-fdw/tds_fdw) | 2.0.5 | 17, 18 | Foreign data wrapper for SQL Server and Sybase |
 | [temporal_tables](https://github.com/arkhipov/temporal_tables) | 1.2.2 | 17, 18 | System-period temporal tables |
@@ -239,6 +243,7 @@ Extensions that need this:
 | pg_net | `pg_net` |
 | pg_partman | `pg_partman_bgw` |
 | pg_qualstats | `pg_qualstats` |
+| pg_show_plans | `pg_show_plans` |
 | pg_squeeze | `pg_squeeze` |
 | pg_stat_monitor | `pg_stat_monitor` |
 | pg_textsearch | `pg_textsearch` |
@@ -249,6 +254,7 @@ Extensions that need this:
 | pgsodium | `pgsodium` |
 | pgtt | `pgtt` |
 | plprofiler | `plprofiler` |
+| set_user | `set_user` |
 | timescaledb | `timescaledb` |
 
 ### CREATE EXTENSION

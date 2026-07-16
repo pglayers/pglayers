@@ -1,5 +1,6 @@
 # Full extension set -- all extensions provided by pglayers.
 # This file is auto-checked by CI. Run 'make check-profiles' to verify.
+address_standardizer
 age
 anon
 credcheck
@@ -45,6 +46,7 @@ pg_repack
 pg_roaringbitmap
 pgrouting
 pg_rrule
+pg_show_plans
 pg_similarity
 pgsodium
 pgsphere
@@ -57,6 +59,7 @@ pg_uuidv7
 pgvector
 pgvectorscale
 pg_wait_sampling
+pljs
 plpgsql_check
 plprofiler
 plv8
@@ -67,6 +70,7 @@ prioritize
 rational
 rum
 semver
+set_user
 tdigest
 tds_fdw
 temporal_tables
