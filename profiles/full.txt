@@ -10,6 +10,7 @@ h3_pg
 hll
 http
 hypopg
+icu_ext
 ip4r
 jsquery
 orafce
@@ -30,10 +31,12 @@ pg_lake
 pglogical
 pg_net
 pg_partman
+pgpcre
 pg_qualstats
 pg_repack
 pg_roaringbitmap
 pgrouting
+pg_rrule
 pg_similarity
 pgsodium
 pgsphere
@@ -59,5 +62,7 @@ tdigest
 tds_fdw
 temporal_tables
 timescaledb
+timestamp9
+toastinfo
 wal2json
 wrappers

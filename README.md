@@ -133,6 +133,7 @@ promoted to stable.
 | [hll](https://github.com/citusdata/postgresql-hll) | 2.21 | 17, 18, 19 | HyperLogLog probabilistic distinct counting |
 | [http](https://github.com/pramsey/pgsql-http) | 1.7.1 | 17, 18, 19 | HTTP client for PostgreSQL (web requests from SQL) |
 | [hypopg](https://github.com/HypoPG/hypopg) | 1.4.3 | 17, 18, 19 | Hypothetical indexes for what-if analysis |
+| [icu_ext](https://github.com/dverite/icu_ext) | 1.11.0 | 17, 18, 19 | ICU functions: Unicode names, transliteration, spellout, collation |
 | [ip4r](https://github.com/RhodiumToad/ip4r) | 2.4.3 | 17, 18, 19 | IPv4/IPv6 range data types with GiST indexing |
 | [jsquery](https://github.com/postgrespro/jsquery) | 1.2 | 17, 18 | JSON query language with GIN indexing |
 | [orafce](https://github.com/orafce/orafce) | 4.16.7 | 17, 18, 19 | Oracle compatibility functions and packages |
@@ -153,6 +154,7 @@ promoted to stable.
 | [pg_qualstats](https://github.com/powa-team/pg_qualstats) | 2.1.4 | 17, 18, 19 | Statistics collector for WHERE clause predicates |
 | [pg_repack](https://github.com/reorg/pg_repack) | 1.5.3 | 17, 18, 19 | Online table reorganization without heavy locks |
 | [pg_roaringbitmap](https://github.com/ChenHuajun/pg_roaringbitmap) | 1.1.0 | 17, 18 | Roaring bitmap data type for fast set operations |
+| [pg_rrule](https://github.com/Natureshadow/pg_rrule) | 0.3.0 | 17, 18, 19 | iCalendar RRULE recurrence type and occurrence expansion |
 | [pg_similarity](https://github.com/eulerto/pg_similarity) | 1.0 | 17, 18 | Similarity functions (Levenshtein, Jaro-Winkler, Cosine, Jaccard) |
 | [pg_squeeze](https://github.com/cybertec-postgresql/pg_squeeze) | 1.9.3 | 17, 18, 19 | Remove unused space from tables without heavy locks |
 | [pg_stat_monitor](https://github.com/percona/pg_stat_monitor) | 2.3.2 | 17, 18 | Enhanced query statistics with histograms and buckets |
@@ -162,6 +164,7 @@ promoted to stable.
 | [pgfincore](https://github.com/klando/pgfincore) | 1.4.0 | 17, 18, 19 | Inspect and manage OS page cache for data files |
 | [pgjwt](https://github.com/michelp/pgjwt) | master | 17, 18, 19 | JSON Web Token (JWT) generation and validation |
 | [pglogical](https://github.com/2ndQuadrant/pglogical) | 2.4.7 | 17, 18, 19 | Logical streaming replication using publish/subscribe model |
+| [pgpcre](https://github.com/petere/pgpcre) | 0.20190509 | 17, 18, 19 | Perl-compatible regular expression (PCRE) type and functions |
 | [pgrouting](https://github.com/pgRouting/pgrouting) | 4.0.1 | 17, 18, 19 | Geospatial routing and network analysis on PostGIS |
 | [pgsodium](https://github.com/michelp/pgsodium) | 3.1.11 | 17, 18, 19 | Modern cryptography using libsodium |
 | [pgsphere](https://github.com/postgrespro/pgsphere) | 1.5.2 | 17, 18 | Spherical data types (points, circles, polygons) for astronomy/geo |
@@ -182,6 +185,8 @@ promoted to stable.
 | [tds_fdw](https://github.com/tds-fdw/tds_fdw) | 2.0.5 | 17, 18 | Foreign data wrapper for SQL Server and Sybase |
 | [temporal_tables](https://github.com/arkhipov/temporal_tables) | 1.2.2 | 17, 18 | System-period temporal tables |
 | [timescaledb](https://github.com/timescale/timescaledb) | 2.28.1 | 17, 18 | Time-series hypertables, compression, continuous aggregates |
+| [timestamp9](https://github.com/optiver/timestamp9) | 1.4.0 | 17, 18, 19 | Nanosecond-precision timestamp type |
+| [toastinfo](https://github.com/df7cb/toastinfo) | 1.7 | 17, 18, 19 | Inspect the TOAST storage details of a value |
 | [wal2json](https://github.com/eulerto/wal2json) | 2.6 | 17, 18 | JSON output plugin for logical replication / CDC |
 | [wrappers](https://github.com/supabase/wrappers) | 0.6.2 | 17, 18 | Foreign Data Wrapper framework (Stripe, S3, Firebase, etc.) |
 
