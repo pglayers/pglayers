@@ -87,16 +87,30 @@ RUN set -eux; \
     LIBDIR="/output/usr/lib/postgresql/${PG}/lib"; \
     DEPS_DIR="${LIBDIR}/${EXT}-deps"; \
     tag="pglx_${EXT}_"; \
-    [ -d "$LIBDIR" ] || exit 0; \
+    # Bundled runtime deps = non-base .so the bundling stage copied outside the
+    # PostgreSQL tree. Determine this FIRST -- independent of $LIBDIR -- so we
+    # never silently leave global deps behind (collision risk) just because the
+    # extension has no PG libdir.
+    bundled="$(find /output/usr/lib -path '/output/usr/lib/postgresql' -prune -o \
+        -name '*.so*' \( -type f -o -type l \) -print 2>/dev/null)"; \
+    if [ -z "$bundled" ]; then \
+        find /output/usr/lib -type d -empty -delete 2>/dev/null || true; \
+        exit 0; \
+    fi; \
+    # There ARE bundled deps: they must be relocated into the extension-private
+    # dir + soname-mangled to stay collision-safe. That relies on the layer's
+    # own ELF objects living in the PG libdir (so their RUNPATH can reach
+    # $ORIGIN/<ext>-deps). A binary-only layout (deps but no PG libdir) can't be
+    # handled generically here -- fail loudly and direct to a custom Dockerfile
+    # rather than shipping global, collision-prone deps.
+    if [ ! -d "$LIBDIR" ]; then \
+        echo "classic-relocate: ${EXT} bundles runtime deps but ships no PostgreSQL libdir (${LIBDIR#/output}); the shared template can only relocate deps for extensions whose ELF objects live there. Give this extension a custom Dockerfile (see pg_lake)." >&2; \
+        exit 1; \
+    fi; \
     mkdir -p "$DEPS_DIR"; \
     find /output/usr/lib -path '/output/usr/lib/postgresql' -prune -o \
         -name '*.so*' \( -type f -o -type l \) -print \
         | while IFS= read -r lib; do mv "$lib" "$DEPS_DIR/"; done; \
-    if [ -z "$(ls -A "$DEPS_DIR" 2>/dev/null)" ]; then \
-        rmdir "$DEPS_DIR" 2>/dev/null || true; \
-        find /output/usr/lib -type d -empty -delete 2>/dev/null || true; \
-        exit 0; \
-    fi; \
     for dep in "$DEPS_DIR"/*.so*; do \
         [ -f "$dep" ] || continue; \
         bn="$(basename "$dep")"; \

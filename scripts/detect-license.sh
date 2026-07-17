@@ -14,14 +14,20 @@ pg="${1:?usage: detect-license.sh <pg> <apt_package>}"
 pkg="${2:?usage: detect-license.sh <pg> <apt_package>}"
 tag="$pg"; [ "$pg" = "19" ] && tag="19beta1"
 
-# Fetch the whole copyright file once.
-copyright="$(docker run --rm "postgres:${tag}" bash -c '
+# Fetch the whole copyright file once. Distinguish an infrastructure failure
+# (docker/apt error -> fail fast, non-zero) from a package that installs but
+# ships no copyright file (-> empty output -> UNKNOWN). The inner `if` keeps a
+# missing copyright from being reported as a docker failure.
+if ! copyright="$(docker run --rm "postgres:${tag}" bash -c '
     set -e
     apt-get update >/dev/null 2>&1
     apt-get install -y --no-install-recommends "postgresql-'"$pg"'-'"$pkg"'" >/dev/null 2>&1
     f="/usr/share/doc/postgresql-'"$pg"'-'"$pkg"'/copyright"
-    [ -f "$f" ] && cat "$f"
-' 2>/dev/null || true)"
+    if [ -f "$f" ]; then cat "$f"; fi
+' 2>/dev/null)"; then
+    echo "detect-license: failed to query/install postgresql-${pg}-${pkg} (docker/apt error)" >&2
+    exit 1
+fi
 
 [ -n "$copyright" ] || { echo "UNKNOWN"; exit 0; }
 
