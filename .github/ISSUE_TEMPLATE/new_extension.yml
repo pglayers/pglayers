@@ -36,6 +36,7 @@ body:
         - Apache 2.0
         - ISC
         - MPL-2.0
+        - Artistic-2.0
         - GPL-2.0
         - Other (specify below)
     validations:
