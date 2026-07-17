@@ -220,26 +220,39 @@ for ext in "${EXTENSIONS[@]}"; do
             echo "COPY --from=${img} / /extensions/${ext}/"
             echo "RUN echo /extensions/${ext}/lib > /etc/ld.so.conf.d/pglayers-selftest.conf && ldconfig"
         } > "$sc_dockerfile"
-        sc_libroot="/extensions/${ext}/lib"
+        # Isolated layout: the whole /extensions/<ext> tree is extension-owned
+        # (libs in lib/, executables like pgduck_server in bin/), so scan it all.
+        sc_roots="/extensions/${ext}"
     else
         {
             echo "FROM postgres:${PG_TAG}"
             echo "COPY --from=${img} / /"
         } > "$sc_dockerfile"
-        sc_libroot="/usr/lib/postgresql/${PG}/lib"
+        # Classic layout: the extension overlays onto the base image. Scan the
+        # dirs it ships into -- the PG lib dir (its .so files + private deps)
+        # AND the bin dirs (executables like pgduck_server). Base binaries also
+        # live in bin/ but they resolve on the bare base image, so they never
+        # produce false positives; only a non-self-contained extension object
+        # will report "not found".
+        sc_roots="/usr/lib/postgresql/${PG}/lib /usr/lib/postgresql/${PG}/bin /usr/local/bin"
     fi
     sc_img="pglayers-selftest:${PG}"
     if ! docker build -t "$sc_img" -f "$sc_dockerfile" "${TMPDIR}" >/dev/null 2>&1; then
         warn "${ext}: could not build self-containment test image (skipping)"
         continue
     fi
-    # ldd every ELF object the extension ships (its .so files AND its bundled
-    # private deps) and collect any unresolved sonames.
+    # ldd every ELF object the extension ships -- shared libraries (its .so
+    # files and bundled private deps) AND executables (e.g. pgduck_server) --
+    # and collect any unresolved sonames. ELF membership is detected by magic
+    # bytes so shell scripts and data files in bin/ are skipped.
     sc_missing="$(docker run --rm --entrypoint bash "$sc_img" -c '
-        find "'"$sc_libroot"'" -name "*.so*" -type f 2>/dev/null \
-            | while IFS= read -r so; do
-                ldd "$so" 2>/dev/null | awk "/not found/ {print \$1}"
-            done | sort -u
+        for root in '"$sc_roots"'; do
+            [ -d "$root" ] || continue
+            find "$root" -type f 2>/dev/null
+        done | while IFS= read -r f; do
+            [ "$(od -An -tx1 -N4 "$f" 2>/dev/null | tr -d " ")" = "7f454c46" ] || continue
+            ldd "$f" 2>/dev/null | awk "/not found/ {print \$1}"
+        done | sort -u
     ' 2>/dev/null || true)"
     docker rmi "$sc_img" >/dev/null 2>&1 || true
     if [ -z "$sc_missing" ]; then

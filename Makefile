@@ -36,7 +36,7 @@ help: ## Show this help
 	@printf "  make list-profiles                 List available profiles\n"
 	@printf "  make check-profiles                Verify profile files are in sync\n"
 	@printf "  make check-licenses               Verify extension licenses comply with policy\n"
-	@printf "  make add-apt-ext PKG=cron         Scaffold a new APT extension\n"
+	@printf "  make add-apt-ext PKG=cron NAME=pg_cron  Scaffold a new APT extension\n"
 	@printf "  make clean EXT=pgvector           Remove built image for one extension\n"
 	@printf "  make clean-all                    Remove all built extension images\n"
 	@printf "\nVariables:\n"
@@ -175,6 +175,7 @@ add-apt-ext: ## Scaffold a new APT extension (PKG=<apt package> [NAME=<dir>] [PG
 	@test -n "$(PKG)" || { echo "Usage: make add-apt-ext PKG=<apt package> [NAME=<dir>] [PG=17]"; exit 1; }
 	@name="$(or $(NAME),$(subst -,_,$(PKG)))"; \
 	pg="$(or $(PG),17)"; \
+	pgtag="$$pg"; [ "$$pg" = "19" ] && pgtag="19beta1"; \
 	dir="extensions/$$name"; \
 	if [ -e "$$dir" ]; then echo "Error: $$dir already exists"; exit 1; fi; \
 	echo "Probing PGDG for postgresql-$$pg-$(PKG)..."; \
@@ -184,7 +185,7 @@ add-apt-ext: ## Scaffold a new APT extension (PKG=<apt package> [NAME=<dir>] [PG
 	echo "Detecting license from Debian copyright..."; \
 	lic=$$(./scripts/detect-license.sh "$$pg" "$(PKG)"); \
 	echo "  license: $$lic"; \
-	desc=$$(docker run --rm postgres:$$pg bash -c "apt-get update >/dev/null 2>&1; apt-cache show postgresql-$$pg-$(PKG) 2>/dev/null | awk '/^Description:/{sub(/^Description:[[:space:]]*/,\"\"); print; exit}'"); \
+	desc=$$(docker run --rm postgres:$$pgtag bash -c "apt-get update >/dev/null 2>&1; apt-cache show postgresql-$$pg-$(PKG) 2>/dev/null | awk '/^Description:/{sub(/^Description:[[:space:]]*/,\"\"); print; exit}'"); \
 	mkdir -p "$$dir"; \
 	{ \
 		echo "DESCRIPTION=\"$$desc\""; \

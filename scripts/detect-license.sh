@@ -54,10 +54,19 @@ _known() {
 }
 
 # Split "A or B or C" and pick the first allowed option; else the first.
+# Split on the literal " or " separator only -- never word-split on internal
+# whitespace, so multi-word identifiers (e.g. "Apache 2.0") survive intact.
 _choose() {
-    local raw="$1" first="" n
-    # shellcheck disable=SC2001
-    for part in $(echo "$raw" | sed 's/ or /\n/g'); do
+    local first="" n part rest="$1"
+    while [ -n "$rest" ]; do
+        case "$rest" in
+            *" or "*) part="${rest%% or *}"; rest="${rest#* or }" ;;
+            *)        part="$rest";          rest="" ;;
+        esac
+        # Trim surrounding whitespace from the option.
+        part="${part#"${part%%[![:space:]]*}"}"
+        part="${part%"${part##*[![:space:]]}"}"
+        [ -n "$part" ] || continue
         n="$(_normalize "$part")"
         [ -n "$first" ] || first="$n"
         _in_allow "$n" && { echo "$n"; return 0; }
