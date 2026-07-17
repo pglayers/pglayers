@@ -249,13 +249,21 @@ for ext in "${EXTENSIONS[@]}"; do
     # binaries, so the scan is both complete and fast. ELF membership is
     # detected by magic bytes so scripts/data in bin/ are skipped.
     sc_files="$(comm -23 "${TMPDIR}/${ext}.txt" "${TMPDIR}/base.txt" | sed "s|^|${sc_prefix}|")"
-    sc_missing="$(printf '%s\n' "$sc_files" | docker run --rm -i --entrypoint bash "$sc_img" -c '
+    # Capture the docker run's own exit status (pipefail is on): a failure to
+    # execute the check must FAIL the gate, not be swallowed into an empty
+    # result that would falsely read as "self-contained". The inner ldd/od
+    # noise is suppressed, but the container's own failure is not.
+    if ! sc_missing="$(printf '%s\n' "$sc_files" | docker run --rm -i --entrypoint bash "$sc_img" -c '
         while IFS= read -r f; do
             { [ -n "$f" ] && [ -f "$f" ]; } || continue
             [ "$(od -An -tx1 -N4 "$f" 2>/dev/null | tr -d " ")" = "7f454c46" ] || continue
             ldd "$f" 2>/dev/null | awk "/not found/ {print \$1}"
         done | sort -u
-    ' 2>/dev/null || true)"
+    ')"; then
+        docker rmi "$sc_img" >/dev/null 2>&1 || true
+        fail "${ext}: self-containment check could not run (docker error)"
+        continue
+    fi
     docker rmi "$sc_img" >/dev/null 2>&1 || true
     if [ -z "$sc_missing" ]; then
         pass "${ext}: self-contained (all deps resolve standalone)"
