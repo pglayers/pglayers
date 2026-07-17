@@ -240,7 +240,7 @@ image: ## Build a combined image with all extensions
 	{ \
 		echo "FROM postgres:$(PG)"; \
 		for ext in $(EXTENSIONS); do \
-			ver=$(./scripts/ext-version.sh "$ext" "$(PG)"); \
+			ver=$$(./scripts/ext-version.sh "$$ext" "$(PG)"); \
 			[ -z "$$ver" ] && continue; \
 			total=$$((total + 1)); \
 			if [ "$(REGISTRY)" = "local" ]; then \
@@ -271,7 +271,7 @@ image: ## Build a combined image with all extensions
 		fi; \
 		preloads=""; \
 		for ext in $(EXTENSIONS); do \
-			ver=$(./scripts/ext-version.sh "$ext" "$(PG)"); \
+			ver=$$(./scripts/ext-version.sh "$$ext" "$(PG)"); \
 			[ -z "$$ver" ] && continue; \
 			if [ "$(REGISTRY)" = "local" ]; then \
 				docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
@@ -283,7 +283,7 @@ image: ## Build a combined image with all extensions
 		done; \
 		[ -n "$$preloads" ] && echo "RUN echo \"shared_preload_libraries = '$$preloads'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
 		for ext in $(EXTENSIONS); do \
-			ver=$(./scripts/ext-version.sh "$ext" "$(PG)"); \
+			ver=$$(./scripts/ext-version.sh "$$ext" "$(PG)"); \
 			[ -z "$$ver" ] && continue; \
 			if [ "$(REGISTRY)" = "local" ]; then \
 				docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
@@ -302,7 +302,7 @@ image: ## Build a combined image with all extensions
 		fi; \
 		companions=""; \
 		for ext in $(EXTENSIONS); do \
-			ver=$(./scripts/ext-version.sh "$ext" "$(PG)"); \
+			ver=$$(./scripts/ext-version.sh "$$ext" "$(PG)"); \
 			[ -z "$$ver" ] && continue; \
 			if [ "$(REGISTRY)" = "local" ]; then \
 				docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
