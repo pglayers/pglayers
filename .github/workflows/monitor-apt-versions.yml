@@ -1,0 +1,87 @@
+name: Monitor APT Extension Versions
+
+# APT-based extensions carry no VERSION_XX -- apt installs whatever PGDG ships
+# at build time, so version bumps are otherwise invisible in git. This workflow
+# regenerates the apt-versions lockfile (.github/apt-versions.json) on a
+# schedule and, when PGDG has shipped new versions, opens a PR. That PR is the
+# explicit, git-visible record of the update; merging it triggers build-push.yml
+# to rebuild exactly the affected extension layers.
+
+on:
+  schedule:
+    # Daily at 09:00 UTC (after the source-build monitor at 08:00).
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+jobs:
+  check-apt-versions:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # PAT so the PR triggers downstream workflows; GITHUB_TOKEN fallback.
+          token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Regenerate apt-versions lockfile
+        run: |
+          set -eo pipefail
+          cp .github/apt-versions.json /tmp/apt-versions.old.json 2>/dev/null \
+            || echo '{}' > /tmp/apt-versions.old.json
+          ./scripts/apt-lock.sh
+
+      - name: Open PR on change
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          set -eo pipefail
+
+          if git diff --quiet -- .github/apt-versions.json; then
+            echo "No apt version changes."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Human-readable changelog: "- `ext` (PG NN): `old` -> `new`".
+          summary=$(jq -r --slurpfile old /tmp/apt-versions.old.json '
+            [ to_entries[]
+              | .key as $ext | (.value | to_entries[])
+              | { ext: $ext, pg: .key, new: .value,
+                  old: ($old[0][$ext][.key] // "-") }
+              | select(.new != .old)
+            ]
+            | map("- `\(.ext)` (PG \(.pg)): `\(.old)` -> `\(.new)`")
+            | join("\n")
+          ' .github/apt-versions.json)
+
+          echo "Changes:"
+          echo "$summary"
+
+          branch="deps/apt-versions"
+          git checkout -B "$branch"
+          git add .github/apt-versions.json
+          git commit -m "deps(apt): update tracked apt versions"
+          git push -f -u origin "$branch"
+
+          body=$(printf 'PGDG published new apt package versions. This updates the recorded lockfile (.github/apt-versions.json); merging rebuilds the affected extension layers.\n\n%s\n\n---\n*Automated by monitor-apt-versions.*\n' "$summary")
+
+          existing=$(gh pr list --head "$branch" --state open --json number --jq 'length')
+          if [ "$existing" -gt 0 ]; then
+            echo "PR already open for $branch; force-pushed branch updates it."
+          else
+            gh pr create \
+              --title "deps(apt): update tracked apt versions" \
+              --body "$body" \
+              --base main \
+              --head "$branch"
+          fi
+
+          # Enable auto-merge so the lockfile lands on main (and the rebuild
+          # fires) as soon as required checks pass -- no manual merge needed.
+          # Falls back gracefully if auto-merge is disabled on the repo.
+          gh pr merge "$branch" --auto --squash \
+            || echo "WARN: could not enable auto-merge (enable it in repo settings)."

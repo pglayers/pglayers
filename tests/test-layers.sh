@@ -33,21 +33,27 @@ fail() { ((FAIL++)) || true; printf -- "${RED}FAIL${NC} %s\n" "$1"; }
 warn() { ((WARN++)) || true; printf -- "${YELLOW}WARN${NC} %s\n" "$1"; }
 info() { printf -- "---- %s\n" "$1"; }
 
-# Discover extensions
+# Discover extensions.
+# An extension is included for this PG major if it has a resolvable version:
+# VERSION_<pg> for source-built extensions, or an available PGDG package for
+# APT extensions (scripts/ext-version.sh handles both).
 EXTENSIONS=()
 if [ -n "${PGLAYERS_EXTENSIONS:-}" ]; then
     # Profile mode: use pre-filtered list from Makefile/environment
     for ext in $PGLAYERS_EXTENSIONS; do
-        ver_var="VERSION_${PG}"
-        ver="$(bash -c "source extensions/${ext}/extension.conf && echo \${${ver_var}}")"
+        # No `|| true`: a version-resolution error (e.g. PGDG probe failed)
+        # must fail this correctness gate rather than silently drop extensions.
+        # A genuinely unavailable package returns success with empty output.
+        ver="$(scripts/ext-version.sh "$ext" "$PG")"
         [ -n "$ver" ] && EXTENSIONS+=("$ext")
     done
 else
     # Default: discover from filesystem
     for dir in extensions/*/; do
         ext="$(basename "$dir")"
-        ver_var="VERSION_${PG}"
-        ver="$(bash -c "source ${dir}/extension.conf && echo \${${ver_var}}")"
+        # No `|| true`: see the profile-mode note above -- fail on a real
+        # resolution error, treat a genuinely unavailable package as empty.
+        ver="$(scripts/ext-version.sh "$ext" "$PG")"
         [ -n "$ver" ] && EXTENSIONS+=("$ext")
     done
 fi
@@ -199,9 +205,79 @@ echo
 fi  # end PG < 18 base overwrite check
 
 # ============================================================
-# Phase 5: Build combined image and check shared libraries
+# Phase 5: Self-containment (each extension resolves its own deps alone)
 # ============================================================
-info "Phase 5: Building combined image and checking shared libraries..."
+info "Phase 5: Checking extension self-containment..."
+
+# Every extension layer MUST be self-contained: overlaid on the *bare* base
+# image -- with no sibling extension layers present -- each of its ELF objects
+# must resolve all of its dynamic dependencies. This catches extensions that
+# rely on a sibling layer (e.g. postgis) to provide a shared library such as
+# libcurl. In the classic (PG 17) layout, bundled deps live in a private
+# <ext>-deps/ dir reached via RUNPATH; in the isolated (PG 18+) layout they
+# live flat in the extension's own /extensions/<ext>/lib.
+for ext in "${EXTENSIONS[@]}"; do
+    img="${REGISTRY}/${PREFIX}-${ext}:${PG}"
+    sc_dockerfile="${TMPDIR}/Dockerfile.selftest"
+    if [ "$PG" -ge 18 ] 2>/dev/null; then
+        {
+            echo "FROM postgres:${PG_TAG}"
+            echo "COPY --from=${img} / /extensions/${ext}/"
+            echo "RUN echo /extensions/${ext}/lib > /etc/ld.so.conf.d/pglayers-selftest.conf && ldconfig"
+        } > "$sc_dockerfile"
+        # Isolated layout: the extension's files are COPYed under this prefix.
+        sc_prefix="/extensions/${ext}"
+    else
+        {
+            echo "FROM postgres:${PG_TAG}"
+            echo "COPY --from=${img} / /"
+        } > "$sc_dockerfile"
+        # Classic layout: the extension overlays onto the base image at root.
+        sc_prefix=""
+    fi
+    sc_img="pglayers-selftest:${PG}"
+    if ! docker build -t "$sc_img" -f "$sc_dockerfile" "${TMPDIR}" >/dev/null 2>&1; then
+        # A self-test image that won't build means the layer is broken or a
+        # dependency is unsatisfiable -- this gate must fail, not skip.
+        fail "${ext}: could not build self-containment test image"
+        continue
+    fi
+    # ldd every ELF object the extension SHIPS -- and only those. The set of
+    # files the layer introduces is exactly (its image file list) minus (the
+    # bare base image file list) from Phase 2; this covers its .so files AND
+    # any executables (e.g. pg_lake's pgduck_server) while never touching base
+    # binaries, so the scan is both complete and fast. ELF membership is
+    # detected by magic bytes so scripts/data in bin/ are skipped.
+    sc_files="$(comm -23 "${TMPDIR}/${ext}.txt" "${TMPDIR}/base.txt" | sed "s|^|${sc_prefix}|")"
+    # Capture the docker run's own exit status (pipefail is on): a failure to
+    # execute the check must FAIL the gate, not be swallowed into an empty
+    # result that would falsely read as "self-contained". The inner ldd/od
+    # noise is suppressed, but the container's own failure is not.
+    if ! sc_missing="$(printf '%s\n' "$sc_files" | docker run --rm -i --entrypoint bash "$sc_img" -c '
+        while IFS= read -r f; do
+            { [ -n "$f" ] && [ -f "$f" ]; } || continue
+            [ "$(od -An -tx1 -N4 "$f" 2>/dev/null | tr -d " ")" = "7f454c46" ] || continue
+            ldd "$f" 2>/dev/null | awk "/not found/ {print \$1}"
+        done | sort -u
+    ')"; then
+        docker rmi "$sc_img" >/dev/null 2>&1 || true
+        fail "${ext}: self-containment check could not run (docker error)"
+        continue
+    fi
+    docker rmi "$sc_img" >/dev/null 2>&1 || true
+    if [ -z "$sc_missing" ]; then
+        pass "${ext}: self-contained (all deps resolve standalone)"
+    else
+        fail "${ext}: NOT self-contained -- unresolved dependencies standalone:"
+        echo "$sc_missing" | sort -u | sed 's/^/       /'
+    fi
+done
+echo
+
+# ============================================================
+# Phase 6: Build combined image and check shared libraries
+# ============================================================
+info "Phase 6: Building combined image and checking shared libraries..."
 
 # Generate a test Dockerfile
 {
@@ -302,9 +378,9 @@ fi
 echo
 
 # ============================================================
-# Phase 6: Functional tests -- load all extensions
+# Phase 7: Functional tests -- load all extensions
 # ============================================================
-info "Phase 6: Functional tests (CREATE EXTENSION + smoke tests)..."
+info "Phase 7: Functional tests (CREATE EXTENSION)..."
 info "Disk usage before starting test container:"
 df -h / 2>/dev/null | tail -1 | sed 's/^/       /'
 
@@ -351,11 +427,14 @@ declare -A EXT_SQL_NAMES=(
     [age]="age"
     [anon]="anon"
     [documentdb]="documentdb_core"
+    [extra_window_functions]="extra_window_functions"
+    [first_last_agg]="first_last_agg"
     [h3_pg]="h3"
     [hll]="hll"
     [http]="http"
     [hypopg]="hypopg"
     [ip4r]="ip4r"
+    [jsquery]="jsquery"
     [orafce]="orafce"
     [pg_bigm]="pg_bigm"
     [pg_cron]="pg_cron"
@@ -383,6 +462,7 @@ declare -A EXT_SQL_NAMES=(
     [pglogical]="pglogical"
     [pgrouting]="pgrouting"
     [pgsodium]="pgsodium"
+    [pgsphere]="pg_sphere"
     [pgtap]="pgtap"
     [pgtt]="pgtt"
     [pgvector]="vector"
@@ -393,6 +473,7 @@ declare -A EXT_SQL_NAMES=(
     [postgis]="postgis"
     [postgres_protobuf]="postgres_protobuf"
     [prefix]="prefix"
+    [rational]="pg_rational"
     [rum]="rum"
     [semver]="semver"
     [tdigest]="tdigest"
@@ -462,146 +543,15 @@ for ext in "${EXTENSIONS[@]}"; do
     fi
 done
 
-# Smoke tests -- only run for extensions present in this PG version
-
-smoke_test() {
-    local desc="$1" sql="$2"
-    local result rc retries=0
-    result="$(docker exec pgx-func-test psql -U postgres -tAc "$sql" 2>&1)" && rc=0 || rc=$?
-    # Retry up to 3 times if the server was in recovery mode
-    while [ "$rc" -ne 0 ] && [ "$retries" -lt 3 ] && echo "$result" | grep -qE "recovery mode|not yet accepting|crash of another|server closed the connection"; do
-        wait_for_ready
-        result="$(docker exec pgx-func-test psql -U postgres -tAc "$sql" 2>&1)" && rc=0 || rc=$?
-        ((retries++)) || true
-    done
-    if [ "$rc" -eq 0 ] && [ -n "$result" ]; then
-        pass "smoke: ${desc}"
-    else
-        fail "smoke: ${desc}: ${result}"
-    fi
-}
-
-# Helper: only run smoke test if extension is in the EXTENSIONS list
+# Helper: only run a step if the extension is present in this PG version.
 has_ext() { printf '%s\n' "${EXTENSIONS[@]}" | grep -qx "$1"; }
 
-has_ext age && smoke_test "age graph" \
-    "LOAD 'age'; SET search_path = ag_catalog; SELECT create_graph('smoke_g'); SELECT drop_graph('smoke_g', true);"
-has_ext anon && smoke_test "anon loaded" \
-    "SELECT count(*) FROM pg_extension WHERE extname = 'anon';"
-has_ext credcheck && smoke_test "credcheck loaded" \
-    "SHOW credcheck.password_min_length;"
-has_ext documentdb && smoke_test "documentdb BSON type" \
-    "SELECT '{\"hello\": \"world\"}'::documentdb_core.bson;"
-has_ext h3_pg && smoke_test "h3 cell" \
-    "SELECT h3_lat_lng_to_cell('(0,0)'::point, 5);"
-has_ext hll && smoke_test "hll aggregate" \
-    "SELECT hll_cardinality(hll_add_agg(hll_hash_integer(g))) FROM generate_series(1,100) g;"
-has_ext http && smoke_test "http functions" \
-    "SELECT count(*) FROM pg_proc WHERE proname = 'http_get';"
-has_ext hypopg && smoke_test "hypopg create index" \
-    "SELECT indexrelid FROM hypopg_create_index('CREATE INDEX ON public.part_config (parent_table)');"
-has_ext ip4r && smoke_test "ip4r range" \
-    "SELECT '192.168.1.0/24'::ip4r;"
-has_ext orafce && smoke_test "orafce nvl" \
-    "SELECT oracle.nvl(NULL::text, 'fallback');"
-has_ext pg_bigm && smoke_test "pg_bigm search" \
-    "SELECT bigm_similarity('hello', 'helo');"
-has_ext pg_cron && smoke_test "pg_cron schedule" \
-    "SELECT cron.schedule('test_job', '* * * * *', 'SELECT 1');"
-has_ext pg_duckdb && smoke_test "pg_duckdb loaded" \
-    "SELECT count(*) FROM pg_extension WHERE extname = 'pg_duckdb';"
-has_ext pg_durable && smoke_test "pg_durable loaded" \
-    "SELECT count(*) FROM pg_extension WHERE extname = 'pg_durable';"
-has_ext pg_graphql && smoke_test "pg_graphql schema" \
-    "SELECT count(*) FROM pg_namespace WHERE nspname = 'graphql';"
-has_ext pg_hashids && smoke_test "pg_hashids encode" \
-    "SELECT id_encode(123);"
-has_ext pg_failover_slots && smoke_test "pg_failover_slots loaded" \
-    "SELECT count(*) FROM pg_proc WHERE proname LIKE 'pg_failover_slot%';"
-has_ext pg_hint_plan && smoke_test "pg_hint_plan loaded" \
-    "SHOW pg_hint_plan.enable_hint;"
-has_ext pg_ivm && smoke_test "pg_ivm functions" \
-    "SELECT count(*) FROM pg_proc WHERE proname = 'create_immv';"
-has_ext pg_jsonschema && smoke_test "pg_jsonschema validate" \
-    "SELECT json_matches_schema('{\"type\":\"object\"}'::json, '{}'::json);"
-has_ext pg_lake && smoke_test "pg_lake fdw" \
-    "SELECT count(*) FROM pg_foreign_data_wrapper WHERE fdwname = 'pg_lake';"
-has_ext pg_net && smoke_test "pg_net schema" \
-    "SELECT count(*) FROM pg_namespace WHERE nspname = 'net';"
-has_ext pg_qualstats && smoke_test "pg_qualstats view" \
-    "SELECT count(*) FROM pg_qualstats();"
-has_ext pg_partman && smoke_test "pg_partman config table" \
-    "SELECT count(*) FROM public.part_config;"
-has_ext pg_repack && smoke_test "pg_repack version" \
-    "SELECT repack.version();"
-has_ext pg_roaringbitmap && smoke_test "pg_roaringbitmap ops" \
-    "SELECT rb_cardinality(rb_build(ARRAY[1,2,3]::int[]));"
-has_ext pg_similarity && smoke_test "pg_similarity levenshtein" \
-    "SELECT lev('hello', 'hallo');"
-has_ext pgrouting && smoke_test "pgrouting dijkstra" \
-    "SELECT count(*) FROM pg_proc WHERE proname = 'pgr_dijkstra';"
-has_ext pgsodium && smoke_test "pgsodium random" \
-    "SELECT length(pgsodium.randombytes_buf(16));"
-has_ext pgtap && smoke_test "pgtap version" \
-    "SELECT pgtap_version();"
-has_ext pgtt && smoke_test "pgtt loaded" \
-    "SELECT count(*) FROM pg_proc WHERE proname = 'pgtt_is_global_temporary';"
-has_ext pg_squeeze && smoke_test "pg_squeeze schema" \
-    "SELECT count(*) FROM squeeze.tables;"
-has_ext pg_stat_monitor && smoke_test "pg_stat_monitor view" \
-    "SELECT count(*) FROM pg_stat_monitor;"
-has_ext pg_textsearch && smoke_test "pg_textsearch index" \
-    "SELECT count(*) FROM pg_available_extensions WHERE name = 'pg_textsearch';"
-has_ext pg_uuidv7 && smoke_test "pg_uuidv7 generate" \
-    "SELECT uuid_generate_v7();"
-has_ext pg_wait_sampling && smoke_test "pg_wait_sampling profile" \
-    "SELECT count(*) FROM pg_wait_sampling_profile;"
-has_ext pgaudit && smoke_test "pgaudit active" \
-    "SHOW pgaudit.log;"
-has_ext pgjwt && smoke_test "pgjwt sign" \
-    "SELECT sign('{\"sub\":\"test\"}'::json, 'secret');"
-has_ext pglogical && smoke_test "pglogical version" \
-    "SELECT pglogical.pglogical_version();"
-has_ext pgvector && smoke_test "pgvector similarity" \
-    "SELECT '[1,2,3]'::vector <-> '[4,5,6]'::vector;"
-has_ext pgvectorscale && smoke_test "pgvectorscale diskann" \
-    "SELECT count(*) FROM pg_am WHERE amname = 'diskann';"
-has_ext pgfincore && smoke_test "pgfincore loaded" \
-    "SELECT count(*) FROM pg_proc WHERE proname = 'pgfincore';"
-has_ext plpgsql_check && smoke_test "plpgsql_check lint" \
-    "SELECT count(*) FROM pg_proc WHERE proname = 'plpgsql_check_function';"
-has_ext plprofiler && smoke_test "plprofiler loaded" \
-    "SELECT count(*) FROM pg_proc WHERE proname = 'pl_profiler_get_source';"
-has_ext plv8 && smoke_test "plv8 javascript" \
-    "SELECT plv8_version();"
-has_ext postgis && smoke_test "PostGIS geometry" \
-    "SELECT ST_AsText(ST_GeomFromText('POINT(1 2)'));"
-has_ext postgres_protobuf && smoke_test "postgres_protobuf loaded" \
-    "SELECT count(*) FROM pg_proc WHERE proname = 'protobuf_decode';"
-has_ext prefix && smoke_test "prefix range" \
-    "SELECT '123'::prefix_range @> '1234567890';"
-has_ext rum && smoke_test "rum index" \
-    "SELECT 1 FROM pg_available_extensions WHERE name = 'rum';"
-has_ext semver && smoke_test "semver comparison" \
-    "SELECT '1.2.3'::semver > '1.2.2'::semver;"
-has_ext tdigest && smoke_test "tdigest percentile" \
-    "SELECT tdigest_percentile(x, 100, 0.5) FROM generate_series(1,100) x;"
-has_ext tds_fdw && smoke_test "tds_fdw wrapper" \
-    "SELECT count(*) FROM pg_foreign_data_wrapper WHERE fdwname = 'tds_fdw';"
-has_ext temporal_tables && smoke_test "temporal_tables loaded" \
-    "SELECT proname FROM pg_proc WHERE proname = 'versioning';"
-has_ext timescaledb && smoke_test "timescaledb available" \
-    "SELECT count(*) FROM pg_available_extensions WHERE name = 'timescaledb';"
-has_ext wal2json && smoke_test "wal2json plugin exists" \
-    "SELECT count(*) FROM pg_proc WHERE proname = 'pg_logical_slot_get_changes';"
-has_ext wrappers && smoke_test "wrappers loaded" \
-    "SELECT count(*) FROM pg_extension WHERE extname = 'wrappers';"
 echo
 
 # ============================================================
-# Phase 7: Integration tests (per-extension test.sql files)
+# Phase 8: Integration tests (per-extension test.sql files)
 # ============================================================
-info "Phase 7: Integration tests (extensions/*/test.sql)..."
+info "Phase 8: Integration tests (extensions/*/test.sql)..."
 
 # Ensure container is healthy before starting integration tests
 wait_for_ready
@@ -609,7 +559,7 @@ wait_for_ready
 for ext in "${EXTENSIONS[@]}"; do
     test_file="extensions/${ext}/test.sql"
     if [ ! -f "$test_file" ]; then
-        warn "${ext}: no test.sql found"
+        fail "${ext}: no test.sql (every extension must ship functional tests)"
         continue
     fi
     output="$(docker exec -i pgx-func-test psql -U postgres -tA -v ON_ERROR_STOP=0 < "$test_file" 2>&1)" || true
@@ -630,15 +580,15 @@ for ext in "${EXTENSIONS[@]}"; do
     elif [ "$passes" -gt 0 ]; then
         pass "integration ${ext} (${passes} checks)"
     else
-        warn "${ext}: test.sql produced no PASS/FAIL output"
+        fail "${ext}: test.sql produced no PASS/FAIL output (extension failed to load or assert)"
     fi
 done
 
 # ============================================================
-# Phase 8: MongoDB wire protocol test (documentdb gateway)
+# Phase 9: MongoDB wire protocol test (documentdb gateway)
 # ============================================================
 if has_ext documentdb; then
-    info "Phase 8: DocumentDB MongoDB wire protocol test..."
+    info "Phase 9: DocumentDB MongoDB wire protocol test..."
     wait_for_ready
 
     # Create a test user (BlockedRolePrefixes blocks 'pg*' prefix)

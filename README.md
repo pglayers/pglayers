@@ -24,7 +24,7 @@ Pre-built combined images with `shared_preload_libraries` already
 configured:
 
 ```bash
-# All 50+ extensions
+# All 80+ extensions
 docker run -d -e POSTGRES_PASSWORD=secret ghcr.io/pglayers/pglayers-full:17
 
 # Azure Database for PostgreSQL compatible (30+ extensions)
@@ -123,16 +123,28 @@ promoted to stable.
 
 | Extension | Version | PG versions | Description |
 |-----------|---------|-------------|-------------|
-| [age](https://github.com/apache/age) | 1.7.0-rc0 | 17, 18 | Graph database with openCypher query language (Apache AGE) |
+| [age](https://github.com/apache/age) | 1.7.0 (PG17), 1.8.0 (PG18) | 17, 18 | Graph database with openCypher query language (Apache AGE) |
 | [anon](https://gitlab.com/dalibo/postgresql_anonymizer) | 3.1.1 | 17, 18 | Data anonymization and masking |
 | [credcheck](https://github.com/HexaCluster/credcheck) | 5.0 | 17, 18, 19 | Credential checks on user creation / password change |
+| [db2fce](https://github.com/credativ/db2fce) | 0.0.17 | 17, 18 | DB2 compatibility functions (date/time, string helpers) |
 | [documentdb](https://github.com/documentdb/documentdb) | 0.113-0 | 17, 18 | MongoDB-compatible document database engine (BSON types and CRUD API) |
+| [extra_window_functions](https://github.com/xocolatl/extra_window_functions) | 1.0 | 17, 18, 19 | Extra window functions (ignore-nulls variants, nth-from-last) |
+| [first_last_agg](https://github.com/wulczer/first_last_agg) | 0.1.4-4-gd63ea3b | 17, 18 | first() and last() aggregate functions |
 | [h3-pg](https://github.com/zachasme/h3-pg) | 4.2.3 | 17, 18 | Uber H3 hexagonal geospatial indexing |
 | [hll](https://github.com/citusdata/postgresql-hll) | 2.21 | 17, 18, 19 | HyperLogLog probabilistic distinct counting |
-| [http](https://github.com/pramsey/pgsql-http) | 1.7.1 | 17, 18, 19 | HTTP client for PostgreSQL (web requests from SQL) |
+| [http](https://github.com/pramsey/pgsql-http) | 1.7.2 | 17, 18, 19 | HTTP client for PostgreSQL (web requests from SQL) |
 | [hypopg](https://github.com/HypoPG/hypopg) | 1.4.3 | 17, 18, 19 | Hypothetical indexes for what-if analysis |
+| [icu_ext](https://github.com/dverite/icu_ext) | 1.11.0 | 17, 18, 19 | ICU functions: Unicode names, transliteration, spellout, collation |
 | [ip4r](https://github.com/RhodiumToad/ip4r) | 2.4.3 | 17, 18, 19 | IPv4/IPv6 range data types with GiST indexing |
+| [jsquery](https://github.com/postgrespro/jsquery) | 1.2 | 17, 18 | JSON query language with GIN indexing |
 | [orafce](https://github.com/orafce/orafce) | 4.16.7 | 17, 18, 19 | Oracle compatibility functions and packages |
+| [periods](https://github.com/xocolatl/periods) | 1.2.3 | 17, 18 | SQL:2016 application-time PERIODs and system versioning |
+| [pg_background](https://github.com/vibhorkum/pg_background) | 2.0.2 | 17, 18, 19 | Run SQL in background worker processes |
+| [pg_csv](https://github.com/PostgREST/pg_csv) | 1.0.2 | 17, 18, 19 | Aggregate result rows into CSV text |
+| [pg_dirtyread](https://github.com/df7cb/pg_dirtyread) | 2.8 | 17, 18, 19 | Read dead (deleted, unvacuumed) tuples for forensics/recovery |
+| [pg_pwhash](https://github.com/cybertec-postgresql/pg_pwhash) | 1.0 | 17, 18, 19 | Password hashing (scrypt, argon2, yescrypt) |
+| [pg_show_plans](https://github.com/cybertec-postgresql/pg_show_plans) | 2.1.8 | 17, 18, 19 | Show execution plans of all currently running queries |
+| [pg_statviz](https://github.com/vyruss/pg_statviz) | 1.1 | 17, 18, 19 | Time-series snapshots of PostgreSQL statistics for visualization |
 | [pgaudit](https://github.com/pgaudit/pgaudit) | 17.1 | 17, 18 | Audit logging (session and object-level) |
 | [pg_bigm](https://github.com/pgbigm/pg_bigm) | 1.2 | 17, 18 | 2-gram full text search (better for CJK languages) |
 | [pg_cron](https://github.com/citusdata/pg_cron) | 1.6.7 | 17, 18 | Job scheduler (periodic jobs inside the database) |
@@ -144,39 +156,50 @@ promoted to stable.
 | [pg_hint_plan](https://github.com/ossc-db/pg_hint_plan) | 1.7.1 | 17, 18 | Tweak execution plans using hints in SQL comments |
 | [pg_ivm](https://github.com/sraoss/pg_ivm) | 1.13 | 17, 18 | Incremental View Maintenance for materialized views |
 | [pg_jsonschema](https://github.com/supabase/pg_jsonschema) | 0.3.4 | 17, 18 | JSON Schema validation |
-| [pg_lake](https://github.com/Snowflake-Labs/pg_lake) | 3.3.4 | 17, 18 | Iceberg and data lake access (Parquet, CSV, JSON via DuckDB) |
+| [pg_lake](https://github.com/Snowflake-Labs/pg_lake) | 3.4.1 | 17, 18 | Iceberg and data lake access (Parquet, CSV, JSON via DuckDB) |
 | [pg_net](https://github.com/supabase/pg_net) | 0.20.3 | 17, 18, 19 | Async non-blocking HTTP/HTTPS requests |
 | [pg_partman](https://github.com/pgpartman/pg_partman) | 5.4.3 | 17, 18, 19 | Automated table partition management |
+| [pg_permissions](https://github.com/cybertec-postgresql/pg_permissions) | 1.4.1 | 17, 18, 19 | Review and audit object permissions against a desired state |
 | [pg_qualstats](https://github.com/powa-team/pg_qualstats) | 2.1.4 | 17, 18, 19 | Statistics collector for WHERE clause predicates |
 | [pg_repack](https://github.com/reorg/pg_repack) | 1.5.3 | 17, 18, 19 | Online table reorganization without heavy locks |
-| [pg_roaringbitmap](https://github.com/ChenHuajun/pg_roaringbitmap) | 1.1.0 | 17, 18 | Roaring bitmap data type for fast set operations |
+| [pg_roaringbitmap](https://github.com/ChenHuajun/pg_roaringbitmap) | 1.2.0 | 17, 18 | Roaring bitmap data type for fast set operations |
+| [pg_rrule](https://github.com/Natureshadow/pg_rrule) | 0.3.0 | 17, 18, 19 | iCalendar RRULE recurrence type and occurrence expansion |
 | [pg_similarity](https://github.com/eulerto/pg_similarity) | 1.0 | 17, 18 | Similarity functions (Levenshtein, Jaro-Winkler, Cosine, Jaccard) |
 | [pg_squeeze](https://github.com/cybertec-postgresql/pg_squeeze) | 1.9.3 | 17, 18, 19 | Remove unused space from tables without heavy locks |
 | [pg_stat_monitor](https://github.com/percona/pg_stat_monitor) | 2.3.2 | 17, 18 | Enhanced query statistics with histograms and buckets |
 | [pg_textsearch](https://github.com/timescale/pg_textsearch) | 1.3.1 | 17, 18 | BM25 relevance-ranked full-text search |
 | [pg_uuidv7](https://github.com/fboulnois/pg_uuidv7) | 1.7.0 | 17, 18, 19 | UUIDv7 generation (time-sortable unique identifiers) |
-| [pg_wait_sampling](https://github.com/postgrespro/pg_wait_sampling) | 1.1.9 | 17, 18, 19 | Sampling-based statistics of wait events |
+| [pg_wait_sampling](https://github.com/postgrespro/pg_wait_sampling) | 1.1.11 | 17, 18, 19 | Sampling-based statistics of wait events |
 | [pgfincore](https://github.com/klando/pgfincore) | 1.4.0 | 17, 18, 19 | Inspect and manage OS page cache for data files |
 | [pgjwt](https://github.com/michelp/pgjwt) | master | 17, 18, 19 | JSON Web Token (JWT) generation and validation |
 | [pglogical](https://github.com/2ndQuadrant/pglogical) | 2.4.7 | 17, 18, 19 | Logical streaming replication using publish/subscribe model |
+| [pgnodemx](https://github.com/CrunchyData/pgnodemx) | 2.0.1 | 17, 18 | Expose node OS/cgroup metrics as SQL (container-aware monitoring) |
+| [pgpcre](https://github.com/petere/pgpcre) | 0.20190509 | 17, 18, 19 | Perl-compatible regular expression (PCRE) type and functions |
 | [pgrouting](https://github.com/pgRouting/pgrouting) | 4.0.1 | 17, 18, 19 | Geospatial routing and network analysis on PostGIS |
 | [pgsodium](https://github.com/michelp/pgsodium) | 3.1.11 | 17, 18, 19 | Modern cryptography using libsodium |
+| [pgsphere](https://github.com/postgrespro/pgsphere) | 1.5.2 | 17, 18 | Spherical data types (points, circles, polygons) for astronomy/geo |
 | [pgtap](https://github.com/theory/pgtap) | 1.3.4 | 17, 18, 19 | Unit testing framework for PostgreSQL |
 | [pgtt](https://github.com/darold/pgtt) | 4.5 | 17, 18, 19 | Oracle-style Global Temporary Tables |
-| [pgvector](https://github.com/pgvector/pgvector) | 0.8.3 | 17, 18, 19 | Vector similarity search for AI/embeddings |
+| [pgvector](https://github.com/pgvector/pgvector) | 0.8.5 | 17, 18, 19 | Vector similarity search for AI/embeddings |
 | [pgvectorscale](https://github.com/timescale/pgvectorscale) | 0.9.0 | 17, 18 | High-performance vector search with DiskANN (complements pgvector) |
-| [plpgsql_check](https://github.com/okbob/plpgsql_check) | 2.9.1 | 17, 18, 19 | PL/pgSQL linter and validator |
+| [pljs](https://github.com/plv8/pljs) | 1.0.5 | 17, 18 | JavaScript (QuickJS) procedural language |
+| [plpgsql_check](https://github.com/okbob/plpgsql_check) | 2.10.1 | 17, 18, 19 | PL/pgSQL linter and validator |
 | [plprofiler](https://github.com/bigsql/plprofiler) | 4.2.5 | 17, 18 | Performance profiler for PL/pgSQL functions |
 | [plv8](https://github.com/plv8/plv8) | 3.2.4 | 17, 18 | JavaScript (V8) procedural language |
 | [PostGIS](https://github.com/postgis/postgis) | 3.6.4 | 17, 18, 19 | Geospatial extensions (geometry, geography, raster, MVT) |
 | [postgres_protobuf](https://github.com/mpartel/postgres-protobuf) | 0.3.2 | 17, 18, 19 | Protocol Buffer support (query, convert to/from JSON) |
 | [prefix](https://github.com/dimitri/prefix) | 1.2.11 | 17, 18, 19 | Prefix range data type for phone routing lookups |
+| [prioritize](https://github.com/cybertec-postgresql/prioritize) | 1.0.4 | 17, 18 | Get/set OS scheduling priority of backend processes |
+| [rational](https://github.com/begriffs/pg_rational) | 0.0.2 | 17, 18, 19 | Precise fractional (rational number) arithmetic |
 | [rum](https://github.com/postgrespro/rum) | 1.3.15 | 17, 18 | GIN-like index with ordering for full text search |
 | [semver](https://github.com/theory/pg-semver) | 0.41.0 | 17, 18, 19 | Semantic version data type |
-| [tdigest](https://github.com/tvondra/tdigest) | 1.4.3 | 17, 18, 19 | T-digest for quantile and percentile estimation |
+| [set_user](https://github.com/pgaudit/set_user) | 4.2.0 | 17, 18, 19 | Auditable privilege escalation control (set_user/reset_user) |
+| [tdigest](https://github.com/tvondra/tdigest) | 1.4.4 | 17, 18, 19 | T-digest for quantile and percentile estimation |
 | [tds_fdw](https://github.com/tds-fdw/tds_fdw) | 2.0.5 | 17, 18 | Foreign data wrapper for SQL Server and Sybase |
 | [temporal_tables](https://github.com/arkhipov/temporal_tables) | 1.2.2 | 17, 18 | System-period temporal tables |
-| [timescaledb](https://github.com/timescale/timescaledb) | 2.28.1 | 17, 18 | Time-series hypertables, compression, continuous aggregates |
+| [timescaledb](https://github.com/timescale/timescaledb) | 2.28.2 | 17, 18 | Time-series hypertables, compression, continuous aggregates |
+| [timestamp9](https://github.com/optiver/timestamp9) | 1.4.0 | 17, 18, 19 | Nanosecond-precision timestamp type |
+| [toastinfo](https://github.com/df7cb/toastinfo) | 1.7 | 17, 18, 19 | Inspect the TOAST storage details of a value |
 | [wal2json](https://github.com/eulerto/wal2json) | 2.6 | 17, 18 | JSON output plugin for logical replication / CDC |
 | [wrappers](https://github.com/supabase/wrappers) | 0.6.2 | 17, 18 | Foreign Data Wrapper framework (Stripe, S3, Firebase, etc.) |
 
@@ -220,15 +243,18 @@ Extensions that need this:
 | pg_net | `pg_net` |
 | pg_partman | `pg_partman_bgw` |
 | pg_qualstats | `pg_qualstats` |
+| pg_show_plans | `pg_show_plans` |
 | pg_squeeze | `pg_squeeze` |
 | pg_stat_monitor | `pg_stat_monitor` |
 | pg_textsearch | `pg_textsearch` |
 | pg_wait_sampling | `pg_wait_sampling` |
 | pgaudit | `pgaudit` |
 | pglogical | `pglogical` |
+| pgnodemx | `pgnodemx` |
 | pgsodium | `pgsodium` |
 | pgtt | `pgtt` |
 | plprofiler | `plprofiler` |
+| set_user | `set_user` |
 | timescaledb | `timescaledb` |
 
 ### CREATE EXTENSION
@@ -358,6 +384,33 @@ manually -- just `docker run` and `CREATE EXTENSION`.
 The project publishes one Docker image per extension per PostgreSQL
 version. These are not runnable containers -- they are `FROM scratch`
 images containing only the extension artifacts.
+
+### How extensions are built
+
+Extensions fall into four build families (in order of preference):
+
+1. **APT via the shared template** -- the default for most extensions.
+   They have no Dockerfile at all: a single shared `Dockerfile.apt`
+   installs `postgresql-<pg>-<pkg>` from PGDG, extracts the files, bundles
+   any non-base runtime libraries, and relocates them for the classic
+   layout. You only write an `extension.conf` (with `APT_PACKAGE`) and a
+   `test.sql`. *(~56 extensions, e.g. pgvector, pg_cron.)*
+2. **APT with a custom Dockerfile** -- for apt packages the shared template
+   can't express: multiple/renamed packages, `.control` update-alternatives
+   symlinks, or extra steps. *(e.g. postgis, pgrouting, http, h3_pg,
+   tds_fdw.)*
+3. **Source-built from an upstream prebuilt image** -- for heavy builds
+   that ship an official image or a cached build stage, avoiding a long
+   compile in CI. *(e.g. pg_duckdb from `pgduckdb/pgduckdb`, pg_lake from a
+   prebuilt vcpkg image.)*
+4. **Source-built from git** -- `git clone` + `make` at a pinned upstream
+   tag, when no apt package exists. *(e.g. pg_net, pgsodium, the pgrx/Rust
+   extensions.)*
+
+Whatever the family, every layer must be **self-contained** (carry all of
+its own non-base runtime libraries) and collision-free -- enforced by the
+test suite. See [AGENTS.md](AGENTS.md) for the build requirements and
+[CONTRIBUTING.md](CONTRIBUTING.md) for how to add one.
 
 ### PG 17: Classic layout
 
@@ -610,7 +663,23 @@ make clean EXT=pgvector
 
 # Remove all built extension images (reclaim disk space)
 make clean-all
+
+# Scaffold a new APT-based extension (probes PGDG, detects license,
+# writes extension.conf + a test.sql stub)
+make add-apt-ext PKG=<apt-package> [NAME=<dir>] [PG=17]
+
+# Verify all extensions comply with the licensing policy
+make check-licenses
+
+# Verify profiles are in sync with the extensions/ directory
+make check-profiles
 ```
+
+> APT-based extensions have **no Dockerfile** -- they are built by the
+> shared `Dockerfile.apt`, with their version and PostgreSQL-version
+> support resolved from PGDG at build time. Adding one is usually just
+> `make add-apt-ext` + writing `test.sql`. See the
+> [Contributing guide](CONTRIBUTING.md#adding-a-new-extension).
 
 ### Skipping extensions from CI
 
@@ -820,10 +889,19 @@ extensions, reporting bugs, and submitting changes.
 pglayers/
 ├── Makefile                          Build interface
 ├── Dockerfile                        Combined image (all extensions)
+├── Dockerfile.apt                    Shared build for all APT extensions
 ├── CONTRIBUTING.md                   Contribution guide
 ├── AGENTS.md                         Agent/CI instructions
+├── scripts/
+│   ├── apt-support.sh                PGDG availability + version probing
+│   ├── apt-lock.sh                   Generate .github/apt-versions.json
+│   ├── ext-version.sh                Resolve an extension's build version
+│   ├── detect-license.sh             License detection from Debian copyright
+│   ├── check-licenses.sh             Enforce the licensing policy
+│   └── licenses.conf                 Allow/deny/exception license lists
 ├── .github/
 │   ├── base-image-digests.json       Tracked base image digests
+│   ├── apt-versions.json             Recorded apt versions (per PG major)
 │   ├── ISSUE_TEMPLATE/
 │   │   ├── bug_report.yml            Bug report form
 │   │   ├── new_extension.yml         Extension request form
@@ -832,16 +910,16 @@ pglayers/
 │       ├── build-push.yml            CI: builds extensions, pushes to GHCR
 │       ├── test.yml                  CI: full test suite (PG 17, 18, 19)
 │       ├── monitor-base-image.yml    Detects base image updates (every 6h)
-│       ├── monitor-extensions.yml    Detects new extension releases (daily)
+│       ├── monitor-extensions.yml    Detects new source-build releases
+│       ├── monitor-apt-versions.yml  Tracks apt versions (apt-versions.json)
 │       └── cache-cleanup.yml         Prunes stale GHA caches
 ├── extensions/
-│   ├── pgvector/
-│   │   ├── Dockerfile                Multi-stage build -> artifact image
-│   │   ├── extension.conf            Metadata and version mapping
+│   ├── pgvector/                     APT extension: conf + test only
+│   │   ├── extension.conf            Metadata (APT_PACKAGE, license, ...)
 │   │   └── test.sql                  Integration tests (PASS/FAIL assertions)
-│   ├── pg_cron/
-│   ├── postgis/                      (complex: bundles runtime libs)
-│   ├── ... (50+ extensions)
+│   ├── pg_net/                       Source-built: adds its own Dockerfile
+│   ├── postgis/                      Custom APT Dockerfile (bundles libs)
+│   ├── ... (80+ extensions)
 │   └── wal2json/
 ├── profiles/
 │   ├── azure.txt                     Azure PostgreSQL Flexible Server extensions
@@ -856,9 +934,18 @@ pglayers/
 ## Licensing policy
 
 This project ships extensions with **permissive open-source licenses**
-(PostgreSQL, MIT, BSD, Apache 2.0, ISC) and, where industry practice
-clearly supports it, **GPL-2.0 extensions loaded via PostgreSQL's
-dynamic extension mechanism**.
+(PostgreSQL, MIT, ISC, Zlib, Apache-2.0, the BSD family, plus the safe
+weak/file-level copyleft MPL-2.0 and permissive-classified Artistic-2.0)
+and, where industry practice clearly supports it, **GPL-2.0 extensions
+loaded via PostgreSQL's dynamic extension mechanism**.
+
+The policy is codified in [`scripts/licenses.conf`](scripts/licenses.conf)
+and enforced automatically by `make check-licenses` in CI: source-available
+licenses (BSL/BUSL, SSPL, FSL, Elastic-2.0/ELv2) and infectious copyleft
+(GPL/LGPL/AGPL) are denied, with `postgis` and `pgrouting` recorded as
+documented, deliberate exceptions. Every extension's license is
+auto-detected from its Debian copyright when it is added (see the
+[Contributing guide](CONTRIBUTING.md#licensing)).
 
 ### GPL-2.0 extensions (PostGIS, pgRouting)
 

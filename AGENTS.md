@@ -6,18 +6,37 @@ Composable PostgreSQL extension Docker layers on top of official images.
 
 ## Licensing Policy
 
-This project only ships extensions with **permissive open-source
-licenses** (PostgreSQL, MIT, BSD, Apache 2.0, ISC). Before adding any
-extension:
+This project only ships extensions with **permissive (or safe
+weak-copyleft) licenses**. The policy is codified in
+`scripts/licenses.conf` and enforced automatically by
+`make check-licenses` (run in CI):
 
-1. **Audit the license** -- Check the extension's LICENSE/COPYING file
-   in its repository. Reject anything that is:
-   - Proprietary or source-available (e.g., BSL, SSPL, FSL, ELv2)
-   - Copyleft that would infect the combined image (e.g., AGPL)
-   - Requires proprietary runtime dependencies (e.g., Oracle client)
+- **`ALLOW_LICENSES`** -- auto-accepted: PostgreSQL, MIT, ISC, Zlib,
+  Apache-2.0, the BSD family, plus safe weak/file-level copyleft (MPL-2.0)
+  and permissive-classified (Artistic-2.0). Safe because extensions are
+  separate `.so` files loaded at runtime, never statically linked into a
+  combined derivative work.
+- **`DENY_LICENSES`** -- never accepted: source-available (BSL/BUSL, SSPL,
+  FSL, Elastic-2.0/ELv2) and infectious copyleft (AGPL, GPL, LGPL).
+- **`LICENSE_EXCEPTIONS`** -- deliberate, documented deviations from the
+  deny list (currently `postgis` and `pgrouting`, GPL geospatial
+  extensions loaded at runtime -- mere aggregation, not derivative). Each
+  exception records a rationale for the audit trail.
 
-2. **Document the license** -- Add a `LICENSE` field to `extension.conf`
-   (e.g., `LICENSE="PostgreSQL"` or `LICENSE="MIT"`).
+When adding an extension:
+
+1. **Set the `LICENSE` field** in `extension.conf` (e.g.
+   `LICENSE="PostgreSQL"`). The value must resolve to `ALLOW_LICENSES`
+   (after alias normalization) or be recorded as an exception, or
+   `make check-licenses` fails. Debian ships a machine-readable DEP-5
+   copyright file per package
+   (`/usr/share/doc/postgresql-<pg>-<pkg>/copyright`) you can consult to
+   determine the license.
+
+2. **A denied or unknown license fails CI.** To ship a denied license
+   anyway (rare), add an entry to `LICENSE_EXCEPTIONS` **and**
+   `LICENSE_EXCEPTION_REASON` in `scripts/licenses.conf` with a written
+   justification.
 
 3. **When in doubt, skip it** -- If an extension's license is ambiguous
    or has changed recently (e.g., TimescaleDB moved to TSL for some
@@ -29,9 +48,18 @@ Extensions we explicitly exclude:
 
 ## Version Policy
 
-Always use the **latest stable release** of each extension that is
-compatible with our supported PostgreSQL versions (currently 17, 18,
-and 19). When a new upstream release is published:
+**APT-based extensions have no `VERSION_XX` fields.** Their version is
+whatever `apt.postgresql.org` (PGDG) currently ships: the build resolves
+it at build time (`scripts/apt-support.sh` / `scripts/ext-version.sh`),
+availability is probed per PG major (an extension "supports" a PG version
+iff PGDG publishes `postgresql-<pg>-<pkg>`), and `apt-get` always installs
+the latest patch. So there is nothing to bump -- do **not** add
+`VERSION_XX` to an APT extension.
+
+**Source-built extensions** pin the upstream git tag. Always use the
+**latest stable release** compatible with our supported PostgreSQL
+versions (currently 17, 18, and 19). When a new upstream release is
+published:
 
 1. Update `VERSION_17`, `VERSION_18`, and `VERSION_19` in `extension.conf`.
 2. Update the `ARG EXT_VERSION` default in the Dockerfile.
@@ -69,11 +97,19 @@ This test suite validates:
    `.so` in the combined image. Catches transitive runtime deps that
    weren't bundled (e.g., PostGIS needing libtiff via libproj).
 
-4. **All extensions load** -- `CREATE EXTENSION` must succeed for every
+4. **Self-containment** -- Overlays each extension on the *bare* base
+   image alone (no sibling layers) and runs `ldd` on every ELF object it
+   ships. An extension must resolve all of its own runtime deps without
+   help from any other layer (e.g. `pg_net` must bundle its own
+   `libcurl.so.4`, not borrow postgis's). See Dockerfile requirement #8.
+
+5. **All extensions load** -- `CREATE EXTENSION` must succeed for every
    extension in the combined image.
 
-5. **Functional smoke tests** -- Basic operations per extension to catch
-   runtime failures that CREATE EXTENSION alone wouldn't surface.
+6. **Functional integration tests** -- Each extension's
+   `extensions/<ext>/test.sql` runs multi-step `PASS`/`FAIL` checks in the
+   combined image, catching runtime failures that `CREATE EXTENSION` alone
+   wouldn't surface. `test.sql` is required for every extension.
 
 ### When to run tests
 
@@ -111,34 +147,49 @@ all supported versions or remove the unsupported version from
 
 ### Adding a new extension checklist
 
-Every new extension **must** have full test coverage before merging.
-This means updating `tests/test-layers.sh` to include:
+For an **APT-based** extension, you usually only need an
+`extensions/<ext>/extension.conf` with `APT_PACKAGE` set (no Dockerfile --
+the shared `Dockerfile.apt` handles it; see Dockerfile requirement #3).
+Source-built or special-case extensions add their own
+`extensions/<ext>/Dockerfile`.
 
-1. **Extension name mapping** -- Add an entry to `EXT_SQL_NAMES` if the
-   SQL extension name differs from the directory name (e.g.,
-   `[pgvector]="vector"`).
+The fastest way to add an APT extension is the scaffold:
+
+```bash
+make add-apt-ext PKG=<apt-package> [NAME=<dir>] [PG=17]
+```
+
+It probes PGDG for availability + version, detects the license from the
+Debian DEP-5 copyright (`scripts/detect-license.sh`), auto-fills the
+description, writes `extensions/<name>/extension.conf`, and runs
+`make check-licenses`. If the license is denied or undetected it stops and
+asks you to decide (fix `LICENSE`, extend `ALLOW_LICENSES`, or record an
+exception). You still add test coverage (below) and review the conf.
+
+Every new extension **must** have full test coverage before merging.
+This means:
+
+1. **Extension name mapping** -- Add an entry to `EXT_SQL_NAMES` in
+   `tests/test-layers.sh` if the SQL extension name differs from the
+   directory name (e.g., `[pgvector]="vector"`).
 
 2. **CREATE EXTENSION test** -- Automatically covered for all extensions
    in the `EXTENSIONS` list. If the extension is not loadable via
    `CREATE EXTENSION` (e.g., logical decoding output plugins like
    wal2json), add it to `SKIP_CREATE_EXT` instead.
 
-3. **Functional smoke test** -- Add a `smoke_test` call that exercises
-   the extension's core functionality (not just loading). Examples:
-   - Data type creation/cast
-   - A function call that returns a result
-   - An operator or index operation
-   The smoke test must produce non-empty output on success.
-
-4. **shared_preload_libraries** -- If the extension requires preloading,
+3. **shared_preload_libraries** -- If the extension requires preloading,
    add `SHARED_PRELOAD="<library>"` to `extension.conf`. Phase 5 of
    `test-layers.sh` auto-generates the `shared_preload_libraries` line
    from this field for both classic (PG 17) and isolated (PG 18+)
    layouts.
 
-5. **Integration test file** -- Create `extensions/<name>/test.sql` with
-   multi-step validation. Each test outputs a line starting with `PASS`
-   or `FAIL`. Format:
+4. **Integration test file (required)** -- Create
+   `extensions/<name>/test.sql` with multi-step validation. This is the
+   **single source of truth** for an extension's functional coverage
+   (Phase 8) -- there is no separate smoke test. A missing `test.sql`, or
+   one that produces no `PASS`/`FAIL` output, is a hard failure. Each test
+   outputs a line starting with `PASS` or `FAIL`. Format:
    ```sql
    SELECT CASE
        WHEN <condition>
@@ -147,10 +198,14 @@ This means updating `tests/test-layers.sh` to include:
    END;
    ```
    Tests must be self-contained (create own tables, clean up after).
-   Aim for 2-4 checks per extension covering:
+   Make the **first** check a minimal load/sanity assertion (it doubles as
+   the smoke test), then aim for 2-4 checks total covering:
    - Core data type or function works
    - Index or operator behavior
    - Integration with other PG features (e.g., triggers, aggregates)
+
+   `make add-apt-ext` generates a starter `test.sql` stub with the load
+   assertion; replace the placeholder with real checks.
 
 The collision, overwrite, and ldd checks are automatic for all
 extensions in the `extensions/` directory -- no manual update needed
@@ -159,9 +214,49 @@ the isolated layout eliminates them by design.)
 
 ### Version monitoring
 
-Every extension **must** be handled by the version monitoring workflow
-(`.github/workflows/monitor-extensions.yml`). When adding a new
-extension:
+**APT-based extensions are tracked by an apt-versions lockfile, not by
+`VERSION_XX`.** They carry no `VERSION_XX` and `apt-get` installs the latest
+PGDG package on every rebuild, so `monitor-extensions.yml` (the source-build
+monitor) skips them automatically. Because that makes an apt version bump
+otherwise invisible in git, a second workflow makes it explicit:
+
+- **`.github/apt-versions.json`** -- a generated lockfile recording the
+  apt-resolved version of every APT extension per PG major. It is a
+  **record, not a pin** (PGDG is a rolling repo; builds always install the
+  latest patch). Regenerate it locally with `scripts/apt-lock.sh` (requires
+  Docker + jq).
+- **`.github/workflows/monitor-apt-versions.yml`** -- runs daily,
+  regenerates the lockfile, and opens a PR when PGDG has shipped new
+  versions. The PR diff + body (`- ext (PG NN): old -> new`) is the
+  explicit, git-visible changelog of the update. The scheduled run only
+  regenerates on a throwaway branch (`deps/apt-versions`) and opens/updates
+  the PR -- it **never commits directly to `main`**. The PR has
+  **auto-merge enabled** (`--auto --squash`), so it lands automatically once
+  required checks pass (no manual merge needed); it still respects branch
+  protection, so a failing check holds it open for review.
+- **`build-push.yml`** keys change detection off `.github/apt-versions.json`:
+  merging the monitor PR rebuilds **exactly** the extensions whose recorded
+  version changed, producing fresh `pgx-<ext>:<pg>-<version>` images.
+
+**When exactly is the lockfile updated?** Only at the moment the monitor PR
+is **merged** -- that single event both lands the new versions on `main` and
+triggers the rebuild. With auto-merge enabled the PR merges itself once
+checks pass, so no human step is required in the common (green) case; a
+failed check leaves it open for manual review. Because PGDG is rolling, a
+base-image or weekly-cron rebuild between monitor runs may publish images
+newer than the lockfile records; the next monitor run re-syncs the lockfile,
+so any drift is transient and self-healing.
+
+So an APT update flows: PGDG publishes -> monitor opens lockfile PR ->
+**auto-merge on green (lockfile updated on `main`)** -> rebuild affected
+layers. There is still no `VERSION_XX` to bump by hand, and no `TAG_FILTER`
+needed. **Never add `VERSION_XX` or `apt-lock.sh` output to an APT
+extension's `extension.conf`.** The rest of this section applies to
+**source-built** extensions only.
+
+Every source-built extension **must** be handled by the version
+monitoring workflow (`.github/workflows/monitor-extensions.yml`). When
+adding a new source-built extension:
 
 1. **Standard semver tags** (e.g., `v1.0.0`, `1.0.0`) -- No action
    needed. The workflow detects these automatically via the GitHub
@@ -192,6 +287,22 @@ extension:
 
 ### Dockerfile requirements
 
+Extensions are built in one of four families:
+
+1. **APT via the shared `Dockerfile.apt`** -- no per-extension Dockerfile;
+   only an `extension.conf` with `APT_PACKAGE` (most extensions).
+2. **APT with a custom `extensions/<ext>/Dockerfile`** -- special-case apt
+   packages (multiple/renamed packages, `.control` symlinks): `postgis`,
+   `pgrouting`, `http`, `h3_pg`, `tds_fdw`.
+3. **Source-built from an upstream prebuilt image** -- heavy builds that
+   `FROM` an official image / cached stage: `pg_duckdb`, `pg_lake`.
+4. **Source-built from git** -- `git clone` + `make` at a pinned tag when no
+   apt package exists (`pg_net`, `pgsodium`, the Rust extensions, ...).
+
+Family 1 has no Dockerfile (see requirement #3 below). The rules here apply
+to the shared template and to any **custom** `extensions/<ext>/Dockerfile`
+(families 2-4).
+
 Every extension Dockerfile **must** follow these practices:
 
 1. **BuildKit syntax** -- Start with `# syntax=docker/dockerfile:1`.
@@ -206,57 +317,34 @@ Every extension Dockerfile **must** follow these practices:
    Do NOT add `rm -rf /var/lib/apt/lists/*` (unnecessary with cache
    mounts and it defeats the caching).
 
-3. **Prefer APT packages** -- If the extension is available in the PGDG
-   APT repository (`apt.postgresql.org`), install it via `apt-get`
-   rather than compiling from source. This is faster, more reproducible,
-   and automatically picks up security patches. The standard APT-based
-   Dockerfile pattern:
-   ```dockerfile
-   # syntax=docker/dockerfile:1
-   ARG PG_MAJOR=17
-   ARG PG_TAG=${PG_MAJOR}
-   ARG LAYOUT=classic
+3. **Prefer APT packages via the shared template** -- If the extension is
+   available in the PGDG APT repository (`apt.postgresql.org`), install it
+   via `apt-get` rather than compiling from source. This is faster, more
+   reproducible, and automatically picks up security patches.
 
-   FROM postgres:${PG_TAG} AS builder
-   ARG PG_MAJOR
+   **APT extensions do not need a Dockerfile.** The repo ships a single
+   shared `Dockerfile.apt` that handles the entire APT pattern -- file
+   extraction, generic runtime-dependency bundling, classic relocation +
+   soname mangling, and the classic/isolated layout selection. To add an
+   APT extension, create `extensions/<ext>/extension.conf` with
+   `APT_PACKAGE="<package>"` set (no `postgresql-<pg>-` prefix, no version)
+   and **no Dockerfile**. The Makefile routes any extension that lacks its
+   own `extensions/<ext>/Dockerfile` to `Dockerfile.apt`, passing
+   `APT_PACKAGE` and `EXT_NAME` as build args.
 
-   RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-       --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-       apt-get update && apt-get install -y --no-install-recommends \
-       postgresql-${PG_MAJOR}-<package>
+   The shared template is self-contained and collision-safe by
+   construction (it bundles every non-base runtime dep and, for the
+   classic layout, relocates + mangles them per requirement #8). For
+   SQL-only extensions or extensions whose deps are all in the base image,
+   the bundling/relocation stages are no-ops, so the output is identical to
+   the old hand-written boilerplate.
 
-   RUN mkdir -p /output && \
-       dpkg -L postgresql-${PG_MAJOR}-<package> \
-       | grep -E '^/usr/(lib|share)/postgresql/' \
-       | while IFS= read -r f; do \
-           [ -f "$f" ] || continue; \
-           mkdir -p "/output$(dirname "$f")"; \
-           cp -a "$f" "/output$f"; \
-       done
-
-   # --- Layout selection ---
-   FROM scratch AS classic
-   COPY --from=builder /output/ /
-
-   FROM builder AS normalizer
-   ARG PG_MAJOR
-   RUN mkdir -p /isolated/lib /isolated/share/extension && \
-       find /output/usr/lib/postgresql/${PG_MAJOR}/lib -maxdepth 1 -type f \
-           -exec cp -a {} /isolated/lib/ \; && \
-       cp -a /output/usr/share/postgresql/${PG_MAJOR}/extension/* \
-           /isolated/share/extension/ && \
-       cp -a /output/usr/lib/postgresql/${PG_MAJOR}/lib/bitcode /isolated/lib/bitcode \
-           2>/dev/null || true
-
-   FROM scratch AS isolated
-   COPY --from=normalizer /isolated/ /
-
-   FROM ${LAYOUT}
-   ```
-   Add `APT_PACKAGE="<package>"` to `extension.conf` when using this
-   pattern. If the extension has runtime shared library dependencies
-   not present in the base postgres image, add a dep-bundling stage
-   (see `extensions/postgis/Dockerfile` for the full pattern).
+   **Only write a custom `extensions/<ext>/Dockerfile` when the extension
+   needs something the template can't express** -- e.g. multiple/renamed
+   APT packages, `.control` update-alternatives symlinks, or extra build
+   steps. A custom Dockerfile always overrides the template. Current custom
+   APT Dockerfiles: `postgis` (postgis-3 + -scripts + control symlinks),
+   `pgrouting`, `h3_pg`, `tds_fdw`, `http`.
 
 4. **Source builds (when no APT package exists)** -- Strip `.so` files
    after `make install` to reduce image size (50-80% reduction):
@@ -283,6 +371,58 @@ Every extension Dockerfile **must** follow these practices:
    inherently portable; only pre-built binary downloads need
    `TARGETARCH` handling.
 
+8. **Extensions MUST always be self-contained** -- Every extension layer
+   must carry *all* of its runtime shared-library dependencies that are
+   not already present in the official `postgres:XX` base image. An
+   extension must never rely on a *sibling* layer to provide a shared
+   library (e.g. `http`/`pg_net`/`pg_duckdb` must not depend on `postgis`
+   to supply `libcurl.so.4`). A layer must load successfully when overlaid
+   on the bare base image with no other extension layers present.
+
+   This is enforced by **Phase 5 of `tests/test-layers.sh`**, which
+   overlays each extension on the bare base image alone and runs `ldd` on
+   every ELF object it ships; any unresolved dependency fails the build.
+
+   The two layouts satisfy self-containment differently:
+
+   - **Isolated (PG 18+):** each extension lives in its own
+     `/extensions/<ext>/lib` namespace, so bundled deps sit flat next to
+     the extension `.so` and are found via the per-extension
+     `dynamic_library_path` / `ld.so.conf.d` entry. Bundling every
+     non-base dep (no skip lists) is sufficient -- collisions are
+     structurally impossible.
+
+   - **Classic (PG 17):** the flat overlay means every layer shares
+     `/usr/lib/<multiarch>/`, so two extensions bundling the same soname
+     (e.g. `libcurl.so.4`) at different versions would collide. Do **not**
+     solve this by dropping the dep and delegating to a sibling layer --
+     that breaks self-containment. Instead, **relocate** the bundled deps
+     into an extension-private directory
+     (`/usr/lib/postgresql/<pg>/lib/<ext>-deps/`) and point each ELF
+     object's `RUNPATH` at it via `$ORIGIN` using `patchelf`. The private
+     dir name is unique per extension, so there is no file collision, and
+     the layer stays self-contained.
+
+     A private dir + RUNPATH alone is **not** enough, though: sonames are
+     process-global. In a combined image several extensions load into the
+     same postgres backend, and if one (e.g. via `shared_preload_libraries`)
+     loads its own `libssh2.so.1` first, another layer's `libcurl` -- or
+     postgis's -- will bind to that already-loaded soname and may hit
+     undefined symbols. So also **mangle each bundled dep's soname** with a
+     per-extension prefix (`patchelf --set-soname pglx_<ext>_<soname>`,
+     rename the file to match) and rewrite the `NEEDED` entries of every ELF
+     object you ship (`patchelf --replace-needed`). Unique sonames make
+     cross-layer symbol clashes impossible.
+
+     See the `classic-relocate` stage in `extensions/http/Dockerfile`,
+     `extensions/pg_net/Dockerfile`, `extensions/pg_duckdb/Dockerfile`, and
+     `extensions/pg_lake/Dockerfile` for the reference pattern (the last
+     also relocates and rewrites the `pgduck_server` binary via
+     `$ORIGIN/../lib`).
+
+   Never introduce a `skip-libs` list that omits a real runtime dependency
+   in the hope that another layer provides it.
+
 ### Keeping documentation in sync
 
 When adding, removing, or modifying extensions, **all of the following
@@ -303,7 +443,7 @@ must be updated in the same commit**:
    the PG version columns are correct.
 
 4. **`tests/test-layers.sh`** -- As described above (name mapping,
-   smoke test, shared_preload entry).
+   `SKIP_CREATE_EXT` if needed) plus a required `extensions/<ext>/test.sql`.
 
 5. **`extension.conf` LICENSE field** -- Every extension must document
    its license. Run `make list` and verify the new extension appears.
@@ -360,7 +500,6 @@ appear:
 - `README.md` `shared_preload_libraries` table
 - `tests/test-layers.sh` `EXT_SQL_NAMES` array
 - `tests/test-layers.sh` `SKIP_CREATE_EXT` array
-- `tests/test-layers.sh` smoke test calls
 
 This ensures consistency, makes diffs readable, and avoids merge
 conflicts when multiple extensions are added in parallel.

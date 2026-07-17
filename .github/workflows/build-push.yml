@@ -6,6 +6,8 @@ on:
     paths:
       - 'extensions/**'
       - 'profiles/**'
+      - 'Dockerfile.apt'
+      - '.github/apt-versions.json'
       - '.github/base-image-digests.json'
       - '.github/workflows/build-push.yml'
   pull_request:
@@ -13,6 +15,7 @@ on:
     paths:
       - 'extensions/**'
       - 'profiles/**'
+      - 'Dockerfile.apt'
   schedule:
     # Weekly full rebuild (safety net): Sunday 04:00 UTC
     - cron: '0 4 * * 0'
@@ -55,9 +58,27 @@ jobs:
           if [ -z "$ext_filter" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ] && [ "${{ github.event_name }}" != "schedule" ]; then
             changed_exts=$(git diff --name-only HEAD~1 -- extensions/ \
               | grep -oP 'extensions/\K[^/]+' | sort -u | tr '\n' ' ')
-            # If workflow file changed, rebuild everything
+            # If the build workflow changed, rebuild everything.
             if git diff --name-only HEAD~1 | grep -q '.github/workflows/build-push.yml'; then
               changed_exts=""
+            # The shared APT template affects every extension that uses it
+            # (those without their own Dockerfile); rebuild those.
+            elif git diff --name-only HEAD~1 | grep -qxF 'Dockerfile.apt'; then
+              for d in extensions/*/; do
+                e=$(basename "$d")
+                [ -f "$d/Dockerfile" ] || changed_exts="$changed_exts $e"
+              done
+              changed_exts=$(echo "$changed_exts" | tr ' ' '\n' | sort -u | tr '\n' ' ')
+            # The apt-versions lockfile is the explicit record of apt-shipped
+            # versions. When it changes, rebuild exactly the extensions whose
+            # recorded version changed -- this is what turns a PGDG apt update
+            # into a real, deliberate layer rebuild.
+            elif git diff --name-only HEAD~1 | grep -qxF '.github/apt-versions.json'; then
+              git show HEAD~1:.github/apt-versions.json > /tmp/old-apt.json 2>/dev/null \
+                || echo '{}' > /tmp/old-apt.json
+              changed_exts=$(jq -r --slurpfile old /tmp/old-apt.json \
+                'to_entries[] | select(.value != ($old[0][.key] // {})) | .key' \
+                .github/apt-versions.json | tr '\n' ' ')
             fi
           fi
 
@@ -69,32 +90,61 @@ jobs:
             if [ -n "$changed_exts" ] && ! echo "$changed_exts" | grep -qw "$ext"; then
               continue
             fi
+            # Reset all fields that may be absent from a given extension.conf,
+            # otherwise values bleed over from a previously-sourced extension
+            # (e.g. an ext without VERSION_19 would inherit the prior ext's,
+            # producing a spurious PG 19 build with the wrong version).
             CI_SKIP=""
             APT_PACKAGE=""
             VCPKG_VERSION=""
+            # Read below via indirect expansion (${!ver_var}), so shellcheck
+            # cannot see the use.
+            # shellcheck disable=SC2034
+            VERSION_17=""
+            # shellcheck disable=SC2034
+            VERSION_18=""
+            # shellcheck disable=SC2034
+            VERSION_19=""
             source "$ext_dir/extension.conf"
             [ "${CI_SKIP:-}" = "1" ] && continue
+            # APT extensions without their own Dockerfile use the shared template.
+            dockerfile="extensions/$ext/Dockerfile"
+            [ -f "$dockerfile" ] || dockerfile="Dockerfile.apt"
             for pg in 17 18 19; do
               [ -n "$pg_filter" ] && [ "$pg" != "$pg_filter" ] && continue
               ver_var="VERSION_${pg}"
               ver="${!ver_var}"
+              # APT extensions carry no VERSION_XX: derive availability + the
+              # version from PGDG. An empty result means the package is not
+              # published for this PG major, so the combo is skipped (this is
+              # what makes beta gaps like pglogical/tdigest on PG19 auto-skip).
+              # A non-zero exit means the PGDG query itself failed -- fail the
+              # job rather than silently skipping the build.
+              if [ -z "$ver" ] && [ -n "${APT_PACKAGE:-}" ]; then
+                if ! ver="$(./scripts/ext-version.sh "$ext" "$pg")"; then
+                  echo "ERROR: PGDG version resolution failed for $ext (PG $pg)" >&2
+                  exit 1
+                fi
+              fi
               [ -z "$ver" ] && continue
               extensions=$(echo "$extensions" | jq -c \
                 --arg ext "$ext" --arg pg "$pg" --arg ver "$ver" \
-                '. + [{"extension": $ext, "pg": $pg, "version": $ver}]')
+                --arg apt "${APT_PACKAGE:-}" --arg df "$dockerfile" \
+                '. + [{"extension": $ext, "pg": $pg, "version": $ver, "apt_package": $apt, "dockerfile": $df}]')
               # Source-built extensions: native build per arch (no QEMU)
               # APT-based extensions: single job with QEMU (fast enough)
               if [ -z "$APT_PACKAGE" ]; then
                 for arch in amd64 arm64; do
                   build=$(echo "$build" | jq -c \
                     --arg ext "$ext" --arg pg "$pg" --arg ver "$ver" --arg arch "$arch" \
-                    --arg vcpkg "${VCPKG_VERSION:-}" \
-                    '. + [{"extension": $ext, "pg": $pg, "version": $ver, "arch": $arch, "native": true, "vcpkg_version": $vcpkg}]')
+                    --arg vcpkg "${VCPKG_VERSION:-}" --arg df "$dockerfile" \
+                    '. + [{"extension": $ext, "pg": $pg, "version": $ver, "arch": $arch, "native": true, "vcpkg_version": $vcpkg, "apt_package": "", "dockerfile": $df}]')
                 done
               else
                 build=$(echo "$build" | jq -c \
                   --arg ext "$ext" --arg pg "$pg" --arg ver "$ver" \
-                  '. + [{"extension": $ext, "pg": $pg, "version": $ver, "arch": "all", "native": false}]')
+                  --arg apt "$APT_PACKAGE" --arg df "$dockerfile" \
+                  '. + [{"extension": $ext, "pg": $pg, "version": $ver, "arch": "all", "native": false, "apt_package": $apt, "dockerfile": $df}]')
               fi
             done
           done
@@ -138,12 +188,14 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: extensions/${{ matrix.extension }}
-          file: extensions/${{ matrix.extension }}/Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: ${{ matrix.native && format('linux/{0}', matrix.arch) || 'linux/amd64,linux/arm64' }}
           build-args: |
             PG_MAJOR=${{ matrix.pg }}
             PG_TAG=${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
             EXT_VERSION=${{ matrix.version }}
+            APT_PACKAGE=${{ matrix.apt_package }}
+            EXT_NAME=${{ matrix.extension }}
             LAYOUT=${{ matrix.pg >= 18 && 'isolated' || 'classic' }}
           push: true
           tags: |
@@ -219,12 +271,14 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: extensions/${{ matrix.extension }}
-          file: extensions/${{ matrix.extension }}/Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           build-args: |
             PG_MAJOR=${{ matrix.pg }}
             PG_TAG=${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
             EXT_VERSION=${{ matrix.version }}
+            APT_PACKAGE=${{ matrix.apt_package }}
+            EXT_NAME=${{ matrix.extension }}
             LAYOUT=${{ matrix.pg >= 18 && 'isolated' || 'classic' }}
           push: false
           cache-from: type=gha,scope=${{ matrix.extension }}-${{ matrix.pg }}-amd64

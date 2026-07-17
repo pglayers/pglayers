@@ -8,6 +8,8 @@ on:
       - 'profiles/**'
       - 'tests/**'
       - 'Makefile'
+      - 'Dockerfile.apt'
+      - 'scripts/**'
       - '.github/workflows/test.yml'
   pull_request:
     branches: [main]
@@ -45,6 +47,16 @@ jobs:
           # For pushes, HEAD~1 is the previous commit. Both cases work with HEAD~1.
           changed=$(git diff --name-only HEAD~1 -- extensions/ \
             | grep -oP 'extensions/\K[^/]+' | sort -u | tr '\n' ' ')
+          # The shared APT template affects every extension that uses it (those
+          # without their own Dockerfile). If it changed, rebuild them all so
+          # the change is actually exercised instead of pulling stale images.
+          if git diff --name-only HEAD~1 | grep -qxF 'Dockerfile.apt'; then
+            for d in extensions/*/; do
+              e=$(basename "$d")
+              [ -f "$d/Dockerfile" ] || changed="$changed $e"
+            done
+          fi
+          changed=$(echo "$changed" | tr ' ' '\n' | sed '/^$/d' | sort -u | tr '\n' ' ')
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
           if [ -n "$changed" ]; then
             echo "Changed extensions: $changed"
@@ -74,12 +86,13 @@ jobs:
         env:
           REGISTRY: ghcr.io/pglayers
           PREFIX: pgx
+          PG: ${{ matrix.pg }}
+          CHANGED: ${{ steps.changes.outputs.changed }}
         run: |
           # Pull pre-built images for unchanged extensions from the registry
           for ext in extensions/*/; do
             ext="$(basename "$ext")"
-            changed="${{ steps.changes.outputs.changed }}"
-            if [ -n "$changed" ] && echo "$changed" | grep -qw "$ext"; then
+            if [ -n "$CHANGED" ] && echo "$CHANGED" | grep -qw "$ext"; then
               echo "SKIP pull $ext (will build from source)"
               continue
             fi
@@ -89,16 +102,16 @@ jobs:
               echo "SKIP pull $ext (CI_SKIP=1)"
               continue
             fi
-            ver=$(bash -c "source extensions/$ext/extension.conf && echo \${VERSION_${{ matrix.pg }}}")
+            ver=$(./scripts/ext-version.sh "$ext" "$PG")
             [ -z "$ver" ] && continue
-            img="${REGISTRY}/${PREFIX}-${ext}:${{ matrix.pg }}"
+            img="${REGISTRY}/${PREFIX}-${ext}:${PG}"
             if docker pull "$img" 2>/dev/null; then
               # For PG 18+, verify the image uses the isolated layout.
               # Stale images built before isolated layout was introduced have
               # files at /usr/lib/... (classic) instead of /lib/ (isolated).
               # Note: isolated images are FROM scratch (no shell), so we check
               # via docker export + tar.
-              if [ "${{ matrix.pg }}" -ge 18 ]; then
+              if [ "$PG" -ge 18 ]; then
                 cid=$(docker create "$img" true 2>/dev/null)
                 has_isolated=$(docker export "$cid" 2>/dev/null \
                   | tar -t 2>/dev/null | grep -q '^lib/\|^share/extension/' && echo yes || echo no)
@@ -110,7 +123,7 @@ jobs:
                 fi
               fi
               # Re-tag as local/ so make test finds it
-              docker tag "$img" "local/${PREFIX}-${ext}:${{ matrix.pg }}"
+              docker tag "$img" "local/${PREFIX}-${ext}:${PG}"
             else
               echo "WARN: $img not available, will build from source"
             fi
@@ -123,7 +136,7 @@ jobs:
           PG_TAG: ${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
         run: |
           for ext in ${{ steps.changes.outputs.changed }}; do
-            ver=$(bash -c "source extensions/$ext/extension.conf && echo \${VERSION_${{ matrix.pg }}}")
+            ver=$(./scripts/ext-version.sh "$ext" "${{ matrix.pg }}")
             if [ -z "$ver" ]; then
               echo "SKIP $ext (no version for PG ${{ matrix.pg }})"
               continue
@@ -140,7 +153,7 @@ jobs:
           # (new extensions, CI_SKIP extensions not in GHCR, etc.)
           for ext in extensions/*/; do
             ext="$(basename "$ext")"
-            ver=$(bash -c "source extensions/$ext/extension.conf && echo \${VERSION_${{ matrix.pg }}}")
+            ver=$(./scripts/ext-version.sh "$ext" "${{ matrix.pg }}")
             [ -z "$ver" ] && continue
             # Already have it (pulled or built above)
             if docker image inspect "local/pgx-${ext}:${{ matrix.pg }}" >/dev/null 2>&1; then
@@ -157,6 +170,9 @@ jobs:
 
       - name: Check profiles
         run: make check-profiles
+
+      - name: Check licenses
+        run: make check-licenses
 
   test-profile:
     needs: test
@@ -187,18 +203,21 @@ jobs:
         env:
           REGISTRY: ghcr.io/pglayers
           PREFIX: pgx
+          PG: ${{ matrix.pg }}
+          PROFILE: ${{ matrix.profile }}
         run: |
-          for ext in $(grep -v '^\#' profiles/${{ matrix.profile }}.txt | grep -v '^$'); do
+          grep -v '^\#' "profiles/${PROFILE}.txt" | grep -v '^$' \
+            | while IFS= read -r ext; do
             ci_skip=$(bash -c "source extensions/$ext/extension.conf && echo \${CI_SKIP:-}")
             if [ "$ci_skip" = "1" ]; then
               echo "SKIP $ext (CI_SKIP=1)"
               continue
             fi
-            ver=$(bash -c "source extensions/$ext/extension.conf && echo \${VERSION_${{ matrix.pg }}}")
+            ver=$(./scripts/ext-version.sh "$ext" "$PG")
             [ -z "$ver" ] && continue
-            img="${REGISTRY}/${PREFIX}-${ext}:${{ matrix.pg }}"
+            img="${REGISTRY}/${PREFIX}-${ext}:${PG}"
             if docker pull "$img" 2>/dev/null; then
-              docker tag "$img" "local/${PREFIX}-${ext}:${{ matrix.pg }}"
+              docker tag "$img" "local/${PREFIX}-${ext}:${PG}"
             else
               echo "WARN: $img not available, will skip"
             fi
