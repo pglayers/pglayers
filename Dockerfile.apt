@@ -50,16 +50,19 @@ RUN set -eux; \
     done
 
 # Bundle ALL runtime shared libraries not present in the base postgres image
-# so the layer is fully self-contained. No-op when the extension has no .so
-# files or no non-base deps.
+# so the layer is fully self-contained. Dependencies are discovered from every
+# ELF object the extension ships -- its .so files AND any executables it
+# installs (e.g. under /usr/lib/postgresql/<pg>/bin) -- not just *.so, so an
+# executable's non-base deps are bundled too. No-op when the extension ships
+# no ELF objects or has no non-base deps.
 COPY --from=base /tmp/base-libs.txt /tmp/base-libs.txt
 RUN set -eux; \
-    PG=${PG_MAJOR}; \
     : > /tmp/all-deps.txt; \
-    if [ -d "/output/usr/lib/postgresql/${PG}/lib" ]; then \
-        find "/output/usr/lib/postgresql/${PG}/lib" -name '*.so' \
-            -exec ldd {} + 2>/dev/null \
-            | awk '/=>/ && /\// {print $3}' | sort -u > /tmp/all-deps.txt; \
+    if [ -d /output ]; then \
+        find /output -type f 2>/dev/null | while IFS= read -r f; do \
+            [ "$(od -An -tx1 -N4 "$f" 2>/dev/null | tr -d ' ')" = "7f454c46" ] || continue; \
+            ldd "$f" 2>/dev/null || true; \
+        done | awk '/=>/ && /\// {print $3}' | sort -u > /tmp/all-deps.txt; \
     fi; \
     while IFS= read -r lib; do \
         [ -n "$lib" ] || continue; \

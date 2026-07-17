@@ -225,36 +225,33 @@ for ext in "${EXTENSIONS[@]}"; do
             echo "COPY --from=${img} / /extensions/${ext}/"
             echo "RUN echo /extensions/${ext}/lib > /etc/ld.so.conf.d/pglayers-selftest.conf && ldconfig"
         } > "$sc_dockerfile"
-        # Isolated layout: the whole /extensions/<ext> tree is extension-owned
-        # (libs in lib/, executables like pgduck_server in bin/), so scan it all.
-        sc_roots="/extensions/${ext}"
+        # Isolated layout: the extension's files are COPYed under this prefix.
+        sc_prefix="/extensions/${ext}"
     else
         {
             echo "FROM postgres:${PG_TAG}"
             echo "COPY --from=${img} / /"
         } > "$sc_dockerfile"
-        # Classic layout: the extension overlays onto the base image. Scan the
-        # dirs it ships into -- the PG lib dir (its .so files + private deps)
-        # AND the bin dirs (executables like pgduck_server). Base binaries also
-        # live in bin/ but they resolve on the bare base image, so they never
-        # produce false positives; only a non-self-contained extension object
-        # will report "not found".
-        sc_roots="/usr/lib/postgresql/${PG}/lib /usr/lib/postgresql/${PG}/bin /usr/local/bin"
+        # Classic layout: the extension overlays onto the base image at root.
+        sc_prefix=""
     fi
     sc_img="pglayers-selftest:${PG}"
     if ! docker build -t "$sc_img" -f "$sc_dockerfile" "${TMPDIR}" >/dev/null 2>&1; then
-        warn "${ext}: could not build self-containment test image (skipping)"
+        # A self-test image that won't build means the layer is broken or a
+        # dependency is unsatisfiable -- this gate must fail, not skip.
+        fail "${ext}: could not build self-containment test image"
         continue
     fi
-    # ldd every ELF object the extension ships -- shared libraries (its .so
-    # files and bundled private deps) AND executables (e.g. pgduck_server) --
-    # and collect any unresolved sonames. ELF membership is detected by magic
-    # bytes so shell scripts and data files in bin/ are skipped.
-    sc_missing="$(docker run --rm --entrypoint bash "$sc_img" -c '
-        for root in '"$sc_roots"'; do
-            [ -d "$root" ] || continue
-            find "$root" -type f 2>/dev/null
-        done | while IFS= read -r f; do
+    # ldd every ELF object the extension SHIPS -- and only those. The set of
+    # files the layer introduces is exactly (its image file list) minus (the
+    # bare base image file list) from Phase 2; this covers its .so files AND
+    # any executables (e.g. pg_lake's pgduck_server) while never touching base
+    # binaries, so the scan is both complete and fast. ELF membership is
+    # detected by magic bytes so scripts/data in bin/ are skipped.
+    sc_files="$(comm -23 "${TMPDIR}/${ext}.txt" "${TMPDIR}/base.txt" | sed "s|^|${sc_prefix}|")"
+    sc_missing="$(printf '%s\n' "$sc_files" | docker run --rm -i --entrypoint bash "$sc_img" -c '
+        while IFS= read -r f; do
+            { [ -n "$f" ] && [ -f "$f" ]; } || continue
             [ "$(od -An -tx1 -N4 "$f" 2>/dev/null | tr -d " ")" = "7f454c46" ] || continue
             ldd "$f" 2>/dev/null | awk "/not found/ {print \$1}"
         done | sort -u
