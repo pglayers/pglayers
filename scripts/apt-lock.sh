@@ -43,7 +43,10 @@ for dir in extensions/*/; do
 
     obj='{}'
     for pg in $pgs; do
-        v="$(scripts/apt-support.sh version "$pg" "$APT_PACKAGE" 2>/dev/null || true)"
+        # No `|| true`: a PGDG query failure must abort (set -euo pipefail)
+        # rather than silently dropping a version from the lockfile. A package
+        # genuinely absent for this PG major yields empty output + exit 0.
+        v="$(scripts/apt-support.sh version "$pg" "$APT_PACKAGE")"
         [ -n "$v" ] || continue
         obj="$(jq -c --arg pg "$pg" --arg v "$v" '. + {($pg): $v}' <<<"$obj")"
     done
