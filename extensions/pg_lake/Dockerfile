@@ -2,7 +2,7 @@
 ARG PG_MAJOR=17
 ARG PG_TAG=${PG_MAJOR}
 ARG LAYOUT=classic
-ARG EXT_VERSION=v3.3.4
+ARG EXT_VERSION=v3.4.1
 ARG VCPKG_VERSION=2025.10.17
 
 # Capture base image library list for dep-bundling

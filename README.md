@@ -156,7 +156,7 @@ promoted to stable.
 | [pg_hint_plan](https://github.com/ossc-db/pg_hint_plan) | 1.7.1 | 17, 18 | Tweak execution plans using hints in SQL comments |
 | [pg_ivm](https://github.com/sraoss/pg_ivm) | 1.13 | 17, 18 | Incremental View Maintenance for materialized views |
 | [pg_jsonschema](https://github.com/supabase/pg_jsonschema) | 0.3.4 | 17, 18 | JSON Schema validation |
-| [pg_lake](https://github.com/Snowflake-Labs/pg_lake) | 3.3.4 | 17, 18 | Iceberg and data lake access (Parquet, CSV, JSON via DuckDB) |
+| [pg_lake](https://github.com/Snowflake-Labs/pg_lake) | 3.4.1 | 17, 18 | Iceberg and data lake access (Parquet, CSV, JSON via DuckDB) |
 | [pg_net](https://github.com/supabase/pg_net) | 0.20.3 | 17, 18, 19 | Async non-blocking HTTP/HTTPS requests |
 | [pg_partman](https://github.com/pgpartman/pg_partman) | 5.4.3 | 17, 18, 19 | Automated table partition management |
 | [pg_permissions](https://github.com/cybertec-postgresql/pg_permissions) | 1.4.1 | 17, 18, 19 | Review and audit object permissions against a desired state |
