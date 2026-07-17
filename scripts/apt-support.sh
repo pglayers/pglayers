@@ -36,15 +36,23 @@ _clean_version() {
 
 # Populate the per-PG cache file with "postgresql-<pg>-<suffix> <version>"
 # lines for every available package, using a single container invocation.
+#
+# Distinguishes a genuine result from an infrastructure failure: if the docker
+# query fails (network/apt error) or yields an empty list (the postgres image
+# always ships postgresql-<pg>-* packages, so empty means the query broke), it
+# returns non-zero WITHOUT caching, so callers can surface the error instead of
+# silently treating every package as "unavailable".
 _ensure_cache() {
     local pg="$1"
     local list="${CACHE_DIR}/pg${pg}.list"
     if [ -s "$list" ]; then return 0; fi
     mkdir -p "$CACHE_DIR"
-    local tag
+    local tag tmp
     tag="$(_pg_tag "$pg")"
+    tmp="$(mktemp "${CACHE_DIR}/pg${pg}.XXXXXX")"
     # One container: apt-get update, then dump name+version for the prefix.
-    docker run --rm "postgres:${tag}" bash -c '
+    # pipefail (set at top) makes the pipeline fail if the docker run fails.
+    if ! docker run --rm "postgres:${tag}" bash -c '
         set -e
         apt-get update >/dev/null 2>&1
         for p in $(apt-cache pkgnames "postgresql-'"$pg"'-" 2>/dev/null); do
@@ -52,7 +60,17 @@ _ensure_cache() {
             v="$(apt-cache show "$p" 2>/dev/null | awk "/^Version:/{print \$2; exit}")"
             [ -n "$v" ] && echo "$p $v"
         done
-    ' 2>/dev/null | sort -u > "$list" || : > "$list"
+    ' 2>/dev/null | sort -u > "$tmp"; then
+        rm -f "$tmp"
+        echo "apt-support: PGDG package query failed for PG ${pg} (docker/apt error)" >&2
+        return 1
+    fi
+    if [ ! -s "$tmp" ]; then
+        rm -f "$tmp"
+        echo "apt-support: empty PGDG package list for PG ${pg} (query likely failed)" >&2
+        return 1
+    fi
+    mv "$tmp" "$list"
 }
 
 _raw_version() {
@@ -67,12 +85,18 @@ cmd="${1:-}"; pg="${2:-}"; pkg="${3:-}"
 case "$cmd" in
     version)
         [ -n "$pkg" ] || exit 0
+        # A query failure inside _raw_version (_ensure_cache) propagates as a
+        # non-zero exit via set -e. A package that is simply absent from the
+        # (successfully fetched) list yields empty output and exit 0, so callers
+        # can distinguish "unavailable" (skip) from "query broke" (fail).
         raw="$(_raw_version "$pg" "$pkg")"
-        [ -n "$raw" ] && _clean_version "$raw"
+        if [ -n "$raw" ]; then _clean_version "$raw"; fi
+        exit 0
         ;;
     aptversion)
         [ -n "$pkg" ] || exit 0
         _raw_version "$pg" "$pkg"
+        exit 0
         ;;
     available)
         [ -n "$pkg" ] || exit 1

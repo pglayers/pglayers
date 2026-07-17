@@ -41,14 +41,19 @@ EXTENSIONS=()
 if [ -n "${PGLAYERS_EXTENSIONS:-}" ]; then
     # Profile mode: use pre-filtered list from Makefile/environment
     for ext in $PGLAYERS_EXTENSIONS; do
-        ver="$(scripts/ext-version.sh "$ext" "$PG" 2>/dev/null || true)"
+        # No `|| true`: a version-resolution error (e.g. PGDG probe failed)
+        # must fail this correctness gate rather than silently drop extensions.
+        # A genuinely unavailable package returns success with empty output.
+        ver="$(scripts/ext-version.sh "$ext" "$PG")"
         [ -n "$ver" ] && EXTENSIONS+=("$ext")
     done
 else
     # Default: discover from filesystem
     for dir in extensions/*/; do
         ext="$(basename "$dir")"
-        ver="$(scripts/ext-version.sh "$ext" "$PG" 2>/dev/null || true)"
+        # No `|| true`: see the profile-mode note above -- fail on a real
+        # resolution error, treat a genuinely unavailable package as empty.
+        ver="$(scripts/ext-version.sh "$ext" "$PG")"
         [ -n "$ver" ] && EXTENSIONS+=("$ext")
     done
 fi

@@ -118,8 +118,13 @@ jobs:
               # version from PGDG. An empty result means the package is not
               # published for this PG major, so the combo is skipped (this is
               # what makes beta gaps like pglogical/tdigest on PG19 auto-skip).
+              # A non-zero exit means the PGDG query itself failed -- fail the
+              # job rather than silently skipping the build.
               if [ -z "$ver" ] && [ -n "${APT_PACKAGE:-}" ]; then
-                ver="$(./scripts/ext-version.sh "$ext" "$pg" 2>/dev/null || true)"
+                if ! ver="$(./scripts/ext-version.sh "$ext" "$pg")"; then
+                  echo "ERROR: PGDG version resolution failed for $ext (PG $pg)" >&2
+                  exit 1
+                fi
               fi
               [ -z "$ver" ] && continue
               extensions=$(echo "$extensions" | jq -c \

@@ -26,7 +26,10 @@ vv="VERSION_${pg}"
 v="${!vv:-}"
 
 if [ -z "$v" ] && [ -n "${APT_PACKAGE:-}" ]; then
-    v="$("$(dirname "$0")/apt-support.sh" version "$pg" "$APT_PACKAGE" 2>/dev/null || true)"
+    # No `|| true`: an apt-support.sh failure (PGDG query broke) must propagate
+    # so callers fail fast. A package that is genuinely unavailable for this PG
+    # major returns success with empty output, which stays an empty version.
+    v="$("$(dirname "$0")/apt-support.sh" version "$pg" "$APT_PACKAGE")"
 fi
 
 echo "$v"

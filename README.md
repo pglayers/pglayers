@@ -123,16 +123,16 @@ promoted to stable.
 
 | Extension | Version | PG versions | Description |
 |-----------|---------|-------------|-------------|
-| [age](https://github.com/apache/age) | 1.7.0-rc0 | 17, 18 | Graph database with openCypher query language (Apache AGE) |
+| [age](https://github.com/apache/age) | 1.7.0 (PG17), 1.8.0 (PG18) | 17, 18 | Graph database with openCypher query language (Apache AGE) |
 | [anon](https://gitlab.com/dalibo/postgresql_anonymizer) | 3.1.1 | 17, 18 | Data anonymization and masking |
 | [credcheck](https://github.com/HexaCluster/credcheck) | 5.0 | 17, 18, 19 | Credential checks on user creation / password change |
 | [db2fce](https://github.com/credativ/db2fce) | 0.0.17 | 17, 18 | DB2 compatibility functions (date/time, string helpers) |
 | [documentdb](https://github.com/documentdb/documentdb) | 0.113-0 | 17, 18 | MongoDB-compatible document database engine (BSON types and CRUD API) |
 | [extra_window_functions](https://github.com/xocolatl/extra_window_functions) | 1.0 | 17, 18, 19 | Extra window functions (ignore-nulls variants, nth-from-last) |
-| [first_last_agg](https://github.com/wulczer/first_last_agg) | 0.1.4 | 17, 18 | first() and last() aggregate functions |
+| [first_last_agg](https://github.com/wulczer/first_last_agg) | 0.1.4-4-gd63ea3b | 17, 18 | first() and last() aggregate functions |
 | [h3-pg](https://github.com/zachasme/h3-pg) | 4.2.3 | 17, 18 | Uber H3 hexagonal geospatial indexing |
 | [hll](https://github.com/citusdata/postgresql-hll) | 2.21 | 17, 18, 19 | HyperLogLog probabilistic distinct counting |
-| [http](https://github.com/pramsey/pgsql-http) | 1.7.1 | 17, 18, 19 | HTTP client for PostgreSQL (web requests from SQL) |
+| [http](https://github.com/pramsey/pgsql-http) | 1.7.2 | 17, 18, 19 | HTTP client for PostgreSQL (web requests from SQL) |
 | [hypopg](https://github.com/HypoPG/hypopg) | 1.4.3 | 17, 18, 19 | Hypothetical indexes for what-if analysis |
 | [icu_ext](https://github.com/dverite/icu_ext) | 1.11.0 | 17, 18, 19 | ICU functions: Unicode names, transliteration, spellout, collation |
 | [ip4r](https://github.com/RhodiumToad/ip4r) | 2.4.3 | 17, 18, 19 | IPv4/IPv6 range data types with GiST indexing |
@@ -162,14 +162,14 @@ promoted to stable.
 | [pg_permissions](https://github.com/cybertec-postgresql/pg_permissions) | 1.4.1 | 17, 18, 19 | Review and audit object permissions against a desired state |
 | [pg_qualstats](https://github.com/powa-team/pg_qualstats) | 2.1.4 | 17, 18, 19 | Statistics collector for WHERE clause predicates |
 | [pg_repack](https://github.com/reorg/pg_repack) | 1.5.3 | 17, 18, 19 | Online table reorganization without heavy locks |
-| [pg_roaringbitmap](https://github.com/ChenHuajun/pg_roaringbitmap) | 1.1.0 | 17, 18 | Roaring bitmap data type for fast set operations |
+| [pg_roaringbitmap](https://github.com/ChenHuajun/pg_roaringbitmap) | 1.2.0 | 17, 18 | Roaring bitmap data type for fast set operations |
 | [pg_rrule](https://github.com/Natureshadow/pg_rrule) | 0.3.0 | 17, 18, 19 | iCalendar RRULE recurrence type and occurrence expansion |
 | [pg_similarity](https://github.com/eulerto/pg_similarity) | 1.0 | 17, 18 | Similarity functions (Levenshtein, Jaro-Winkler, Cosine, Jaccard) |
 | [pg_squeeze](https://github.com/cybertec-postgresql/pg_squeeze) | 1.9.3 | 17, 18, 19 | Remove unused space from tables without heavy locks |
 | [pg_stat_monitor](https://github.com/percona/pg_stat_monitor) | 2.3.2 | 17, 18 | Enhanced query statistics with histograms and buckets |
 | [pg_textsearch](https://github.com/timescale/pg_textsearch) | 1.3.1 | 17, 18 | BM25 relevance-ranked full-text search |
 | [pg_uuidv7](https://github.com/fboulnois/pg_uuidv7) | 1.7.0 | 17, 18, 19 | UUIDv7 generation (time-sortable unique identifiers) |
-| [pg_wait_sampling](https://github.com/postgrespro/pg_wait_sampling) | 1.1.9 | 17, 18, 19 | Sampling-based statistics of wait events |
+| [pg_wait_sampling](https://github.com/postgrespro/pg_wait_sampling) | 1.1.11 | 17, 18, 19 | Sampling-based statistics of wait events |
 | [pgfincore](https://github.com/klando/pgfincore) | 1.4.0 | 17, 18, 19 | Inspect and manage OS page cache for data files |
 | [pgjwt](https://github.com/michelp/pgjwt) | master | 17, 18, 19 | JSON Web Token (JWT) generation and validation |
 | [pglogical](https://github.com/2ndQuadrant/pglogical) | 2.4.7 | 17, 18, 19 | Logical streaming replication using publish/subscribe model |
@@ -180,10 +180,10 @@ promoted to stable.
 | [pgsphere](https://github.com/postgrespro/pgsphere) | 1.5.2 | 17, 18 | Spherical data types (points, circles, polygons) for astronomy/geo |
 | [pgtap](https://github.com/theory/pgtap) | 1.3.4 | 17, 18, 19 | Unit testing framework for PostgreSQL |
 | [pgtt](https://github.com/darold/pgtt) | 4.5 | 17, 18, 19 | Oracle-style Global Temporary Tables |
-| [pgvector](https://github.com/pgvector/pgvector) | 0.8.3 | 17, 18, 19 | Vector similarity search for AI/embeddings |
+| [pgvector](https://github.com/pgvector/pgvector) | 0.8.5 | 17, 18, 19 | Vector similarity search for AI/embeddings |
 | [pgvectorscale](https://github.com/timescale/pgvectorscale) | 0.9.0 | 17, 18 | High-performance vector search with DiskANN (complements pgvector) |
 | [pljs](https://github.com/plv8/pljs) | 1.0.5 | 17, 18 | JavaScript (QuickJS) procedural language |
-| [plpgsql_check](https://github.com/okbob/plpgsql_check) | 2.9.1 | 17, 18, 19 | PL/pgSQL linter and validator |
+| [plpgsql_check](https://github.com/okbob/plpgsql_check) | 2.10.1 | 17, 18, 19 | PL/pgSQL linter and validator |
 | [plprofiler](https://github.com/bigsql/plprofiler) | 4.2.5 | 17, 18 | Performance profiler for PL/pgSQL functions |
 | [plv8](https://github.com/plv8/plv8) | 3.2.4 | 17, 18 | JavaScript (V8) procedural language |
 | [PostGIS](https://github.com/postgis/postgis) | 3.6.4 | 17, 18, 19 | Geospatial extensions (geometry, geography, raster, MVT) |
@@ -194,10 +194,10 @@ promoted to stable.
 | [rum](https://github.com/postgrespro/rum) | 1.3.15 | 17, 18 | GIN-like index with ordering for full text search |
 | [semver](https://github.com/theory/pg-semver) | 0.41.0 | 17, 18, 19 | Semantic version data type |
 | [set_user](https://github.com/pgaudit/set_user) | 4.2.0 | 17, 18, 19 | Auditable privilege escalation control (set_user/reset_user) |
-| [tdigest](https://github.com/tvondra/tdigest) | 1.4.3 | 17, 18, 19 | T-digest for quantile and percentile estimation |
+| [tdigest](https://github.com/tvondra/tdigest) | 1.4.4 | 17, 18, 19 | T-digest for quantile and percentile estimation |
 | [tds_fdw](https://github.com/tds-fdw/tds_fdw) | 2.0.5 | 17, 18 | Foreign data wrapper for SQL Server and Sybase |
 | [temporal_tables](https://github.com/arkhipov/temporal_tables) | 1.2.2 | 17, 18 | System-period temporal tables |
-| [timescaledb](https://github.com/timescale/timescaledb) | 2.28.1 | 17, 18 | Time-series hypertables, compression, continuous aggregates |
+| [timescaledb](https://github.com/timescale/timescaledb) | 2.28.2 | 17, 18 | Time-series hypertables, compression, continuous aggregates |
 | [timestamp9](https://github.com/optiver/timestamp9) | 1.4.0 | 17, 18, 19 | Nanosecond-precision timestamp type |
 | [toastinfo](https://github.com/df7cb/toastinfo) | 1.7 | 17, 18, 19 | Inspect the TOAST storage details of a value |
 | [wal2json](https://github.com/eulerto/wal2json) | 2.6 | 17, 18 | JSON output plugin for logical replication / CDC |
