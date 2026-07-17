@@ -79,7 +79,7 @@ build: _check-ext ## Build a single extension image
 	$(eval DOCKERFILE := $(if $(wildcard extensions/$(EXT)/Dockerfile),extensions/$(EXT)/Dockerfile,Dockerfile.apt))
 	@test -n "$(EXT_VERSION)" || { echo "Error: $(EXT) is not available for PG $(PG) (no VERSION_$(PG), and $(if $(EXT_APT_PACKAGE),PGDG has no postgresql-$(PG)-$(EXT_APT_PACKAGE),no APT_PACKAGE set))"; exit 1; }
 	@test -f "$(DOCKERFILE)" || { echo "Error: $(EXT) has no Dockerfile and no APT_PACKAGE for the shared template"; exit 1; }
-	@test "$(DOCKERFILE)" = "extensions/$(EXT)/Dockerfile" -o -n "$(EXT_APT_PACKAGE)" || { echo "Error: $(EXT) uses the shared Dockerfile.apt but has no APT_PACKAGE set"; exit 1; }
+	@{ test "$(DOCKERFILE)" = "extensions/$(EXT)/Dockerfile" || test -n "$(EXT_APT_PACKAGE)"; } || { echo "Error: $(EXT) uses the shared Dockerfile.apt but has no APT_PACKAGE set"; exit 1; }
 	@echo "Building $(PREFIX)-$(EXT):$(PG) (extension $(EXT_VERSION), $(if $(filter Dockerfile.apt,$(DOCKERFILE)),shared apt template,custom Dockerfile))..."
 	docker buildx build \
 		$(if $(PLATFORM),--platform $(PLATFORM)) \

@@ -79,11 +79,13 @@ RUN set -eux; \
     # loads its own libssh2.so.1 first, postgis's libcurl would bind to it
     # and hit undefined symbols. Unique sonames make cross-layer clashes
     # impossible while keeping the layer self-contained.
+    find "$DEPS_DIR" -type l -delete 2>/dev/null || true; \
     for dep in "$DEPS_DIR"/*.so*; do \
         [ -f "$dep" ] || continue; \
-        bn="$(basename "$dep")"; \
-        patchelf --set-soname "${tag}${bn}" "$dep"; \
-        mv "$dep" "$DEPS_DIR/${tag}${bn}"; \
+        soname="$(patchelf --print-soname "$dep" 2>/dev/null || true)"; \
+        [ -n "$soname" ] || soname="$(basename "$dep")"; \
+        patchelf --set-soname "${tag}${soname}" "$dep"; \
+        mv "$dep" "$DEPS_DIR/${tag}${soname}"; \
     done; \
     # Rewrite NEEDED refs to bundled libs across every ELF object we ship.
     for obj in "$LIBDIR"/*.so* "$DEPS_DIR"/*.so*; do \

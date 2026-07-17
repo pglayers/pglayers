@@ -65,11 +65,13 @@ RUN set -eux; \
     # Mangle bundled dep sonames with a per-extension prefix so they can never
     # satisfy another layer's (or postgis's) soname in the shared postgres
     # process. See extensions/pg_duckdb/Dockerfile for the rationale.
+    find "$DEPS_DIR" -type l -delete 2>/dev/null || true; \
     for dep in "$DEPS_DIR"/*.so*; do \
         [ -f "$dep" ] || continue; \
-        bn="$(basename "$dep")"; \
-        patchelf --set-soname "${tag}${bn}" "$dep"; \
-        mv "$dep" "$DEPS_DIR/${tag}${bn}"; \
+        soname="$(patchelf --print-soname "$dep" 2>/dev/null || true)"; \
+        [ -n "$soname" ] || soname="$(basename "$dep")"; \
+        patchelf --set-soname "${tag}${soname}" "$dep"; \
+        mv "$dep" "$DEPS_DIR/${tag}${soname}"; \
     done; \
     for obj in "$LIBDIR"/*.so* "$DEPS_DIR"/*.so*; do \
         [ -f "$obj" ] || continue; \
