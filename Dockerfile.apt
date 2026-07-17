@@ -87,6 +87,11 @@ RUN set -eux; \
     LIBDIR="/output/usr/lib/postgresql/${PG}/lib"; \
     DEPS_DIR="${LIBDIR}/${EXT}-deps"; \
     tag="pglx_${EXT}_"; \
+    # If the extension installs nothing under /usr/lib (e.g. SQL-only), there
+    # are neither bundled deps nor a PG libdir -- nothing to relocate. (Bundled
+    # deps, when present, are copied under /output/usr/lib/<multiarch> by the
+    # bundling stage, so their absence here is definitive.)
+    [ -d /output/usr/lib ] || exit 0; \
     # Bundled runtime deps = non-base .so the bundling stage copied outside the
     # PostgreSQL tree. Determine this FIRST -- independent of $LIBDIR -- so we
     # never silently leave global deps behind (collision risk) just because the
