@@ -465,7 +465,7 @@ jobs:
   # Compose and push profile images from the freshly published layers.
   profile-images:
     needs: [matrix, build, manifest]
-    if: ${{ always() && !cancelled() && needs.matrix.outputs.publish == 'true' && github.ref == 'refs/heads/main' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    if: ${{ always() && !cancelled() && needs.matrix.outputs.publish == 'true' && github.ref == 'refs/heads/main' && (needs.build.result == 'success' || needs.build.result == 'skipped') && (needs.manifest.result == 'success' || needs.manifest.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
