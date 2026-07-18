@@ -132,8 +132,8 @@ jobs:
           # If multiple versions changed, rebuild everything
           if [ "$(echo "$changed" | wc -w)" -gt 1 ]; then
             echo "Multiple versions changed, triggering full rebuild"
-            gh workflow run build-push.yml
+            gh workflow run ci.yml
           else
             echo "Triggering rebuild for PG ${changed}"
-            gh workflow run build-push.yml -f pg_version="${changed}"
+            gh workflow run ci.yml -f pg_version="${changed}"
           fi

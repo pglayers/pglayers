@@ -97,16 +97,28 @@ This test suite validates:
    `.so` in the combined image. Catches transitive runtime deps that
    weren't bundled (e.g., PostGIS needing libtiff via libproj).
 
-4. **Self-containment** -- Overlays each extension on the *bare* base
-   image alone (no sibling layers) and runs `ldd` on every ELF object it
-   ships. An extension must resolve all of its own runtime deps without
-   help from any other layer (e.g. `pg_net` must bundle its own
-   `libcurl.so.4`, not borrow postgis's). See Dockerfile requirement #8.
+4. **No cross-layer library leaks** (PG 18+ isolated layout) -- In the
+   combined image, `ldd`s every ELF object under `/extensions/<ext>/`
+   and asserts each **bundled** dependency resolves inside that same
+   extension's `/extensions/<ext>/lib`, never a sibling layer's dir. The
+   `ldd ... not found` check (#3) only catches a *missing* library; this
+   catches one that binds to the *wrong* copy -- the failure mode behind
+   "PostGIS loads a mismatched libssh2 through the profile-wide linker
+   path". A leak means isolation regressed (a global `ld.so.conf.d` /
+   `LD_LIBRARY_PATH` was reintroduced, or soname mangling / `$ORIGIN`
+   RUNPATH is missing from a `normalizer` stage).
 
-5. **All extensions load** -- `CREATE EXTENSION` must succeed for every
+5. **Self-containment** -- Overlays each extension on the *bare* base
+   image alone (no sibling layers, no global linker path) and runs `ldd`
+   on every ELF object it ships. An extension must resolve all of its own
+   runtime deps purely via its own `$ORIGIN` RUNPATH (e.g. `pg_net` must
+   bundle its own `libcurl.so.4`, not borrow postgis's). See Dockerfile
+   requirement #8.
+
+6. **All extensions load** -- `CREATE EXTENSION` must succeed for every
    extension in the combined image.
 
-6. **Functional integration tests** -- Each extension's
+7. **Functional integration tests** -- Each extension's
    `extensions/<ext>/test.sql` runs multi-step `PASS`/`FAIL` checks in the
    combined image, catching runtime failures that `CREATE EXTENSION` alone
    wouldn't surface. `test.sql` is required for every extension.
@@ -234,7 +246,7 @@ otherwise invisible in git, a second workflow makes it explicit:
   **auto-merge enabled** (`--auto --squash`), so it lands automatically once
   required checks pass (no manual merge needed); it still respects branch
   protection, so a failing check holds it open for review.
-- **`build-push.yml`** keys change detection off `.github/apt-versions.json`:
+- **`ci.yml`** keys change detection off `.github/apt-versions.json`:
   merging the monitor PR rebuilds **exactly** the extensions whose recorded
   version changed, producing fresh `pgx-<ext>:<pg>-<version>` images.
 
@@ -363,6 +375,44 @@ Every extension Dockerfile **must** follow these practices:
    declared as a top-level ARG. BuildKit skips unused stages, so the
    normalizer stage adds zero overhead for PG 17 builds.
 
+   **The isolated `normalizer` stage MUST make every bundling layer
+   self-resolving -- it is NOT enough to copy bundled deps flat into
+   `/isolated/lib`.** *Which cases need it:* any Dockerfile (families
+   2-4) whose layer ships a runtime `.so` that is **not** in the base
+   `postgres` image -- i.e. it copies non-base libs via the
+   `find /output/usr/lib ... ! -path '*/postgresql/*'` bundling step, or
+   otherwise places a support lib / companion binary in the layer
+   (`pgsodium`->libsodium, `postgis`/`pgrouting`->libgeos et al.,
+   `http`/`pg_net`/`pg_duckdb`/`pg_lake`/`documentdb`->libcurl->libssh2,
+   `h3_pg`->libh3, `tds_fdw`->libsybdb, ...). For those, the `normalizer`
+   stage must, after copying files into `/isolated/lib`:
+   - **mangle each bundled dep's soname** to `pglx_<ext>_<soname>`
+     (`patchelf --set-soname`, rename the file) and rewrite the `NEEDED`
+     entries of every ELF object it ships (`patchelf --replace-needed`),
+   - **set `RUNPATH=$ORIGIN`** on every ELF object in `/isolated/lib`
+     (and `$ORIGIN/../lib` on any companion binary shipped in `bin/`,
+     e.g. `pg_lake`'s `pgduck_server`),
+   - which requires **`patchelf`** installed in the stage the normalizer
+     is `FROM` (the builder/collector/deb-stage).
+
+   This is mandatory because the combined/profile image resolves each
+   module's transitive deps purely through that per-object RUNPATH +
+   mangled soname -- there is **no** global `ld.so.conf.d`/`ldconfig`/
+   `LD_LIBRARY_PATH` fallback (see requirement #8 and the reasoning in the
+   "Isolated (PG 18+)" note there). A `normalizer` that only copies libs
+   flat will pass a naive build but fail Phase 5 (self-containment) and
+   leak across layers in the combined image (the mismatched-`libssh2`
+   bug). *When it is a no-op:* SQL-only extensions or extensions whose
+   deps are all in the base image ship no bundled `.so`, so the
+   soname/RUNPATH block is guarded (`if [ -s /tmp/bundled.txt ]`) and does
+   nothing -- but still set `RUNPATH=$ORIGIN` on the extension's own
+   `.so`, which is harmless and future-proof. **APT extensions on the
+   shared `Dockerfile.apt` get all of this for free -- do not
+   reimplement.** Reference custom implementations: `Dockerfile.apt`,
+   `extensions/postgis/Dockerfile`, `extensions/pg_lake/Dockerfile`
+   (companion binary), `extensions/pgsodium/Dockerfile` (bundled soname
+   with a symlink chain).
+
 7. **Architecture-neutral** -- Dockerfiles must work on both `linux/amd64`
    and `linux/arm64` without modification. Do NOT hardcode architecture-
    specific paths like `/usr/lib/x86_64-linux-gnu/`. Use
@@ -387,10 +437,27 @@ Every extension Dockerfile **must** follow these practices:
 
    - **Isolated (PG 18+):** each extension lives in its own
      `/extensions/<ext>/lib` namespace, so bundled deps sit flat next to
-     the extension `.so` and are found via the per-extension
-     `dynamic_library_path` / `ld.so.conf.d` entry. Bundling every
-     non-base dep (no skip lists) is sufficient -- collisions are
-     structurally impossible.
+     the extension `.so`. PostgreSQL locates the extension **module**
+     itself via the per-extension `dynamic_library_path` /
+     `extension_control_path` GUCs, but the *system dynamic linker*
+     (`ld.so`) resolves each module's transitive shared-library
+     dependencies (`libcurl` -> `libssh2`) and ignores those GUCs. So the
+     isolated `normalizer` stage must make every ELF object it ships
+     genuinely self-resolving: set each object's `RUNPATH` to `$ORIGIN`
+     (its own `/extensions/<ext>/lib`) and **mangle each bundled dep's
+     soname** with a per-extension prefix (`pglx_<ext>_<soname>`, rewriting
+     `NEEDED` entries) -- exactly as the classic layout does, only flat
+     (no separate `<ext>-deps/` dir, and `RUNPATH` is just `$ORIGIN`).
+     Do **not** paper over missing RUNPATHs with a profile-wide
+     `ld.so.conf.d` + `ldconfig` or `LD_LIBRARY_PATH` in the combined
+     image: a global linker namespace collapses every soname to a single
+     `ldconfig` winner, so two layers bundling the same soname (e.g.
+     `postgis` and `pg_duckdb`, both pulling `libssh2` via `libcurl`)
+     would bind to one shared copy -- reintroducing exactly the collision
+     the isolated layout exists to prevent. With per-object RUNPATH +
+     mangled sonames, collisions are structurally impossible and the
+     combined image needs only the `dynamic_library_path` /
+     `extension_control_path` GUCs.
 
    - **Classic (PG 17):** the flat overlay means every layer shares
      `/usr/lib/<multiarch>/`, so two extensions bundling the same soname
@@ -418,7 +485,9 @@ Every extension Dockerfile **must** follow these practices:
      `extensions/pg_net/Dockerfile`, `extensions/pg_duckdb/Dockerfile`, and
      `extensions/pg_lake/Dockerfile` for the reference pattern (the last
      also relocates and rewrites the `pgduck_server` binary via
-     `$ORIGIN/../lib`).
+     `$ORIGIN/../lib`). The isolated `normalizer` stage in the same
+     Dockerfiles (and in the shared `Dockerfile.apt`) applies the flat
+     `$ORIGIN` + soname-mangling equivalent.
 
    Never introduce a `skip-libs` list that omits a real runtime dependency
    in the hope that another layer provides it.
@@ -487,6 +556,38 @@ must be updated in the same commit**:
    when the process cannot be a PostgreSQL background worker (e.g.,
    because it embeds a multi-threaded engine incompatible with
    PostgreSQL's process model).
+
+9. **`extension.conf` CONFLICTS field** -- Some extensions cannot be
+   loaded into the same backend *no matter how well the layers are
+   isolated*, because the conflict is at the **runtime/symbol** level, not
+   the file level, and file/soname isolation can't fix it. PostgreSQL loads
+   every module with `dlopen(file, RTLD_NOW | RTLD_GLOBAL)` (see
+   `dfmgr.c`), so each module and its `NEEDED` deps publish their exported
+   symbols into one process-global namespace. Soname mangling + `$ORIGIN`
+   RUNPATH isolate *which file* loads (enough for ABI-compatible C libs
+   like `libcurl`/`libssh2`), but they do **not** rename the symbols
+   inside, nor do they isolate process-global runtime state
+   (background workers, threads, companion servers). `pg_lake` and
+   `pg_duckdb` are both DuckDB-based and destabilize the shared backend
+   when co-loaded (empirically: including both in the combined image
+   crashes it during query execution; excluding `pg_lake` makes the crash
+   cascade disappear). This is why classic PG17 tolerates the pair (files
+   overlay at one path) while isolated PG18+ does not. When two extensions
+   provably cannot co-load, declare it:
+   ```bash
+   CONFLICTS="pg_duckdb"          # comma-separated SQL/dir names
+   ```
+   The relationship is symmetric (declaring it on one side is enough).
+   `tests/test-layers.sh` builds a conflict-free subset for the *combined*
+   image (Phases 6-9): when two conflicting extensions are both present,
+   the later one is excluded from the combined image (it is still
+   validated standalone in Phase 5). Real deployments compose curated
+   **profiles**, which must not contain conflicting members. (Benign
+   *SQL-level* name overlaps between unrelated extensions -- e.g. two
+   extensions both defining `public.fips_mode()` -- are handled separately:
+   the combined test treats a duplicate-object `CREATE EXTENSION` error as
+   a non-gating warning and skips that extension's integration check, since
+   you would never create both in one real database.)
 
 Do not merge a PR that adds an extension to `extensions/` without
 updating the README table and tests. Stale documentation is a bug.

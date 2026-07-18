@@ -125,8 +125,10 @@ for ext in "${TEST_EXTENSIONS[@]}"; do
     LIB_PATHS="${LIB_PATHS}/extensions/${ext}/lib:"
 done
 
-# Build the LD_LIBRARY_PATH (for bundled runtime deps like PostGIS)
-LD_LIB_PATH="${LIB_PATHS%:}"
+# No LD_LIBRARY_PATH: each isolated layer resolves its own bundled runtime
+# deps via per-object $ORIGIN RUNPATH + per-extension-mangled sonames. A
+# global linker path would collapse each soname to a single winner and let
+# one layer bind another's copy (e.g. postgis + pg_duckdb both ship libssh2).
 
 # Generate Pod manifest
 cat <<EOF | kubectl apply -f - >/dev/null
@@ -154,8 +156,6 @@ done)
           value: "test"
         - name: POSTGRES_HOST_AUTH_METHOD
           value: "trust"
-        - name: LD_LIBRARY_PATH
-          value: "${LD_LIB_PATH}"
       args:
         - "postgres"
         - "-c"

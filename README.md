@@ -89,11 +89,19 @@ RUN echo "extension_control_path = '/extensions/pgvector/share:/extensions/pg_cr
     >> /usr/share/postgresql/postgresql.conf.sample && \
     echo "dynamic_library_path = '/extensions/pgvector/lib:/extensions/pg_cron/lib:/extensions/postgis/lib:\$libdir'" \
     >> /usr/share/postgresql/postgresql.conf.sample
-
-# Resolve bundled shared library dependencies
-RUN for d in /extensions/*/lib; do echo "$d"; done \
-    > /etc/ld.so.conf.d/pglayers.conf && ldconfig
 ```
+
+No linker configuration (`ld.so.conf.d`/`ldconfig`/`LD_LIBRARY_PATH`) is
+needed: each isolated layer is self-contained. Every ELF object it ships
+carries an `$ORIGIN` RUNPATH pointing at its own
+`/extensions/<ext>/lib`, and any bundled runtime library it needs (e.g.
+`libcurl` -> `libssh2`) has a per-extension-mangled soname
+(`pglx_<ext>_<soname>`). This keeps each layer's dependencies private, so
+two extensions that bundle the same library (for example `postgis` and
+`pg_duckdb`, both of which pull in `libssh2` via `libcurl`) can never bind
+to each other's copy in the shared postgres process. Configuring a global
+linker path instead would collapse every soname to a single winner and
+reintroduce exactly that cross-layer collision.
 
 The `$system` and `$libdir` suffixes ensure built-in contrib extensions
 (hstore, pg_stat_statements, etc.) remain discoverable.
@@ -559,8 +567,6 @@ spec:
       env:
         - name: POSTGRES_PASSWORD
           value: "secret"
-        - name: LD_LIBRARY_PATH
-          value: "/extensions/postgis/lib"
       args:
         - "postgres"
         - "-c"
@@ -907,8 +913,7 @@ pglayers/
 │   │   ├── new_extension.yml         Extension request form
 │   │   └── config.yml                Template chooser config
 │   └── workflows/
-│       ├── build-push.yml            CI: builds extensions, pushes to GHCR
-│       ├── test.yml                  CI: full test suite (PG 17, 18, 19)
+│       ├── ci.yml                    CI: build + test + compose profiles; publish on merge
 │       ├── monitor-base-image.yml    Detects base image updates (every 6h)
 │       ├── monitor-extensions.yml    Detects new source-build releases
 │       ├── monitor-apt-versions.yml  Tracks apt versions (apt-versions.json)

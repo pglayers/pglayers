@@ -18,7 +18,7 @@ ARG TARGETARCH
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates
+    curl ca-certificates patchelf
 
 # Download DocumentDB deb from GitHub releases.
 # Tag format: v0.113-0 -> deb version: 0.113-0
@@ -104,26 +104,57 @@ COPY --from=deb-stage /output/ /
 COPY --from=rust-builder /output/ /
 COPY documentdb_gw_config.json /etc/documentdb/gateway_config.json
 
-# Isolated: flat /lib/ + /share/extension/ layout (PG 18+, CNPG-compatible)
+# Isolated: flat /lib/ + /share/extension/ layout (PG 18+, CNPG-compatible).
+# Each extension resolves its OWN bundled deps from its private
+# /extensions/<ext>/lib via $ORIGIN RUNPATH -- never through a global ld.so
+# cache -- with bundled-dep sonames mangled per extension so identical sonames
+# in sibling layers can't clash in the shared postgres process.
 FROM deb-stage AS normalizer
 ARG PG_MAJOR
 COPY --from=rust-builder /output/ /output/
 COPY documentdb_gw_config.json /output/etc/documentdb/gateway_config.json
-RUN mkdir -p /isolated/lib /isolated/share/extension /isolated/etc/documentdb && \
-    # Extension .so files
-    find /output/usr/lib/postgresql/${PG_MAJOR}/lib -maxdepth 1 -type f \
-        -exec cp -a {} /isolated/lib/ \; && \
-    # Control + SQL files
-    cp -a /output/usr/share/postgresql/${PG_MAJOR}/extension/* \
-        /isolated/share/extension/ && \
-    # Bundled runtime deps (system libs not in base image)
+RUN set -eux; \
+    PG=${PG_MAJOR}; \
+    tag="pglx_documentdb_"; \
+    mkdir -p /isolated/lib /isolated/share/extension /isolated/etc/documentdb; \
+    find /output/usr/lib/postgresql/${PG}/lib -maxdepth 1 -type f \
+        -exec cp -a {} /isolated/lib/ \; ; \
+    cp -a /output/usr/share/postgresql/${PG}/extension/* /isolated/share/extension/; \
+    cp -a /output/etc/documentdb/* /isolated/etc/documentdb/; \
+    : > /tmp/bundled.txt; \
     find /output/usr/lib -name '*.so*' ! -path '*/postgresql/*' \
-        \( -type f -o -type l \) -exec cp -a {} /isolated/lib/ \; && \
-    # Config files
-    cp -a /output/etc/documentdb/* /isolated/etc/documentdb/ && \
-    # Bitcode (optional, for JIT)
-    cp -a /output/usr/lib/postgresql/${PG_MAJOR}/lib/bitcode /isolated/lib/bitcode \
-        2>/dev/null || true
+        \( -type f -o -type l \) 2>/dev/null | while IFS= read -r f; do \
+        cp -a "$f" /isolated/lib/ && basename "$f" >> /tmp/bundled.txt; \
+    done; \
+    cp -a /output/usr/lib/postgresql/${PG}/lib/bitcode /isolated/lib/bitcode \
+        2>/dev/null || true; \
+    if [ -s /tmp/bundled.txt ]; then \
+        sort -u /tmp/bundled.txt > /tmp/bundled-u.txt; \
+        while IFS= read -r name; do \
+            [ -L "/isolated/lib/$name" ] && rm -f "/isolated/lib/$name" || true; \
+        done < /tmp/bundled-u.txt; \
+        while IFS= read -r name; do \
+            dep="/isolated/lib/$name"; \
+            [ -f "$dep" ] || continue; \
+            soname="$(patchelf --print-soname "$dep" 2>/dev/null || true)"; \
+            [ -n "$soname" ] || soname="$name"; \
+            patchelf --set-soname "${tag}${soname}" "$dep"; \
+            mv "$dep" "/isolated/lib/${tag}${soname}"; \
+        done < /tmp/bundled-u.txt; \
+        for obj in /isolated/lib/*.so*; do \
+            [ -f "$obj" ] || continue; \
+            for need in $(patchelf --print-needed "$obj" 2>/dev/null); do \
+                case "$need" in "${tag}"*) continue ;; esac; \
+                if [ -f "/isolated/lib/${tag}${need}" ]; then \
+                    patchelf --replace-needed "$need" "${tag}${need}" "$obj"; \
+                fi; \
+            done; \
+        done; \
+    fi; \
+    for obj in /isolated/lib/*.so*; do \
+        [ -f "$obj" ] || continue; \
+        patchelf --set-rpath '$ORIGIN' "$obj"; \
+    done
 
 FROM scratch AS isolated
 COPY --from=normalizer /isolated/ /
