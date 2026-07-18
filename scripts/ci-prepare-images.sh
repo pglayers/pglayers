@@ -42,9 +42,13 @@ build_local() {
 }
 
 # For PG >= 18 a pulled image MUST use the isolated layout (files under /lib or
-# /share/extension). Stale images built before the isolated layout -- or before
-# the $ORIGIN RUNPATH fix -- must be rebuilt, not trusted. Isolated images are
-# FROM scratch (no shell), so inspect the layout via docker export.
+# /share/extension), not a stale classic image. Isolated images are FROM scratch
+# (no shell), so inspect the layout via docker export. This is a layout guard
+# only; it does not verify $ORIGIN RUNPATH / mangled sonames. That is sound here
+# because any layer that bundles runtime libs (the only ones needing the RUNPATH
+# fix) is rebuilt from source whenever its Dockerfile changes -- i.e. it lands in
+# $CHANGED and is built, not pulled -- so a pulled image is either non-bundling
+# (RUNPATH irrelevant) or already-published-with-the-fix.
 isolated_ok() {
 	local img="$1"
 	[ "$PG" -ge 18 ] 2>/dev/null || return 0
@@ -60,25 +64,38 @@ isolated_ok() {
 
 for ext in "$@"; do
 	[ -d "extensions/$ext" ] || continue
-	ver="$(./scripts/ext-version.sh "$ext" "$PG" 2>/dev/null || true)"
+	# Distinguish "not available for this PG" (empty output, skip) from a real
+	# resolution failure (non-zero exit, fail loudly) -- do not swallow the latter.
+	if ! ver="$(./scripts/ext-version.sh "$ext" "$PG")"; then
+		echo "ERROR: version resolution failed for $ext (PG $PG)" >&2
+		exit 1
+	fi
 	[ -z "$ver" ] && { echo "skip $ext (no version for PG $PG)"; continue; }
 
 	local_img="local/${PREFIX}-${ext}:${PG}"
 	docker image inspect "$local_img" >/dev/null 2>&1 && continue
+
+	ci_skip="$(bash -c "source extensions/$ext/extension.conf && echo \"\${CI_SKIP:-}\"")"
+	src="${SOURCE_REGISTRY}/${PREFIX}-${ext}:${PG}"
+
+	# CI_SKIP extensions are never built in CI (too heavy) -- pull only, or skip.
+	if [ "$ci_skip" = "1" ]; then
+		if docker pull "$src" 2>/dev/null && isolated_ok "$src"; then
+			docker tag "$src" "$local_img"
+		else
+			echo "skip $ext (CI_SKIP=1 and no usable published image)"
+			docker rmi "$src" 2>/dev/null || true
+		fi
+		continue
+	fi
 
 	if is_changed "$ext"; then
 		build_local "$ext"
 		continue
 	fi
 
-	ci_skip="$(bash -c "source extensions/$ext/extension.conf && echo \"\${CI_SKIP:-}\"")"
-	src="${SOURCE_REGISTRY}/${PREFIX}-${ext}:${PG}"
-
 	if docker pull "$src" 2>/dev/null && isolated_ok "$src"; then
 		docker tag "$src" "$local_img"
-	elif [ "$ci_skip" = "1" ]; then
-		echo "skip $ext (CI_SKIP=1 and no usable published image)"
-		docker rmi "$src" 2>/dev/null || true
 	else
 		echo "no usable published image for $ext; building from source"
 		docker rmi "$src" 2>/dev/null || true

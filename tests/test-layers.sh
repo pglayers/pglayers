@@ -396,13 +396,12 @@ if [ "$PG" -ge 18 ] 2>/dev/null; then
         for d in /extensions/*/lib /extensions/*/bin; do
             [ -d "$d" ] || continue
             ext="$(basename "$(dirname "$d")")"
-            for obj in "$d"/*; do
-                [ -f "$obj" ] || continue
+            find "$d" -type f 2>/dev/null | while IFS= read -r obj; do
                 [ "$(od -An -tx1 -N4 "$obj" 2>/dev/null | tr -d " ")" = "7f454c46" ] || continue
                 ldd "$obj" 2>/dev/null | grep -oE "/extensions/[^ ]+" | while IFS= read -r dep; do
                     depext="$(printf "%s" "$dep" | cut -d/ -f3)"
                     [ "$depext" = "$ext" ] || \
-                        echo "$ext: $(basename "$obj") binds $dep (foreign layer: $depext)"
+                        echo "$ext: ${obj##*/extensions/} binds $dep (foreign layer: $depext)"
                 done
             done
         done

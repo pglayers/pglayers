@@ -132,7 +132,10 @@ jobs:
           for ext_dir in extensions/*/; do
             ext="$(basename "$ext_dir")"
             [ -n "$ext_filter" ] && [ "$ext" != "$ext_filter" ] && continue
-            if [ "$build_all" != "true" ] && ! echo " $test_changed " | grep -qw "$ext"; then
+            # Skip by change-set only when nothing forces this ext in: a full
+            # rebuild ($build_all) or an explicit single-extension dispatch.
+            if [ "$build_all" != "true" ] && [ -z "$ext_filter" ] \
+               && ! echo " $test_changed " | grep -qw "$ext"; then
               continue
             fi
             # Reset per-extension fields so absent values don't bleed over.
@@ -193,14 +196,25 @@ jobs:
           publish='false'
           case "$event" in push|schedule|workflow_dispatch) publish='true' ;; esac
 
+          # What the test jobs rebuild from source (vs pull). This must mirror
+          # the publish scope so a full/targeted rebuild is verified against the
+          # freshly built layers, not stale pulled ones (e.g. the weekly cron).
+          if [ "$build_all" = "true" ]; then
+            changed_out="$(for d in extensions/*/; do basename "$d"; done | tr '\n' ' ')"
+          elif [ "$event" = "workflow_dispatch" ] && [ -n "$ext_filter" ]; then
+            changed_out="$ext_filter"
+          else
+            changed_out="$test_changed"
+          fi
+
           {
-            echo "changed=$test_changed"
+            echo "changed=$changed_out"
             echo "build=$build"
             echo "extensions=$extensions"
             echo "publish=$publish"
             echo "test_pgs=$test_pgs"
           } >> "$GITHUB_OUTPUT"
-          echo "changed: [$test_changed]"
+          echo "changed: [$changed_out]"
           echo "publish: $publish | test_pgs: $test_pgs"
           echo "publish build jobs: $(echo "$build" | jq length)"
 
@@ -364,7 +378,7 @@ jobs:
   # Build each architecture natively (no QEMU) and push per-arch tags.
   # ---------------------------------------------------------------------------
   build:
-    needs: [matrix, checks, test, test-profile]
+    needs: [matrix, checks, test, test-profile, integration]
     if: ${{ needs.matrix.outputs.publish == 'true' && fromJson(needs.matrix.outputs.build)[0] != null }}
     runs-on: ${{ matrix.native && (matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04') || 'ubuntu-24.04' }}
     permissions:
