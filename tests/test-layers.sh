@@ -392,11 +392,12 @@ echo
 # here means that isolation regressed (e.g. a global linker path was
 # reintroduced, or soname mangling / RUNPATH is missing).
 if [ "$PG" -ge 18 ] 2>/dev/null; then
-    # Capture the container's own exit status: a failure to run the check must
-    # FAIL the gate, not be swallowed into an empty result that reads as PASS.
-    # The trailing `true` makes a normal scan exit 0 (leaks are reported on
-    # stdout), so a non-zero status means the container/script genuinely failed.
-    if ! leaks="$(docker run --rm --entrypoint bash "${IMAGE_TAG}" -c '
+    # Robustly distinguish "scan ran and found nothing" from "scan never ran"
+    # (container failed to start, shell errored, etc.): the script prints a
+    # sentinel only after completing the full walk. No sentinel in the output
+    # => the check did not complete => FAIL the gate rather than reading the
+    # empty result as PASS. Leak findings are every non-sentinel line.
+    leak_out="$(docker run --rm --entrypoint bash "${IMAGE_TAG}" -c '
         for d in /extensions/*/lib /extensions/*/bin; do
             [ -d "$d" ] || continue
             ext="$(basename "$(dirname "$d")")"
@@ -409,14 +410,18 @@ if [ "$PG" -ge 18 ] 2>/dev/null; then
                 done
             done
         done
-        true
-    ' 2>/dev/null)"; then
-        fail "Cross-layer leak check could not run (docker error for ${IMAGE_TAG})"
-    elif [ -z "$leaks" ]; then
-        pass "No cross-layer library leaks (each layer resolves its own deps)"
+        echo "__SCAN_COMPLETE__"
+    ' 2>/dev/null || true)"
+    if ! printf '%s\n' "$leak_out" | grep -qx '__SCAN_COMPLETE__'; then
+        fail "Cross-layer leak check did not complete (docker/container error for ${IMAGE_TAG})"
     else
-        fail "Cross-layer library leak detected (extension binds a sibling layer's library):"
-        echo "$leaks" | sort -u | sed 's/^/       /'
+        leaks="$(printf '%s\n' "$leak_out" | grep -vx '__SCAN_COMPLETE__' || true)"
+        if [ -z "$leaks" ]; then
+            pass "No cross-layer library leaks (each layer resolves its own deps)"
+        else
+            fail "Cross-layer library leak detected (extension binds a sibling layer's library):"
+            echo "$leaks" | sort -u | sed 's/^/       /'
+        fi
     fi
     echo
 fi
