@@ -557,11 +557,25 @@ must be updated in the same commit**:
    because it embeds a multi-threaded engine incompatible with
    PostgreSQL's process model).
 
-9. **`extension.conf` CONFLICTS field** -- If the extension cannot be
-   loaded into the same PostgreSQL server as another (e.g. `pg_lake` and
-   `pg_duckdb` each ship their own `libduckdb.so`; in the isolated PG18+
-   layout both load under the same soname from separate
-   `/extensions/*/lib` dirs and crash the backend), declare it:
+9. **`extension.conf` CONFLICTS field** -- Some extensions cannot be
+   loaded into the same backend *no matter how well the layers are
+   isolated*, because the conflict is at the **symbol** level, not the
+   file level. PostgreSQL loads every module with
+   `dlopen(file, RTLD_NOW | RTLD_GLOBAL)` (see `dfmgr.c`), so each module
+   and its `NEEDED` deps publish their exported symbols into one
+   process-global namespace. Soname mangling + `$ORIGIN` RUNPATH isolate
+   *which file* loads (enough for ABI-compatible C libs like
+   `libcurl`/`libssh2`), but they do **not** rename the symbols inside.
+   Two extensions that each bundle the *same* library therefore still
+   collide in the global scope. For a large C++ engine this is fatal:
+   `pg_lake` and `pg_duckdb` each ship their own `libduckdb.so`; even with
+   distinct sonames, two DuckDB copies export identical C++ symbols
+   (vtables, `type_info`, weak symbols) -> ODR violation -> backend crash.
+   (This is why classic PG17 survives -- both overlay `libduckdb.so` at
+   one path so a *single* engine is shared -- while isolated PG18+ loads
+   two and crashes.) Renaming all of DuckDB's symbols is infeasible and
+   there is no `RTLD_LOCAL` lever (PostgreSQL owns the `dlopen` flags), so
+   the only correct answer is to never co-load them. Declare it:
    ```bash
    CONFLICTS="pg_duckdb"          # comma-separated SQL/dir names
    ```
