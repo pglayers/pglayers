@@ -73,29 +73,27 @@ for ext in "$@"; do
 	[ -z "$ver" ] && { echo "skip $ext (no version for PG $PG)"; continue; }
 
 	local_img="local/${PREFIX}-${ext}:${PG}"
-	docker image inspect "$local_img" >/dev/null 2>&1 && continue
-
 	ci_skip="$(bash -c "source extensions/$ext/extension.conf && echo \"\${CI_SKIP:-}\"")"
 	src="${SOURCE_REGISTRY}/${PREFIX}-${ext}:${PG}"
 
-	# CI_SKIP extensions are never built in CI (too heavy) -- pull only, or skip.
-	if [ "$ci_skip" = "1" ]; then
-		if docker pull "$src" 2>/dev/null && isolated_ok "$src"; then
-			docker tag "$src" "$local_img"
-		else
-			echo "skip $ext (CI_SKIP=1 and no usable published image)"
-			docker rmi "$src" 2>/dev/null || true
-		fi
-		continue
-	fi
-
-	if is_changed "$ext"; then
+	# Changed extensions are ALWAYS rebuilt from source -- never reuse a
+	# possibly-stale local image (e.g. from a rerun on a non-clean runner) --
+	# so the freshly changed code is what gets tested. `make build` is
+	# BuildKit-cached, so a redundant rebuild is cheap. (CI_SKIP extensions are
+	# never built in CI, so they fall through to the pull path regardless.)
+	if [ "$ci_skip" != "1" ] && is_changed "$ext"; then
 		build_local "$ext"
 		continue
 	fi
 
+	# Unchanged (or CI_SKIP): a local image from an earlier step is fine.
+	docker image inspect "$local_img" >/dev/null 2>&1 && continue
+
 	if docker pull "$src" 2>/dev/null && isolated_ok "$src"; then
 		docker tag "$src" "$local_img"
+	elif [ "$ci_skip" = "1" ]; then
+		echo "skip $ext (CI_SKIP=1 and no usable published image)"
+		docker rmi "$src" 2>/dev/null || true
 	else
 		echo "no usable published image for $ext; building from source"
 		docker rmi "$src" 2>/dev/null || true
