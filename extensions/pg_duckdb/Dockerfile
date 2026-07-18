@@ -55,7 +55,11 @@ RUN set -eux; \
         dest="$(echo "$lib" | sed 's|^/lib/|/usr/lib/|')"; \
         mkdir -p "/output$(dirname "$dest")"; \
         cp -aL "$lib" "/output${dest}" 2>/dev/null || true; \
-    done < /tmp/all-deps.txt
+    done < /tmp/all-deps.txt; \
+    # Strip everything we ship. The upstream image already strips libduckdb.so
+    # and pg_duckdb.so, and bundled deps are apt libs, so this is
+    # defensive/idempotent -- guarantees a minimal layer regardless of source.
+    find /output -name '*.so*' -type f -exec strip --strip-unneeded {} \; 2>/dev/null || true
 
 # --- Layout selection ---
 # Classic (PG 17): relocate bundled deps into an extension-private directory

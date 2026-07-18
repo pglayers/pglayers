@@ -42,7 +42,11 @@ RUN set -eux; \
         dest="$(echo "$lib" | sed 's|^/lib/|/usr/lib/|')"; \
         mkdir -p "/output$(dirname "$dest")"; \
         cp -aL "$lib" "/output$dest" 2>/dev/null || true; \
-    done < /tmp/all-deps.txt
+    done < /tmp/all-deps.txt; \
+    # Strip everything we ship. The extension and its bundled deps come from
+    # apt (already stripped), so this is defensive/idempotent -- it keeps the
+    # layer minimal should an unstripped lib ever enter the output.
+    find /output -name '*.so*' -type f -exec strip --strip-unneeded {} \; 2>/dev/null || true
 
 # --- Layout selection ---
 # Classic (PG 17): files at standard PG paths. The flat layout means every

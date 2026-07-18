@@ -44,7 +44,12 @@ RUN set -eux; \
         dest="$(echo "$lib" | sed 's|^/lib/|/usr/lib/|')"; \
         mkdir -p "/output$(dirname "$dest")"; \
         cp -aL "$lib" "/output$dest" 2>/dev/null || true; \
-    done < /tmp/all-deps.txt
+    done < /tmp/all-deps.txt; \
+    # Strip bundled deps too. Today these are all Debian apt libs (already
+    # stripped), but the strip pass above runs before this bundling step, so
+    # strip here defensively -- keeps the layer minimal if a self-built lib is
+    # ever bundled. strip --strip-unneeded is safe and idempotent.
+    find /output -name '*.so*' -type f -exec strip --strip-unneeded {} \; 2>/dev/null || true
 
 # --- Layout selection ---
 # Classic (PG 17): relocate bundled deps into an extension-private directory
