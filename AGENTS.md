@@ -559,23 +559,21 @@ must be updated in the same commit**:
 
 9. **`extension.conf` CONFLICTS field** -- Some extensions cannot be
    loaded into the same backend *no matter how well the layers are
-   isolated*, because the conflict is at the **symbol** level, not the
-   file level. PostgreSQL loads every module with
-   `dlopen(file, RTLD_NOW | RTLD_GLOBAL)` (see `dfmgr.c`), so each module
-   and its `NEEDED` deps publish their exported symbols into one
-   process-global namespace. Soname mangling + `$ORIGIN` RUNPATH isolate
-   *which file* loads (enough for ABI-compatible C libs like
-   `libcurl`/`libssh2`), but they do **not** rename the symbols inside.
-   Two extensions that each bundle the *same* library therefore still
-   collide in the global scope. For a large C++ engine this is fatal:
-   `pg_lake` and `pg_duckdb` each ship their own `libduckdb.so`; even with
-   distinct sonames, two DuckDB copies export identical C++ symbols
-   (vtables, `type_info`, weak symbols) -> ODR violation -> backend crash.
-   (This is why classic PG17 survives -- both overlay `libduckdb.so` at
-   one path so a *single* engine is shared -- while isolated PG18+ loads
-   two and crashes.) Renaming all of DuckDB's symbols is infeasible and
-   there is no `RTLD_LOCAL` lever (PostgreSQL owns the `dlopen` flags), so
-   the only correct answer is to never co-load them. Declare it:
+   isolated*, because the conflict is at the **runtime/symbol** level, not
+   the file level, and file/soname isolation can't fix it. PostgreSQL loads
+   every module with `dlopen(file, RTLD_NOW | RTLD_GLOBAL)` (see
+   `dfmgr.c`), so each module and its `NEEDED` deps publish their exported
+   symbols into one process-global namespace. Soname mangling + `$ORIGIN`
+   RUNPATH isolate *which file* loads (enough for ABI-compatible C libs
+   like `libcurl`/`libssh2`), but they do **not** rename the symbols
+   inside, nor do they isolate process-global runtime state
+   (background workers, threads, companion servers). `pg_lake` and
+   `pg_duckdb` are both DuckDB-based and destabilize the shared backend
+   when co-loaded (empirically: including both in the combined image
+   crashes it during query execution; excluding `pg_lake` makes the crash
+   cascade disappear). This is why classic PG17 tolerates the pair (files
+   overlay at one path) while isolated PG18+ does not. When two extensions
+   provably cannot co-load, declare it:
    ```bash
    CONFLICTS="pg_duckdb"          # comma-separated SQL/dir names
    ```
@@ -584,7 +582,12 @@ must be updated in the same commit**:
    image (Phases 6-9): when two conflicting extensions are both present,
    the later one is excluded from the combined image (it is still
    validated standalone in Phase 5). Real deployments compose curated
-   **profiles**, which must not contain conflicting members.
+   **profiles**, which must not contain conflicting members. (Benign
+   *SQL-level* name overlaps between unrelated extensions -- e.g. two
+   extensions both defining `public.fips_mode()` -- are handled separately:
+   the combined test treats a duplicate-object `CREATE EXTENSION` error as
+   a non-gating warning and skips that extension's integration check, since
+   you would never create both in one real database.)
 
 Do not merge a PR that adds an extension to `extensions/` without
 updating the README table and tests. Stale documentation is a bug.

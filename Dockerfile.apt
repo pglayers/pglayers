@@ -165,8 +165,14 @@ RUN set -eux; \
         find "/output/usr/lib/postgresql/${PG}/lib" -maxdepth 1 -type f \
             -exec cp -a {} /isolated/lib/ \; ; \
     fi; \
-    cp -a /output/usr/share/postgresql/${PG}/extension/* /isolated/share/extension/ \
-        2>/dev/null || true; \
+    # Copy the whole per-version share tree: control + SQL scripts INCLUDING any
+    # `directory = <name>` subdir (e.g. pgfincore ships its SQL under
+    # share/postgresql/<pg>/pgfincore/, not extension/), tsearch dictionaries,
+    # etc. Copying only extension/* silently drops those and breaks CREATE
+    # EXTENSION for such extensions in the isolated layout.
+    if [ -d "/output/usr/share/postgresql/${PG}" ]; then \
+        cp -a /output/usr/share/postgresql/${PG}/. /isolated/share/ 2>/dev/null || true; \
+    fi; \
     : > /tmp/bundled.txt; \
     find /output/usr/lib -name '*.so*' ! -path '*/postgresql/*' \
         \( -type f -o -type l \) 2>/dev/null | while IFS= read -r f; do \
