@@ -913,8 +913,7 @@ pglayers/
 │   │   ├── new_extension.yml         Extension request form
 │   │   └── config.yml                Template chooser config
 │   └── workflows/
-│       ├── build-push.yml            CI: builds extensions, pushes to GHCR
-│       ├── test.yml                  CI: full test suite (PG 17, 18, 19)
+│       ├── ci.yml                    CI: build + test + compose profiles; publish on merge
 │       ├── monitor-base-image.yml    Detects base image updates (every 6h)
 │       ├── monitor-extensions.yml    Detects new source-build releases
 │       ├── monitor-apt-versions.yml  Tracks apt versions (apt-versions.json)

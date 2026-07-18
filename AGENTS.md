@@ -246,7 +246,7 @@ otherwise invisible in git, a second workflow makes it explicit:
   **auto-merge enabled** (`--auto --squash`), so it lands automatically once
   required checks pass (no manual merge needed); it still respects branch
   protection, so a failing check holds it open for review.
-- **`build-push.yml`** keys change detection off `.github/apt-versions.json`:
+- **`ci.yml`** keys change detection off `.github/apt-versions.json`:
   merging the monitor PR rebuilds **exactly** the extensions whose recorded
   version changed, producing fresh `pgx-<ext>:<pg>-<version>` images.
 
