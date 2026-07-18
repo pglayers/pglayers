@@ -375,6 +375,44 @@ Every extension Dockerfile **must** follow these practices:
    declared as a top-level ARG. BuildKit skips unused stages, so the
    normalizer stage adds zero overhead for PG 17 builds.
 
+   **The isolated `normalizer` stage MUST make every bundling layer
+   self-resolving -- it is NOT enough to copy bundled deps flat into
+   `/isolated/lib`.** *Which cases need it:* any Dockerfile (families
+   2-4) whose layer ships a runtime `.so` that is **not** in the base
+   `postgres` image -- i.e. it copies non-base libs via the
+   `find /output/usr/lib ... ! -path '*/postgresql/*'` bundling step, or
+   otherwise places a support lib / companion binary in the layer
+   (`pgsodium`->libsodium, `postgis`/`pgrouting`->libgeos et al.,
+   `http`/`pg_net`/`pg_duckdb`/`pg_lake`/`documentdb`->libcurl->libssh2,
+   `h3_pg`->libh3, `tds_fdw`->libsybdb, ...). For those, the `normalizer`
+   stage must, after copying files into `/isolated/lib`:
+   - **mangle each bundled dep's soname** to `pglx_<ext>_<soname>`
+     (`patchelf --set-soname`, rename the file) and rewrite the `NEEDED`
+     entries of every ELF object it ships (`patchelf --replace-needed`),
+   - **set `RUNPATH=$ORIGIN`** on every ELF object in `/isolated/lib`
+     (and `$ORIGIN/../lib` on any companion binary shipped in `bin/`,
+     e.g. `pg_lake`'s `pgduck_server`),
+   - which requires **`patchelf`** installed in the stage the normalizer
+     is `FROM` (the builder/collector/deb-stage).
+
+   This is mandatory because the combined/profile image resolves each
+   module's transitive deps purely through that per-object RUNPATH +
+   mangled soname -- there is **no** global `ld.so.conf.d`/`ldconfig`/
+   `LD_LIBRARY_PATH` fallback (see requirement #8 and the reasoning in the
+   "Isolated (PG 18+)" note there). A `normalizer` that only copies libs
+   flat will pass a naive build but fail Phase 5 (self-containment) and
+   leak across layers in the combined image (the mismatched-`libssh2`
+   bug). *When it is a no-op:* SQL-only extensions or extensions whose
+   deps are all in the base image ship no bundled `.so`, so the
+   soname/RUNPATH block is guarded (`if [ -s /tmp/bundled.txt ]`) and does
+   nothing -- but still set `RUNPATH=$ORIGIN` on the extension's own
+   `.so`, which is harmless and future-proof. **APT extensions on the
+   shared `Dockerfile.apt` get all of this for free -- do not
+   reimplement.** Reference custom implementations: `Dockerfile.apt`,
+   `extensions/postgis/Dockerfile`, `extensions/pg_lake/Dockerfile`
+   (companion binary), `extensions/pgsodium/Dockerfile` (bundled soname
+   with a symlink chain).
+
 7. **Architecture-neutral** -- Dockerfiles must work on both `linux/amd64`
    and `linux/arm64` without modification. Do NOT hardcode architecture-
    specific paths like `/usr/lib/x86_64-linux-gnu/`. Use
