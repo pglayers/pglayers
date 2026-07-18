@@ -392,7 +392,11 @@ echo
 # here means that isolation regressed (e.g. a global linker path was
 # reintroduced, or soname mangling / RUNPATH is missing).
 if [ "$PG" -ge 18 ] 2>/dev/null; then
-    leaks="$(docker run --rm --entrypoint bash "${IMAGE_TAG}" -c '
+    # Capture the container's own exit status: a failure to run the check must
+    # FAIL the gate, not be swallowed into an empty result that reads as PASS.
+    # The trailing `true` makes a normal scan exit 0 (leaks are reported on
+    # stdout), so a non-zero status means the container/script genuinely failed.
+    if ! leaks="$(docker run --rm --entrypoint bash "${IMAGE_TAG}" -c '
         for d in /extensions/*/lib /extensions/*/bin; do
             [ -d "$d" ] || continue
             ext="$(basename "$(dirname "$d")")"
@@ -405,8 +409,10 @@ if [ "$PG" -ge 18 ] 2>/dev/null; then
                 done
             done
         done
-    ' 2>/dev/null || true)"
-    if [ -z "$leaks" ]; then
+        true
+    ' 2>/dev/null)"; then
+        fail "Cross-layer leak check could not run (docker error for ${IMAGE_TAG})"
+    elif [ -z "$leaks" ]; then
         pass "No cross-layer library leaks (each layer resolves its own deps)"
     else
         fail "Cross-layer library leak detected (extension binds a sibling layer's library):"
