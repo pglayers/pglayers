@@ -128,7 +128,13 @@ RUN set -eux; \
         dest="$(echo "$lib" | sed 's|^/lib/|/usr/lib/|')"; \
         mkdir -p "/output$(dirname "$dest")"; \
         cp -aL "$lib" "/output$dest" 2>/dev/null || true; \
-    done < /tmp/all-deps.txt
+    done < /tmp/all-deps.txt; \
+    # Strip the bundled runtime deps too. The earlier strip pass runs before
+    # this bundling step, so locally-built deps copied here (notably
+    # libduckdb.so, ~1.1 GB of DWARF debug info -> ~78 MB stripped) would
+    # otherwise ship unstripped. strip --strip-unneeded is safe for shared
+    # libs and idempotent on already-stripped system libs.
+    find /output -name '*.so*' -type f -exec strip --strip-unneeded {} \; 2>/dev/null || true
 
 # --- Layout selection ---
 # Classic (PG 17): relocate bundled deps into an extension-private directory
