@@ -379,7 +379,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build:
     needs: [matrix, checks, test, test-profile, integration]
-    if: ${{ needs.matrix.outputs.publish == 'true' && fromJson(needs.matrix.outputs.build)[0] != null }}
+    if: ${{ needs.matrix.outputs.publish == 'true' && github.ref == 'refs/heads/main' && fromJson(needs.matrix.outputs.build)[0] != null }}
     runs-on: ${{ matrix.native && (matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04') || 'ubuntu-24.04' }}
     permissions:
       contents: read
@@ -431,7 +431,7 @@ jobs:
   # Merge per-arch images into multi-arch manifest lists (native builds only).
   manifest:
     needs: [matrix, build]
-    if: ${{ needs.matrix.outputs.publish == 'true' && fromJson(needs.matrix.outputs.extensions)[0] != null }}
+    if: ${{ needs.matrix.outputs.publish == 'true' && github.ref == 'refs/heads/main' && fromJson(needs.matrix.outputs.extensions)[0] != null }}
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -465,7 +465,7 @@ jobs:
   # Compose and push profile images from the freshly published layers.
   profile-images:
     needs: [matrix, build, manifest]
-    if: ${{ always() && !cancelled() && needs.matrix.outputs.publish == 'true' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    if: ${{ always() && !cancelled() && needs.matrix.outputs.publish == 'true' && github.ref == 'refs/heads/main' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
