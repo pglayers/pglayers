@@ -557,6 +557,21 @@ must be updated in the same commit**:
    because it embeds a multi-threaded engine incompatible with
    PostgreSQL's process model).
 
+9. **`extension.conf` CONFLICTS field** -- If the extension cannot be
+   loaded into the same PostgreSQL server as another (e.g. `pg_lake` and
+   `pg_duckdb` each ship their own `libduckdb.so`; in the isolated PG18+
+   layout both load under the same soname from separate
+   `/extensions/*/lib` dirs and crash the backend), declare it:
+   ```bash
+   CONFLICTS="pg_duckdb"          # comma-separated SQL/dir names
+   ```
+   The relationship is symmetric (declaring it on one side is enough).
+   `tests/test-layers.sh` builds a conflict-free subset for the *combined*
+   image (Phases 6-9): when two conflicting extensions are both present,
+   the later one is excluded from the combined image (it is still
+   validated standalone in Phase 5). Real deployments compose curated
+   **profiles**, which must not contain conflicting members.
+
 Do not merge a PR that adds an extension to `extensions/` without
 updating the README table and tests. Stale documentation is a bug.
 

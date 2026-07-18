@@ -279,6 +279,33 @@ echo
 # ============================================================
 # Phase 6: Build combined image and check shared libraries
 # ============================================================
+# Some extensions are mutually exclusive at runtime and cannot be loaded into
+# the same server (e.g. pg_duckdb and pg_lake each ship their own libduckdb.so;
+# in the isolated PG18+ layout both copies load under the same soname from
+# separate /extensions/*/lib dirs and crash the backend). Such pairs are
+# declared via `CONFLICTS="other_ext,..."` in extension.conf. Build a
+# conflict-free subset for the *combined* image (Phases 6-9); the excluded
+# extensions are still validated standalone by Phase 5. Real deployments use
+# profiles, which curate compatible sets, so this mirrors reality.
+COMBINED_EXTENSIONS=()
+for ext in "${EXTENSIONS[@]}"; do
+    conflicts=" $(bash -c "source extensions/${ext}/extension.conf 2>/dev/null && echo \"\${CONFLICTS:-}\"" | tr ',' ' ') "
+    skip=""
+    for kept in "${COMBINED_EXTENSIONS[@]}"; do
+        kept_conf=" $(bash -c "source extensions/${kept}/extension.conf 2>/dev/null && echo \"\${CONFLICTS:-}\"" | tr ',' ' ') "
+        # conflict declared in either direction
+        case "$conflicts" in *" $kept "*) skip="$kept"; break ;; esac
+        case "$kept_conf" in *" $ext "*) skip="$kept"; break ;; esac
+    done
+    if [ -n "$skip" ]; then
+        info "Excluding ${ext} from combined image (CONFLICTS with ${skip}; validated standalone in Phase 5)"
+    else
+        COMBINED_EXTENSIONS+=("$ext")
+    fi
+done
+# Phases 6-9 operate on the conflict-free combined set.
+EXTENSIONS=("${COMBINED_EXTENSIONS[@]}")
+
 info "Phase 6: Building combined image and checking shared libraries..."
 
 # Generate a test Dockerfile
@@ -605,6 +632,7 @@ info "Phase 8: Integration tests (extensions/*/test.sql)..."
 # Ensure container is healthy before starting integration tests
 wait_for_ready
 
+phase8_crash=""
 for ext in "${EXTENSIONS[@]}"; do
     test_file="extensions/${ext}/test.sql"
     if [ ! -f "$test_file" ]; then
@@ -615,10 +643,14 @@ for ext in "${EXTENSIONS[@]}"; do
     # Retry up to 3 times if the server was in recovery mode
     retries=0
     while [ "$retries" -lt 3 ] && echo "$output" | grep -qE "recovery mode|not yet accepting|crash of another|server closed the connection"; do
+        phase8_crash="$ext"
         wait_for_ready
         output="$(docker exec -i pgx-func-test psql -U postgres -tA -v ON_ERROR_STOP=0 < "$test_file" 2>&1)" || true
         ((retries++)) || true
     done
+    # A backend crash takes down every connection, so a co-loaded extension can
+    # cascade failures across the rest of the phase. Record it for diagnostics.
+    echo "$output" | grep -qE "crash of another|server closed the connection|terminating connection" && phase8_crash="$ext"
     failures="$(echo "$output" | grep '^FAIL' || true)"
     passes="$(echo "$output" | grep -c '^PASS' || true)"
     if [ -n "$failures" ]; then
@@ -632,6 +664,14 @@ for ext in "${EXTENSIONS[@]}"; do
         fail "${ext}: test.sql produced no PASS/FAIL output (extension failed to load or assert)"
     fi
 done
+
+# If any backend crash was seen, dump the server log so the culprit .so /
+# extension is visible instead of just a cascade of downstream failures.
+if [ -n "$phase8_crash" ]; then
+    warn "Backend crash detected during Phase 8 (near '${phase8_crash}'); recent server log:"
+    docker logs pgx-func-test 2>&1 | grep -iE "server process|was terminated|signal|PANIC|segmentation|shared object|symbol|ERROR:|FATAL:" \
+        | tail -40 | sed 's/^/       /'
+fi
 
 # ============================================================
 # Phase 9: MongoDB wire protocol test (documentdb gateway)
