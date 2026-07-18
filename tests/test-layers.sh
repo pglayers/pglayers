@@ -223,9 +223,11 @@ for ext in "${EXTENSIONS[@]}"; do
         {
             echo "FROM postgres:${PG_TAG}"
             echo "COPY --from=${img} / /extensions/${ext}/"
-            echo "RUN echo /extensions/${ext}/lib > /etc/ld.so.conf.d/pglayers-selftest.conf && ldconfig"
         } > "$sc_dockerfile"
         # Isolated layout: the extension's files are COPYed under this prefix.
+        # No ld.so.conf.d/ldconfig here on purpose -- an isolated layer must
+        # resolve its own bundled deps via each ELF object's $ORIGIN RUNPATH,
+        # not through any global linker path.
         sc_prefix="/extensions/${ext}"
     else
         {
@@ -296,10 +298,11 @@ info "Phase 6: Building combined image and checking shared libraries..."
         done
         echo "RUN echo \"extension_control_path = '${ext_paths}\\\$system'\" >> /usr/share/postgresql/postgresql.conf.sample"
         echo "RUN echo \"dynamic_library_path = '${lib_paths}\\\$libdir'\" >> /usr/share/postgresql/postgresql.conf.sample"
-        # Configure linker for bundled runtime deps
-        # shellcheck disable=SC2016
-        echo 'RUN for d in /extensions/*/lib; do echo "$d"; done > /etc/ld.so.conf.d/pglayers.conf && ldconfig'
-        echo "ENV LD_LIBRARY_PATH=\"${lib_paths%:}\""
+        # No global ld.so.conf.d/ldconfig or LD_LIBRARY_PATH here: each isolated
+        # layer is self-contained via per-object $ORIGIN RUNPATH + mangled
+        # bundled-dep sonames, so a global linker namespace (which collapses to
+        # one winner per soname and lets e.g. postgis bind another layer's
+        # libssh2) must NOT be created.
     else
         # Classic layout: flat overlay
         for ext in "${EXTENSIONS[@]}"; do
@@ -376,6 +379,42 @@ else
     echo "$missing" | sort -u | sed 's/^/       /'
 fi
 echo
+
+# Cross-layer leak check (isolated layout only). `ldd ... not found` above only
+# catches a MISSING dependency -- it cannot catch one that resolves to the WRONG
+# copy. That mismatch is exactly the reported bug ("postgis loads a mismatched
+# libssh2 through the profile-wide linker path"): a generic soname binding to a
+# sibling layer's library via a global ld.so cache / LD_LIBRARY_PATH. Here we
+# assert provenance: every bundled dependency an extension resolves must live in
+# ITS OWN /extensions/<ext>/lib, never in another layer's dir. A correctly built
+# isolated layer resolves its deps via each ELF object's $ORIGIN RUNPATH plus a
+# per-extension-mangled soname, so cross-layer resolution is impossible; a leak
+# here means that isolation regressed (e.g. a global linker path was
+# reintroduced, or soname mangling / RUNPATH is missing).
+if [ "$PG" -ge 18 ] 2>/dev/null; then
+    leaks="$(docker run --rm --entrypoint bash "${IMAGE_TAG}" -c '
+        for d in /extensions/*/lib /extensions/*/bin; do
+            [ -d "$d" ] || continue
+            ext="$(basename "$(dirname "$d")")"
+            for obj in "$d"/*; do
+                [ -f "$obj" ] || continue
+                [ "$(od -An -tx1 -N4 "$obj" 2>/dev/null | tr -d " ")" = "7f454c46" ] || continue
+                ldd "$obj" 2>/dev/null | grep -oE "/extensions/[^ ]+" | while IFS= read -r dep; do
+                    depext="$(printf "%s" "$dep" | cut -d/ -f3)"
+                    [ "$depext" = "$ext" ] || \
+                        echo "$ext: $(basename "$obj") binds $dep (foreign layer: $depext)"
+                done
+            done
+        done
+    ' 2>/dev/null || true)"
+    if [ -z "$leaks" ]; then
+        pass "No cross-layer library leaks (each layer resolves its own deps)"
+    else
+        fail "Cross-layer library leak detected (extension binds a sibling layer's library):"
+        echo "$leaks" | sort -u | sed 's/^/       /'
+    fi
+    echo
+fi
 
 # ============================================================
 # Phase 7: Functional tests -- load all extensions

@@ -97,16 +97,28 @@ This test suite validates:
    `.so` in the combined image. Catches transitive runtime deps that
    weren't bundled (e.g., PostGIS needing libtiff via libproj).
 
-4. **Self-containment** -- Overlays each extension on the *bare* base
-   image alone (no sibling layers) and runs `ldd` on every ELF object it
-   ships. An extension must resolve all of its own runtime deps without
-   help from any other layer (e.g. `pg_net` must bundle its own
-   `libcurl.so.4`, not borrow postgis's). See Dockerfile requirement #8.
+4. **No cross-layer library leaks** (PG 18+ isolated layout) -- In the
+   combined image, `ldd`s every ELF object under `/extensions/<ext>/`
+   and asserts each **bundled** dependency resolves inside that same
+   extension's `/extensions/<ext>/lib`, never a sibling layer's dir. The
+   `ldd ... not found` check (#3) only catches a *missing* library; this
+   catches one that binds to the *wrong* copy -- the failure mode behind
+   "PostGIS loads a mismatched libssh2 through the profile-wide linker
+   path". A leak means isolation regressed (a global `ld.so.conf.d` /
+   `LD_LIBRARY_PATH` was reintroduced, or soname mangling / `$ORIGIN`
+   RUNPATH is missing from a `normalizer` stage).
 
-5. **All extensions load** -- `CREATE EXTENSION` must succeed for every
+5. **Self-containment** -- Overlays each extension on the *bare* base
+   image alone (no sibling layers, no global linker path) and runs `ldd`
+   on every ELF object it ships. An extension must resolve all of its own
+   runtime deps purely via its own `$ORIGIN` RUNPATH (e.g. `pg_net` must
+   bundle its own `libcurl.so.4`, not borrow postgis's). See Dockerfile
+   requirement #8.
+
+6. **All extensions load** -- `CREATE EXTENSION` must succeed for every
    extension in the combined image.
 
-6. **Functional integration tests** -- Each extension's
+7. **Functional integration tests** -- Each extension's
    `extensions/<ext>/test.sql` runs multi-step `PASS`/`FAIL` checks in the
    combined image, catching runtime failures that `CREATE EXTENSION` alone
    wouldn't surface. `test.sql` is required for every extension.
@@ -387,10 +399,27 @@ Every extension Dockerfile **must** follow these practices:
 
    - **Isolated (PG 18+):** each extension lives in its own
      `/extensions/<ext>/lib` namespace, so bundled deps sit flat next to
-     the extension `.so` and are found via the per-extension
-     `dynamic_library_path` / `ld.so.conf.d` entry. Bundling every
-     non-base dep (no skip lists) is sufficient -- collisions are
-     structurally impossible.
+     the extension `.so`. PostgreSQL locates the extension **module**
+     itself via the per-extension `dynamic_library_path` /
+     `extension_control_path` GUCs, but the *system dynamic linker*
+     (`ld.so`) resolves each module's transitive shared-library
+     dependencies (`libcurl` -> `libssh2`) and ignores those GUCs. So the
+     isolated `normalizer` stage must make every ELF object it ships
+     genuinely self-resolving: set each object's `RUNPATH` to `$ORIGIN`
+     (its own `/extensions/<ext>/lib`) and **mangle each bundled dep's
+     soname** with a per-extension prefix (`pglx_<ext>_<soname>`, rewriting
+     `NEEDED` entries) -- exactly as the classic layout does, only flat
+     (no separate `<ext>-deps/` dir, and `RUNPATH` is just `$ORIGIN`).
+     Do **not** paper over missing RUNPATHs with a profile-wide
+     `ld.so.conf.d` + `ldconfig` or `LD_LIBRARY_PATH` in the combined
+     image: a global linker namespace collapses every soname to a single
+     `ldconfig` winner, so two layers bundling the same soname (e.g.
+     `postgis` and `pg_duckdb`, both pulling `libssh2` via `libcurl`)
+     would bind to one shared copy -- reintroducing exactly the collision
+     the isolated layout exists to prevent. With per-object RUNPATH +
+     mangled sonames, collisions are structurally impossible and the
+     combined image needs only the `dynamic_library_path` /
+     `extension_control_path` GUCs.
 
    - **Classic (PG 17):** the flat overlay means every layer shares
      `/usr/lib/<multiarch>/`, so two extensions bundling the same soname
@@ -418,7 +447,9 @@ Every extension Dockerfile **must** follow these practices:
      `extensions/pg_net/Dockerfile`, `extensions/pg_duckdb/Dockerfile`, and
      `extensions/pg_lake/Dockerfile` for the reference pattern (the last
      also relocates and rewrites the `pgduck_server` binary via
-     `$ORIGIN/../lib`).
+     `$ORIGIN/../lib`). The isolated `normalizer` stage in the same
+     Dockerfiles (and in the shared `Dockerfile.apt`) applies the flat
+     `$ORIGIN` + soname-mangling equivalent.
 
    Never introduce a `skip-libs` list that omits a real runtime dependency
    in the hope that another layer provides it.

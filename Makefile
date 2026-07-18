@@ -266,8 +266,6 @@ image: ## Build a combined image with all extensions
 			done; \
 			echo "RUN echo \"extension_control_path = '$${ext_paths}\\\$$system'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
 			echo "RUN echo \"dynamic_library_path = '$${lib_paths}\\\$$libdir'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
-			echo "RUN for d in /extensions/*/lib; do echo \"\$$d\"; done > /etc/ld.so.conf.d/pglayers.conf && ldconfig"; \
-			echo "ENV LD_LIBRARY_PATH=\"$${lib_paths%:}\""; \
 		fi; \
 		preloads=""; \
 		for ext in $(EXTENSIONS); do \
