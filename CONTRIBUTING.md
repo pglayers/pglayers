@@ -126,10 +126,23 @@ upstream tag in `extension.conf` via `VERSION_17/18/19`. Two variants:
 
 If the extension bundles runtime libraries that aren't in the base
 `postgres` image, the layer **must stay self-contained** -- never rely on a
-sibling layer to provide a shared library. See the "Extensions MUST always
-be self-contained" section in [AGENTS.md](AGENTS.md) for the required
-relocation + soname-mangling pattern (`extensions/http/Dockerfile` is the
-reference).
+sibling layer to provide a shared library. This applies to **both** layout
+stages of your Dockerfile:
+
+- **classic** (PG 17): relocate bundled deps into a private
+  `<ext>-deps/` dir with mangled sonames + `$ORIGIN` RUNPATH.
+- **isolated** (PG 18+): the `normalizer` stage must mangle each bundled
+  dep's soname to `pglx_<ext>_<soname>` and set `RUNPATH=$ORIGIN` on every
+  ELF object (there is no global `ld.so.conf.d`/`LD_LIBRARY_PATH` fallback
+  in the combined image). Just copying libs flat into `/isolated/lib` is
+  **not** enough and will fail the self-containment / cross-layer-leak
+  tests.
+
+Install `patchelf` in the builder stage. See requirements #6 and #8 in the
+"Extensions MUST always be self-contained" section of
+[AGENTS.md](AGENTS.md); `extensions/http/Dockerfile` is the reference (and
+`extensions/pg_lake/Dockerfile` for a companion binary). APT extensions on
+the shared `Dockerfile.apt` get all of this automatically.
 
 ### Licensing
 

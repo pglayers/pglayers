@@ -4,7 +4,7 @@ name: Monitor APT Extension Versions
 # at build time, so version bumps are otherwise invisible in git. This workflow
 # regenerates the apt-versions lockfile (.github/apt-versions.json) on a
 # schedule and, when PGDG has shipped new versions, opens a PR. That PR is the
-# explicit, git-visible record of the update; merging it triggers build-push.yml
+# explicit, git-visible record of the update; merging it triggers ci.yml
 # to rebuild exactly the affected extension layers.
 
 on:

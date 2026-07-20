@@ -1,0 +1,500 @@
+name: CI
+
+# Unified pipeline: build -> test -> compose profiles, all from freshly built
+# layers, plus publish on merge. Replaces the former build-push.yml, test.yml,
+# test-k8s.yml and test-cnpg.yml.
+#
+#   pull_request  -> matrix + checks + test + test-profile + integration
+#                    (everything built/composed locally, nothing pushed)
+#   push to main  -> the same verification, then build + manifest +
+#                    profile-images publish jobs (gated on the tests passing)
+#   schedule      -> weekly safety-net full rebuild + publish
+#   workflow_dispatch -> targeted rebuild/publish
+#
+# Composition never pulls a stale layer: scripts/ci-prepare-images.sh rebuilds
+# changed extensions from source and pulls only unchanged ones, so the test
+# and profile jobs always see the current code.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'extensions/**'
+      - 'profiles/**'
+      - 'Dockerfile.apt'
+      - 'Makefile'
+      - 'tests/**'
+      - 'scripts/**'
+      - '.github/apt-versions.json'
+      - '.github/base-image-digests.json'
+      - '.github/workflows/ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'extensions/**'
+      - 'profiles/**'
+      - 'Dockerfile.apt'
+      - 'Makefile'
+      - 'tests/**'
+      - 'scripts/**'
+      - '.github/apt-versions.json'
+      - '.github/base-image-digests.json'
+      - '.github/workflows/ci.yml'
+  schedule:
+    # Weekly full rebuild (safety net): Sunday 04:00 UTC
+    - cron: '0 4 * * 0'
+  workflow_dispatch:
+    inputs:
+      pg_version:
+        description: 'PostgreSQL major version (blank = all)'
+        required: false
+        default: ''
+      extension:
+        description: 'Extension name (blank = all)'
+        required: false
+        default: ''
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  PREFIX: pgx
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Plan: what changed, what to test, what to publish.
+  # ---------------------------------------------------------------------------
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.set.outputs.changed }}       # ext-level changes (test jobs rebuild these)
+      build: ${{ steps.set.outputs.build }}           # publish build matrix (per-arch)
+      extensions: ${{ steps.set.outputs.extensions }} # publish manifest matrix
+      publish: ${{ steps.set.outputs.publish }}        # 'true' on push/schedule/dispatch
+      test_pgs: ${{ steps.set.outputs.test_pgs }}      # PG majors the test jobs cover
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2  # need parent commit for the diff
+
+      - name: Plan build/test matrices
+        id: set
+        run: |
+          pg_filter="${{ github.event.inputs.pg_version }}"
+          ext_filter="${{ github.event.inputs.extension }}"
+          event="${{ github.event_name }}"
+
+          # --- ext-level changes: which layers must be rebuilt from source ---
+          # (Never emptied by infra changes: Makefile/scripts/tests edits change
+          # the test/compose logic, not the layers, so pulling unchanged layers
+          # and running the new logic is a valid test.)
+          test_changed=""
+          if [ "$event" = "pull_request" ] || [ "$event" = "push" ]; then
+            test_changed=$(git diff --name-only HEAD~1 -- extensions/ \
+              | grep -oP 'extensions/\K[^/]+' | sort -u | tr '\n' ' ')
+            # Shared APT template changed -> rebuild every APT extension.
+            if git diff --name-only HEAD~1 | grep -qxF 'Dockerfile.apt'; then
+              for d in extensions/*/; do
+                e=$(basename "$d")
+                [ -f "$d/Dockerfile" ] || test_changed="$test_changed $e"
+              done
+            fi
+            # apt-versions lockfile changed -> rebuild the version-bumped exts.
+            if git diff --name-only HEAD~1 | grep -qxF '.github/apt-versions.json'; then
+              git show HEAD~1:.github/apt-versions.json > /tmp/old-apt.json 2>/dev/null \
+                || echo '{}' > /tmp/old-apt.json
+              vc=$(jq -r --slurpfile old /tmp/old-apt.json \
+                'to_entries[] | select(.value != ($old[0][.key] // {})) | .key' \
+                .github/apt-versions.json | tr '\n' ' ')
+              test_changed="$test_changed $vc"
+            fi
+            test_changed=$(echo "$test_changed" | tr ' ' '\n' | sed '/^$/d' | sort -u | tr '\n' ' ')
+          fi
+
+          # --- publish scope: build+push targeted (test_changed) unless an
+          #     infra change forces a full rebuild ---
+          build_all=false
+          case "$event" in
+            schedule) build_all=true ;;
+            workflow_dispatch) [ -z "$ext_filter" ] && build_all=true ;;
+          esac
+          # A change to the build/compose plumbing can affect every layer.
+          if [ "$event" = "push" ] && \
+             git diff --name-only HEAD~1 \
+               | grep -qE '^(\.github/workflows/ci\.yml|Makefile|scripts/)'; then
+            build_all=true
+          fi
+
+          extensions="[]"
+          build="[]"
+          for ext_dir in extensions/*/; do
+            ext="$(basename "$ext_dir")"
+            [ -n "$ext_filter" ] && [ "$ext" != "$ext_filter" ] && continue
+            # Skip by change-set only when nothing forces this ext in: a full
+            # rebuild ($build_all) or an explicit single-extension dispatch.
+            if [ "$build_all" != "true" ] && [ -z "$ext_filter" ] \
+               && ! echo " $test_changed " | grep -qw "$ext"; then
+              continue
+            fi
+            # Reset per-extension fields so absent values don't bleed over.
+            CI_SKIP=""
+            APT_PACKAGE=""
+            VCPKG_VERSION=""
+            # shellcheck disable=SC2034
+            VERSION_17=""
+            # shellcheck disable=SC2034
+            VERSION_18=""
+            # shellcheck disable=SC2034
+            VERSION_19=""
+            source "$ext_dir/extension.conf"
+            [ "${CI_SKIP:-}" = "1" ] && continue
+            dockerfile="extensions/$ext/Dockerfile"
+            [ -f "$dockerfile" ] || dockerfile="Dockerfile.apt"
+            for pg in 17 18 19; do
+              [ -n "$pg_filter" ] && [ "$pg" != "$pg_filter" ] && continue
+              ver_var="VERSION_${pg}"
+              ver="${!ver_var}"
+              if [ -z "$ver" ] && [ -n "${APT_PACKAGE:-}" ]; then
+                if ! ver="$(./scripts/ext-version.sh "$ext" "$pg")"; then
+                  echo "ERROR: PGDG version resolution failed for $ext (PG $pg)" >&2
+                  exit 1
+                fi
+              fi
+              [ -z "$ver" ] && continue
+              extensions=$(echo "$extensions" | jq -c \
+                --arg ext "$ext" --arg pg "$pg" --arg ver "$ver" \
+                --arg apt "${APT_PACKAGE:-}" --arg df "$dockerfile" \
+                '. + [{"extension": $ext, "pg": $pg, "version": $ver, "apt_package": $apt, "dockerfile": $df}]')
+              if [ -z "$APT_PACKAGE" ]; then
+                for arch in amd64 arm64; do
+                  build=$(echo "$build" | jq -c \
+                    --arg ext "$ext" --arg pg "$pg" --arg ver "$ver" --arg arch "$arch" \
+                    --arg vcpkg "${VCPKG_VERSION:-}" --arg df "$dockerfile" \
+                    '. + [{"extension": $ext, "pg": $pg, "version": $ver, "arch": $arch, "native": true, "vcpkg_version": $vcpkg, "apt_package": "", "dockerfile": $df}]')
+                done
+              else
+                build=$(echo "$build" | jq -c \
+                  --arg ext "$ext" --arg pg "$pg" --arg ver "$ver" \
+                  --arg apt "$APT_PACKAGE" --arg df "$dockerfile" \
+                  '. + [{"extension": $ext, "pg": $pg, "version": $ver, "arch": "all", "native": false, "apt_package": $apt, "dockerfile": $df}]')
+              fi
+            done
+          done
+
+          # PG majors to test: PRs cover 17+18 (classic + isolated); push and
+          # scheduled runs add 19 (beta, non-blocking).
+          if [ -n "$pg_filter" ]; then
+            test_pgs="[\"$pg_filter\"]"
+          elif [ "$event" = "pull_request" ]; then
+            test_pgs='["17","18"]'
+          else
+            test_pgs='["17","18","19"]'
+          fi
+
+          publish='false'
+          case "$event" in push|schedule|workflow_dispatch) publish='true' ;; esac
+
+          # What the test jobs rebuild from source (vs pull). This must mirror
+          # the publish scope so a full/targeted rebuild is verified against the
+          # freshly built layers, not stale pulled ones (e.g. the weekly cron).
+          if [ "$build_all" = "true" ]; then
+            changed_out="$(for d in extensions/*/; do basename "$d"; done | tr '\n' ' ')"
+          elif [ "$event" = "workflow_dispatch" ] && [ -n "$ext_filter" ]; then
+            changed_out="$ext_filter"
+          else
+            changed_out="$test_changed"
+          fi
+
+          {
+            echo "changed=$changed_out"
+            echo "build=$build"
+            echo "extensions=$extensions"
+            echo "publish=$publish"
+            echo "test_pgs=$test_pgs"
+          } >> "$GITHUB_OUTPUT"
+          echo "changed: [$changed_out]"
+          echo "publish: $publish | test_pgs: $test_pgs"
+          echo "publish build jobs: $(echo "$build" | jq length)"
+
+  # ---------------------------------------------------------------------------
+  # Static checks (profiles + licenses), once per run.
+  # ---------------------------------------------------------------------------
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check profiles
+        run: make check-profiles
+      - name: Check licenses
+        run: make check-licenses
+
+  # ---------------------------------------------------------------------------
+  # Layer + combined-image tests (collision, self-containment, cross-layer
+  # leak, CREATE EXTENSION, functional) against freshly assembled images.
+  # ---------------------------------------------------------------------------
+  test:
+    needs: matrix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: ${{ fromJson(needs.matrix.outputs.test_pgs) }}
+    continue-on-error: ${{ matrix.pg == '19' }}
+    name: Test PG ${{ matrix.pg }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          docker system prune -af
+          df -h /
+      - name: Tag beta image as major version
+        if: matrix.pg == '19'
+        run: |
+          docker pull postgres:19beta1
+          docker tag postgres:19beta1 postgres:19
+      - uses: docker/setup-buildx-action@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prepare extension images (build changed, pull unchanged)
+        env:
+          SOURCE_REGISTRY: ${{ env.REGISTRY }}/${{ github.repository_owner }}
+          PREFIX: ${{ env.PREFIX }}
+          PG_TAG: ${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
+          CHANGED: ${{ needs.matrix.outputs.changed }}
+          DOCKER_BUILDKIT: '1'
+        run: |
+          exts=$(for d in extensions/*/; do basename "$d"; done | tr '\n' ' ')
+          # shellcheck disable=SC2086 # intentional word-split: one arg per ext
+          ./scripts/ci-prepare-images.sh ${{ matrix.pg }} $exts
+      - name: Run test suite
+        env:
+          PG_TAG: ${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
+        run: make test REGISTRY=local PG=${{ matrix.pg }} PG_TAG="$PG_TAG"
+
+  # ---------------------------------------------------------------------------
+  # Compose the azure profile image from freshly assembled layers and run its
+  # functional test.sql suite. (The `full` profile is published, not tested,
+  # since `test` already composes/leak-checks the complete extension set.)
+  # ---------------------------------------------------------------------------
+  test-profile:
+    needs: matrix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: ${{ fromJson(needs.matrix.outputs.test_pgs) }}
+    continue-on-error: ${{ matrix.pg == '19' }}
+    name: Test profile azure (PG ${{ matrix.pg }})
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          docker system prune -af
+      - name: Tag beta image as major version
+        if: matrix.pg == '19'
+        run: |
+          docker pull postgres:19beta1
+          docker tag postgres:19beta1 postgres:19
+      - uses: docker/setup-buildx-action@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prepare azure profile images (build changed, pull unchanged)
+        env:
+          SOURCE_REGISTRY: ${{ env.REGISTRY }}/${{ github.repository_owner }}
+          PREFIX: ${{ env.PREFIX }}
+          PG_TAG: ${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
+          CHANGED: ${{ needs.matrix.outputs.changed }}
+          DOCKER_BUILDKIT: '1'
+        run: |
+          exts=$(grep -v '^#' profiles/azure.txt | grep -v '^$' | tr '\n' ' ')
+          # shellcheck disable=SC2086 # intentional word-split: one arg per ext
+          ./scripts/ci-prepare-images.sh ${{ matrix.pg }} $exts
+      - name: Build and test azure profile image
+        run: |
+          make image PG=${{ matrix.pg }} PROFILE=azure REGISTRY=local
+          make test-image PG=${{ matrix.pg }} PROFILE=azure
+
+  # ---------------------------------------------------------------------------
+  # Kubernetes ImageVolume + CloudNativePG integration (k3d, PG 18).
+  # ---------------------------------------------------------------------------
+  integration:
+    needs: matrix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [k8s, cnpg]
+    name: Integration ${{ matrix.target }} (PG 18)
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - uses: docker/setup-buildx-action@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prepare test extension images (build changed, pull unchanged)
+        env:
+          SOURCE_REGISTRY: ${{ env.REGISTRY }}/${{ github.repository_owner }}
+          PREFIX: ${{ env.PREFIX }}
+          CHANGED: ${{ needs.matrix.outputs.changed }}
+          DOCKER_BUILDKIT: '1'
+        run: ./scripts/ci-prepare-images.sh 18 pgvector pg_cron postgis
+      - name: Install k3d
+        run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+      - name: Run ${{ matrix.target }} integration test
+        run: make test-${{ matrix.target }} REGISTRY=local PG=18
+
+  # ---------------------------------------------------------------------------
+  # Publish (push / schedule / dispatch only), gated on the tests above.
+  # Build each architecture natively (no QEMU) and push per-arch tags.
+  # ---------------------------------------------------------------------------
+  build:
+    needs: [matrix, checks, test, test-profile, integration]
+    if: ${{ needs.matrix.outputs.publish == 'true' && github.ref == 'refs/heads/main' && fromJson(needs.matrix.outputs.build)[0] != null }}
+    runs-on: ${{ matrix.native && (matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04') || 'ubuntu-24.04' }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.matrix.outputs.build) }}
+    continue-on-error: ${{ matrix.pg == '19' }}
+    name: Build (${{ matrix.extension }}, ${{ matrix.pg }}, ${{ matrix.arch }})
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up QEMU
+        if: ${{ !matrix.native }}
+        uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: extensions/${{ matrix.extension }}
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ matrix.native && format('linux/{0}', matrix.arch) || 'linux/amd64,linux/arm64' }}
+          build-args: |
+            PG_MAJOR=${{ matrix.pg }}
+            PG_TAG=${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
+            EXT_VERSION=${{ matrix.version }}
+            APT_PACKAGE=${{ matrix.apt_package }}
+            EXT_NAME=${{ matrix.extension }}
+            LAYOUT=${{ matrix.pg >= 18 && 'isolated' || 'classic' }}
+          push: true
+          tags: |
+            ${{ matrix.native && format('{0}/{1}/{2}-{3}:{4}-{5}', env.REGISTRY, github.repository_owner, env.PREFIX, matrix.extension, matrix.pg, matrix.arch) || format('{0}/{1}/{2}-{3}:{4}', env.REGISTRY, github.repository_owner, env.PREFIX, matrix.extension, matrix.pg) }}
+            ${{ !matrix.native && format('{0}/{1}/{2}-{3}:{4}-{5}', env.REGISTRY, github.repository_owner, env.PREFIX, matrix.extension, matrix.pg, matrix.version) || '' }}
+          cache-from: |
+            type=gha,scope=${{ matrix.extension }}-${{ matrix.pg }}-${{ matrix.arch }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-${{ matrix.arch }}
+            ${{ matrix.extension == 'plv8' && format('type=registry,ref={0}/{1}/plv8-v8:{2}', env.REGISTRY, github.repository_owner, matrix.version) || '' }}
+            ${{ matrix.vcpkg_version != '' && format('type=registry,ref={0}/{1}/pg-lake-vcpkg:{2}', env.REGISTRY, github.repository_owner, matrix.vcpkg_version) || '' }}
+          cache-to: |
+            type=gha,mode=max,scope=${{ matrix.extension }}-${{ matrix.pg }}-${{ matrix.arch }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-${{ matrix.arch }},mode=max
+
+  # Merge per-arch images into multi-arch manifest lists (native builds only).
+  manifest:
+    needs: [matrix, build]
+    if: ${{ needs.matrix.outputs.publish == 'true' && github.ref == 'refs/heads/main' && fromJson(needs.matrix.outputs.extensions)[0] != null }}
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.matrix.outputs.extensions) }}
+    continue-on-error: ${{ matrix.pg == '19' }}
+    name: Manifest (${{ matrix.extension }}, ${{ matrix.pg }})
+    steps:
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create multi-arch manifest (if per-arch images exist)
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}"
+          if docker buildx imagetools inspect "${IMAGE}:${{ matrix.pg }}-amd64" >/dev/null 2>&1 && \
+             docker buildx imagetools inspect "${IMAGE}:${{ matrix.pg }}-arm64" >/dev/null 2>&1; then
+            docker buildx imagetools create -t "${IMAGE}:${{ matrix.pg }}" \
+              "${IMAGE}:${{ matrix.pg }}-amd64" \
+              "${IMAGE}:${{ matrix.pg }}-arm64"
+            docker buildx imagetools create -t "${IMAGE}:${{ matrix.pg }}-${{ matrix.version }}" \
+              "${IMAGE}:${{ matrix.pg }}-amd64" \
+              "${IMAGE}:${{ matrix.pg }}-arm64"
+          else
+            echo "Skipping manifest (APT-based extension, already multi-arch)"
+          fi
+
+  # Compose and push profile images from the freshly published layers.
+  profile-images:
+    needs: [matrix, checks, test, test-profile, integration, build, manifest]
+    if: ${{ always() && !cancelled() && needs.matrix.outputs.publish == 'true' && github.ref == 'refs/heads/main' && needs.checks.result == 'success' && needs.test.result == 'success' && needs['test-profile'].result == 'success' && needs.integration.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped') && (needs.manifest.result == 'success' || needs.manifest.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [azure, full]
+        pg: [17, 18, 19]
+    continue-on-error: ${{ matrix.pg == '19' }}
+    name: Profile ${{ matrix.profile }} (PG ${{ matrix.pg }})
+    steps:
+      - uses: actions/checkout@v7
+      - name: Tag beta image as major version
+        if: matrix.pg == '19'
+        run: |
+          docker pull postgres:19beta1
+          docker tag postgres:19beta1 postgres:19
+      - uses: docker/setup-buildx-action@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push profile image
+        run: |
+          make image PG=${{ matrix.pg }} PROFILE=${{ matrix.profile }} \
+            REGISTRY=${{ env.REGISTRY }}/${{ github.repository_owner }}
+          docker tag pglayers-${{ matrix.profile }}:${{ matrix.pg }} \
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/pglayers-${{ matrix.profile }}:${{ matrix.pg }}
+          docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/pglayers-${{ matrix.profile }}:${{ matrix.pg }}

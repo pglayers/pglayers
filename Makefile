@@ -240,7 +240,7 @@ image: ## Build a combined image with all extensions
 	{ \
 		echo "FROM postgres:$(PG)"; \
 		for ext in $(EXTENSIONS); do \
-			ver=$(./scripts/ext-version.sh "$ext" "$(PG)"); \
+			ver=$$(./scripts/ext-version.sh "$$ext" "$(PG)"); \
 			[ -z "$$ver" ] && continue; \
 			total=$$((total + 1)); \
 			if [ "$(REGISTRY)" = "local" ]; then \
@@ -266,12 +266,10 @@ image: ## Build a combined image with all extensions
 			done; \
 			echo "RUN echo \"extension_control_path = '$${ext_paths}\\\$$system'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
 			echo "RUN echo \"dynamic_library_path = '$${lib_paths}\\\$$libdir'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
-			echo "RUN for d in /extensions/*/lib; do echo \"\$$d\"; done > /etc/ld.so.conf.d/pglayers.conf && ldconfig"; \
-			echo "ENV LD_LIBRARY_PATH=\"$${lib_paths%:}\""; \
 		fi; \
 		preloads=""; \
 		for ext in $(EXTENSIONS); do \
-			ver=$(./scripts/ext-version.sh "$ext" "$(PG)"); \
+			ver=$$(./scripts/ext-version.sh "$$ext" "$(PG)"); \
 			[ -z "$$ver" ] && continue; \
 			if [ "$(REGISTRY)" = "local" ]; then \
 				docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
@@ -283,7 +281,7 @@ image: ## Build a combined image with all extensions
 		done; \
 		[ -n "$$preloads" ] && echo "RUN echo \"shared_preload_libraries = '$$preloads'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
 		for ext in $(EXTENSIONS); do \
-			ver=$(./scripts/ext-version.sh "$ext" "$(PG)"); \
+			ver=$$(./scripts/ext-version.sh "$$ext" "$(PG)"); \
 			[ -z "$$ver" ] && continue; \
 			if [ "$(REGISTRY)" = "local" ]; then \
 				docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
@@ -302,7 +300,7 @@ image: ## Build a combined image with all extensions
 		fi; \
 		companions=""; \
 		for ext in $(EXTENSIONS); do \
-			ver=$(./scripts/ext-version.sh "$ext" "$(PG)"); \
+			ver=$$(./scripts/ext-version.sh "$$ext" "$(PG)"); \
 			[ -z "$$ver" ] && continue; \
 			if [ "$(REGISTRY)" = "local" ]; then \
 				docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
