@@ -14,24 +14,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     build-essential git ca-certificates curl patchelf \
     postgresql-server-dev-${PG_MAJOR}
 
-# Build libsodium from source (distro version too old for pgsodium 3.1.11+).
-# Fetch with retries and fall back to the GitHub release mirror -- the
-# canonical download.libsodium.org host intermittently fails DNS in CI.
-RUN set -eux; \
-    for url in \
-        "https://github.com/jedisct1/libsodium/releases/download/${LIBSODIUM_VERSION}-RELEASE/libsodium-${LIBSODIUM_VERSION}.tar.gz" \
-        "https://download.libsodium.org/libsodium/releases/libsodium-${LIBSODIUM_VERSION}.tar.gz" \
-    ; do \
-        if curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 \
-            -o /tmp/libsodium.tar.gz "$url"; then \
-            break; \
-        fi; \
-    done; \
-    test -s /tmp/libsodium.tar.gz; \
-    tar xz -C /tmp -f /tmp/libsodium.tar.gz; \
-    cd /tmp/libsodium-${LIBSODIUM_VERSION}; \
-    ./configure --prefix=/usr && make -j"$(nproc)" && make install; \
-    rm -f /tmp/libsodium.tar.gz
+# Build libsodium from source (distro version too old for pgsodium 3.1.11+)
+RUN curl -fsSL "https://download.libsodium.org/libsodium/releases/libsodium-${LIBSODIUM_VERSION}.tar.gz" \
+    | tar xz -C /tmp \
+    && cd /tmp/libsodium-${LIBSODIUM_VERSION} \
+    && ./configure --prefix=/usr && make -j"$(nproc)" && make install
 
 RUN git clone --branch ${EXT_VERSION} --depth 1 \
     https://github.com/michelp/pgsodium.git /tmp/ext
