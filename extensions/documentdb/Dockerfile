@@ -2,7 +2,7 @@
 ARG PG_MAJOR=17
 ARG PG_TAG=${PG_MAJOR}
 ARG LAYOUT=classic
-ARG EXT_VERSION=v0.113-0
+ARG EXT_VERSION=v0.114-0
 
 # ── Stage 1: Snapshot base image libs (for dep-bundling) ────────────
 FROM postgres:${PG_TAG} AS base
@@ -21,7 +21,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     curl ca-certificates patchelf
 
 # Download DocumentDB deb from GitHub releases.
-# Tag format: v0.113-0 -> deb version: 0.113-0
+# Tag format: v0.114-0 -> deb version: 0.114-0
 # Use deb13 (trixie) to match the postgres:17+ base image.
 RUN DEB_VERSION="${EXT_VERSION#v}" && \
     curl -fsSL -o /tmp/documentdb.deb \
