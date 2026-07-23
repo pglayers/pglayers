@@ -70,6 +70,15 @@ list: ## List available extensions
 # Cache scope for GHA cache (used in CI). Set to enable layer caching.
 CACHE_SCOPE ?=
 
+# Registry to pull published BuildKit cache from (used in CI). When set, a
+# from-source build restores the heavy intermediate stages from the per-arch
+# buildcache-<pg>-<arch> tag the `build` publish job writes, so changed/heavy
+# extensions are not recompiled from scratch on every test run. Read-only: the
+# test jobs never push cache (only the publish `build` job does).
+CACHE_REGISTRY ?=
+# Architecture selecting the per-arch cache tag/scope (default: build host).
+CACHE_ARCH ?= amd64
+
 build: _check-ext ## Build a single extension image
 	$(eval EXT_APT_PACKAGE := $(shell bash -c 'source extensions/$(EXT)/extension.conf && echo "$$APT_PACKAGE"'))
 	$(eval EXT_VERSION := $(shell ./scripts/ext-version.sh $(EXT) $(PG)))
@@ -83,9 +92,10 @@ build: _check-ext ## Build a single extension image
 	@echo "Building $(PREFIX)-$(EXT):$(PG) (extension $(EXT_VERSION), $(if $(filter Dockerfile.apt,$(DOCKERFILE)),shared apt template,custom Dockerfile))..."
 	docker buildx build \
 		$(if $(PLATFORM),--platform $(PLATFORM)) \
-		$(if $(CACHE_SCOPE),--cache-from type=gha$(comma)scope=$(EXT)-$(PG)) \
-		$(if $(CACHE_SCOPE),--cache-from type=registry$(comma)ref=$(REGISTRY)/$(PREFIX)-$(EXT):$(PG)) \
-		$(if $(CACHE_SCOPE),--cache-to type=gha$(comma)mode=max$(comma)scope=$(EXT)-$(PG)) \
+		$(if $(CACHE_SCOPE),--cache-from type=gha$(comma)scope=$(EXT)-$(PG)-$(CACHE_ARCH)) \
+		$(if $(CACHE_REGISTRY),--cache-from type=registry$(comma)ref=$(CACHE_REGISTRY)/$(PREFIX)-$(EXT):buildcache-$(PG)-$(CACHE_ARCH)) \
+		$(if $(CACHE_REGISTRY),--cache-from type=registry$(comma)ref=$(CACHE_REGISTRY)/$(PREFIX)-$(EXT):$(PG)) \
+		$(if $(CACHE_SCOPE),--cache-to type=gha$(comma)mode=max$(comma)scope=$(EXT)-$(PG)-$(CACHE_ARCH)) \
 		--build-arg PG_MAJOR=$(PG) \
 		--build-arg PG_TAG=$(or $(PG_TAG),$(PG)) \
 		--build-arg EXT_VERSION=$(EXT_VERSION) \
