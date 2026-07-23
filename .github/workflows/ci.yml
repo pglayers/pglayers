@@ -295,13 +295,16 @@ jobs:
           push: true
           # Immutable per-version, per-arch staging tag -- never the public :<pg>.
           tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}-${{ matrix.version }}-${{ matrix.arch }}
+          # Registry-only cache. The type=gha cache is deliberately NOT used: on
+          # a full rebuild (build_all) hundreds of jobs share the repo's 10 GB
+          # GHA cache, which evicts entries mid-build ("cache entry no longer
+          # exists"). The GHCR buildcache has no such cap and gives the same
+          # cross-run reuse.
           cache-from: |
-            type=gha,scope=${{ matrix.extension }}-${{ matrix.pg }}-${{ matrix.arch }}
             type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-${{ matrix.arch }}
             ${{ matrix.extension == 'plv8' && format('type=registry,ref={0}/{1}/plv8-v8:{2}', env.REGISTRY, github.repository_owner, matrix.version) || '' }}
             ${{ matrix.vcpkg_version != '' && format('type=registry,ref={0}/{1}/pg-lake-vcpkg:{2}', env.REGISTRY, github.repository_owner, matrix.vcpkg_version) || '' }}
           cache-to: |
-            type=gha,mode=max,scope=${{ matrix.extension }}-${{ matrix.pg }}-${{ matrix.arch }}
             type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-${{ matrix.arch }},mode=max
 
   build-apt:
@@ -349,10 +352,8 @@ jobs:
           # Immutable, multi-arch per-version staging tag -- never the public :<pg>.
           tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}-${{ matrix.version }}
           cache-from: |
-            type=gha,scope=${{ matrix.extension }}-${{ matrix.pg }}-all
             type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-all
           cache-to: |
-            type=gha,mode=max,scope=${{ matrix.extension }}-${{ matrix.pg }}-all
             type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-all,mode=max
 
   # ---------------------------------------------------------------------------
