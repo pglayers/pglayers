@@ -1,19 +1,29 @@
 name: CI
 
-# Unified pipeline: build -> test -> compose profiles, all from freshly built
-# layers, plus publish on merge. Replaces the former build-push.yml, test.yml,
-# test-k8s.yml and test-cnpg.yml.
+# Build-once pipeline.
 #
-#   pull_request  -> matrix + checks + test + test-profile + integration
-#                    (everything built/composed locally, nothing pushed)
-#   push to main  -> the same verification, then build + manifest +
-#                    profile-images publish jobs (gated on the tests passing)
-#   schedule      -> weekly safety-net full rebuild + publish
-#   workflow_dispatch -> targeted rebuild/publish
+# Layers are compiled exactly ONCE, on the pull request (or schedule/dispatch),
+# by the `build` job, which pushes immutable per-commit staging tags:
+#     source ext (per-arch):  pgx-<ext>:<pg>-<version>-<arch>
+#     apt ext (multi-arch):   pgx-<ext>:<pg>-<version>
+# The test / test-profile / integration jobs PULL those images and validate
+# them -- they never recompile. On merge to main the `promote` jobs retag the
+# already-built, already-tested per-arch images into the public multi-arch
+# :<pg> / :<pg>-<version> manifests and compose the profile images -- again
+# without rebuilding.
 #
-# Composition never pulls a stale layer: scripts/ci-prepare-images.sh rebuilds
-# changed extensions from source and pulls only unchanged ones, so the test
-# and profile jobs always see the current code.
+#   pull_request (same-repo) -> matrix + checks + build(+push staging) +
+#                               test + test-profile + integration
+#   pull_request (fork)      -> same, but `build` is skipped (forks cannot push
+#                               to GHCR); the test jobs compile changed layers
+#                               locally instead. Nothing is published.
+#   push to main             -> matrix + promote only. Reuses the staging images
+#                               the PR already built and tested; no rebuild.
+#   schedule / dispatch      -> full (or targeted) build + test + promote.
+#
+# scripts/ci-prepare-images.sh is the single source of truth for assembling the
+# local/ image set the test jobs compose from (pull staging/published, else
+# build from source as a fork fallback).
 
 on:
   pull_request:
@@ -64,14 +74,15 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Plan: what changed, what to test, what to publish.
+  # Plan: what changed, what to build/publish, what to test.
   # ---------------------------------------------------------------------------
   matrix:
     runs-on: ubuntu-latest
     outputs:
-      changed: ${{ steps.set.outputs.changed }}       # ext-level changes (test jobs rebuild these)
-      build: ${{ steps.set.outputs.build }}           # publish build matrix (per-arch)
-      extensions: ${{ steps.set.outputs.extensions }} # publish manifest matrix
+      changed: ${{ steps.set.outputs.changed }}       # exts changed in this run
+      build_native: ${{ steps.set.outputs.build_native }} # source builds (per-arch)
+      build_apt: ${{ steps.set.outputs.build_apt }}    # apt builds (multi-arch)
+      extensions: ${{ steps.set.outputs.extensions }} # promote/manifest matrix
       publish: ${{ steps.set.outputs.publish }}        # 'true' on push/schedule/dispatch
       test_pgs: ${{ steps.set.outputs.test_pgs }}      # PG majors the test jobs cover
     steps:
@@ -113,22 +124,23 @@ jobs:
             test_changed=$(echo "$test_changed" | tr ' ' '\n' | sed '/^$/d' | sort -u | tr '\n' ' ')
           fi
 
-          # --- publish scope: build+push targeted (test_changed) unless an
-          #     infra change forces a full rebuild ---
+          # --- full-rebuild triggers ---
           build_all=false
           case "$event" in
             schedule) build_all=true ;;
             workflow_dispatch) [ -z "$ext_filter" ] && build_all=true ;;
           esac
-          # A change to the build/compose plumbing can affect every layer.
-          if [ "$event" = "push" ] && \
+          # A change to the build/compose plumbing can affect every layer, so a
+          # PR (or merge) that touches it exercises a full rebuild.
+          if { [ "$event" = "push" ] || [ "$event" = "pull_request" ]; } && \
              git diff --name-only HEAD~1 \
                | grep -qE '^(\.github/workflows/ci\.yml|Makefile|scripts/)'; then
             build_all=true
           fi
 
           extensions="[]"
-          build="[]"
+          build_native="[]"
+          build_apt="[]"
           for ext_dir in extensions/*/; do
             ext="$(basename "$ext_dir")"
             [ -n "$ext_filter" ] && [ "$ext" != "$ext_filter" ] && continue
@@ -169,26 +181,25 @@ jobs:
                 '. + [{"extension": $ext, "pg": $pg, "version": $ver, "apt_package": $apt, "dockerfile": $df}]')
               if [ -z "$APT_PACKAGE" ]; then
                 for arch in amd64 arm64; do
-                  build=$(echo "$build" | jq -c \
+                  build_native=$(echo "$build_native" | jq -c \
                     --arg ext "$ext" --arg pg "$pg" --arg ver "$ver" --arg arch "$arch" \
                     --arg vcpkg "${VCPKG_VERSION:-}" --arg df "$dockerfile" \
-                    '. + [{"extension": $ext, "pg": $pg, "version": $ver, "arch": $arch, "native": true, "vcpkg_version": $vcpkg, "apt_package": "", "dockerfile": $df}]')
+                    '. + [{"extension": $ext, "pg": $pg, "version": $ver, "arch": $arch, "vcpkg_version": $vcpkg, "dockerfile": $df}]')
                 done
               else
-                build=$(echo "$build" | jq -c \
+                build_apt=$(echo "$build_apt" | jq -c \
                   --arg ext "$ext" --arg pg "$pg" --arg ver "$ver" \
                   --arg apt "$APT_PACKAGE" --arg df "$dockerfile" \
-                  '. + [{"extension": $ext, "pg": $pg, "version": $ver, "arch": "all", "native": false, "apt_package": $apt, "dockerfile": $df}]')
+                  '. + [{"extension": $ext, "pg": $pg, "version": $ver, "apt_package": $apt, "dockerfile": $df}]')
               fi
             done
           done
 
-          # PG majors to test: PRs cover 17+18 (classic + isolated); push and
-          # scheduled runs add 19 (beta, non-blocking).
+          # PG majors to test. The PR is now the sole verification gate, so it
+          # covers every supported major (19 stays non-blocking via
+          # continue-on-error in the test jobs).
           if [ -n "$pg_filter" ]; then
             test_pgs="[\"$pg_filter\"]"
-          elif [ "$event" = "pull_request" ]; then
-            test_pgs='["17","18"]'
           else
             test_pgs='["17","18","19"]'
           fi
@@ -196,9 +207,10 @@ jobs:
           publish='false'
           case "$event" in push|schedule|workflow_dispatch) publish='true' ;; esac
 
-          # What the test jobs rebuild from source (vs pull). This must mirror
-          # the publish scope so a full/targeted rebuild is verified against the
-          # freshly built layers, not stale pulled ones (e.g. the weekly cron).
+          # What the test jobs treat as "changed" (pull freshly-built staging /
+          # build-from-source fallback) vs "unchanged" (pull published). Mirrors
+          # the build scope so a full/targeted rebuild is verified against the
+          # freshly built layers, not stale published ones.
           if [ "$build_all" = "true" ]; then
             changed_out="$(for d in extensions/*/; do basename "$d"; done | tr '\n' ' ')"
           elif [ "$event" = "workflow_dispatch" ] && [ -n "$ext_filter" ]; then
@@ -209,14 +221,15 @@ jobs:
 
           {
             echo "changed=$changed_out"
-            echo "build=$build"
+            echo "build_native=$build_native"
+            echo "build_apt=$build_apt"
             echo "extensions=$extensions"
             echo "publish=$publish"
             echo "test_pgs=$test_pgs"
           } >> "$GITHUB_OUTPUT"
           echo "changed: [$changed_out]"
           echo "publish: $publish | test_pgs: $test_pgs"
-          echo "publish build jobs: $(echo "$build" | jq length)"
+          echo "native build jobs: $(echo "$build_native" | jq length) | apt build jobs: $(echo "$build_apt" | jq length) | manifest jobs: $(echo "$extensions" | jq length)"
 
   # ---------------------------------------------------------------------------
   # Static checks (profiles + licenses), once per run.
@@ -231,11 +244,130 @@ jobs:
         run: make check-licenses
 
   # ---------------------------------------------------------------------------
+  # Build each layer ONCE and push an immutable staging tag. Runs on the PR
+  # (same-repo only -- forks cannot push to GHCR), schedule and dispatch; NOT on
+  # push-to-main (the merge reuses these images via `promote`).
+  #
+  # Split into two jobs so neither matrix approaches GitHub's 256-job limit on a
+  # full rebuild: source extensions build natively per-arch (no QEMU); APT
+  # extensions build multi-arch in one shot.
+  # ---------------------------------------------------------------------------
+  build-native:
+    needs: matrix
+    if: >-
+      ${{ github.event_name != 'push'
+          && (github.event_name != 'pull_request'
+              || github.event.pull_request.head.repo.full_name == github.repository)
+          && fromJson(needs.matrix.outputs.build_native)[0] != null }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.matrix.outputs.build_native) }}
+    continue-on-error: ${{ matrix.pg == '19' }}
+    name: Build (${{ matrix.extension }}, ${{ matrix.pg }}, ${{ matrix.arch }})
+    steps:
+      - uses: actions/checkout@v7
+      - name: Free disk space
+        run: ./scripts/ci-free-disk.sh
+      - uses: docker/setup-buildx-action@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push per-arch staging image
+        uses: docker/build-push-action@v7
+        with:
+          context: extensions/${{ matrix.extension }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            PG_MAJOR=${{ matrix.pg }}
+            PG_TAG=${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
+            EXT_VERSION=${{ matrix.version }}
+            EXT_NAME=${{ matrix.extension }}
+            LAYOUT=${{ matrix.pg >= 18 && 'isolated' || 'classic' }}
+          push: true
+          # Immutable per-version, per-arch staging tag -- never the public :<pg>.
+          tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}-${{ matrix.version }}-${{ matrix.arch }}
+          cache-from: |
+            type=gha,scope=${{ matrix.extension }}-${{ matrix.pg }}-${{ matrix.arch }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-${{ matrix.arch }}
+            ${{ matrix.extension == 'plv8' && format('type=registry,ref={0}/{1}/plv8-v8:{2}', env.REGISTRY, github.repository_owner, matrix.version) || '' }}
+            ${{ matrix.vcpkg_version != '' && format('type=registry,ref={0}/{1}/pg-lake-vcpkg:{2}', env.REGISTRY, github.repository_owner, matrix.vcpkg_version) || '' }}
+          cache-to: |
+            type=gha,mode=max,scope=${{ matrix.extension }}-${{ matrix.pg }}-${{ matrix.arch }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-${{ matrix.arch }},mode=max
+
+  build-apt:
+    needs: matrix
+    if: >-
+      ${{ github.event_name != 'push'
+          && (github.event_name != 'pull_request'
+              || github.event.pull_request.head.repo.full_name == github.repository)
+          && fromJson(needs.matrix.outputs.build_apt)[0] != null }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.matrix.outputs.build_apt) }}
+    continue-on-error: ${{ matrix.pg == '19' }}
+    name: Build apt (${{ matrix.extension }}, ${{ matrix.pg }})
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push multi-arch staging image
+        uses: docker/build-push-action@v7
+        with:
+          context: extensions/${{ matrix.extension }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            PG_MAJOR=${{ matrix.pg }}
+            PG_TAG=${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
+            EXT_VERSION=${{ matrix.version }}
+            APT_PACKAGE=${{ matrix.apt_package }}
+            EXT_NAME=${{ matrix.extension }}
+            LAYOUT=${{ matrix.pg >= 18 && 'isolated' || 'classic' }}
+          push: true
+          # Immutable, multi-arch per-version staging tag -- never the public :<pg>.
+          tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}-${{ matrix.version }}
+          cache-from: |
+            type=gha,scope=${{ matrix.extension }}-${{ matrix.pg }}-all
+            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-all
+          cache-to: |
+            type=gha,mode=max,scope=${{ matrix.extension }}-${{ matrix.pg }}-all
+            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-all,mode=max
+
+  # ---------------------------------------------------------------------------
   # Layer + combined-image tests (collision, self-containment, cross-layer
-  # leak, CREATE EXTENSION, functional) against freshly assembled images.
+  # leak, CREATE EXTENSION, functional) against images pulled from `build`
+  # (fork PRs compile changed layers from source instead). Not run on push --
+  # the merge trusts the PR's green run and only promotes.
   # ---------------------------------------------------------------------------
   test:
-    needs: matrix
+    needs: [matrix, build-native, build-apt]
+    if: >-
+      ${{ github.event_name != 'push' && !cancelled()
+          && needs.matrix.result == 'success'
+          && (needs['build-native'].result == 'success' || needs['build-native'].result == 'skipped')
+          && (needs['build-apt'].result == 'success' || needs['build-apt'].result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -251,10 +383,7 @@ jobs:
         with:
           fetch-depth: 2
       - name: Free disk space
-        run: |
-          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
-          docker system prune -af
-          df -h /
+        run: ./scripts/ci-free-disk.sh
       - name: Tag beta image as major version
         if: matrix.pg == '19'
         run: |
@@ -267,7 +396,7 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Prepare extension images (build changed, pull unchanged)
+      - name: Prepare extension images (pull staging/published, build fork changes)
         env:
           SOURCE_REGISTRY: ${{ env.REGISTRY }}/${{ github.repository_owner }}
           PREFIX: ${{ env.PREFIX }}
@@ -284,12 +413,16 @@ jobs:
         run: make test REGISTRY=local PG=${{ matrix.pg }} PG_TAG="$PG_TAG"
 
   # ---------------------------------------------------------------------------
-  # Compose the azure profile image from freshly assembled layers and run its
-  # functional test.sql suite. (The `full` profile is published, not tested,
-  # since `test` already composes/leak-checks the complete extension set.)
+  # Compose the azure profile image from the assembled layers and run its
+  # functional test.sql suite.
   # ---------------------------------------------------------------------------
   test-profile:
-    needs: matrix
+    needs: [matrix, build-native, build-apt]
+    if: >-
+      ${{ github.event_name != 'push' && !cancelled()
+          && needs.matrix.result == 'success'
+          && (needs['build-native'].result == 'success' || needs['build-native'].result == 'skipped')
+          && (needs['build-apt'].result == 'success' || needs['build-apt'].result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -305,9 +438,7 @@ jobs:
         with:
           fetch-depth: 2
       - name: Free disk space
-        run: |
-          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
-          docker system prune -af
+        run: ./scripts/ci-free-disk.sh
       - name: Tag beta image as major version
         if: matrix.pg == '19'
         run: |
@@ -320,7 +451,7 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Prepare azure profile images (build changed, pull unchanged)
+      - name: Prepare azure profile images (pull staging/published, build fork changes)
         env:
           SOURCE_REGISTRY: ${{ env.REGISTRY }}/${{ github.repository_owner }}
           PREFIX: ${{ env.PREFIX }}
@@ -337,10 +468,15 @@ jobs:
           make test-image PG=${{ matrix.pg }} PROFILE=azure
 
   # ---------------------------------------------------------------------------
-  # Kubernetes ImageVolume + CloudNativePG integration (k3d, PG 18).
+  # Kubernetes (ImageVolume) + CloudNativePG integration tests, PG 18 only.
   # ---------------------------------------------------------------------------
   integration:
-    needs: matrix
+    needs: [matrix, build-native, build-apt]
+    if: >-
+      ${{ github.event_name != 'push' && !cancelled()
+          && needs.matrix.result == 'success'
+          && (needs['build-native'].result == 'success' || needs['build-native'].result == 'skipped')
+          && (needs['build-apt'].result == 'success' || needs['build-apt'].result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -361,7 +497,7 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Prepare test extension images (build changed, pull unchanged)
+      - name: Prepare test extension images (pull staging/published, build fork changes)
         env:
           SOURCE_REGISTRY: ${{ env.REGISTRY }}/${{ github.repository_owner }}
           PREFIX: ${{ env.PREFIX }}
@@ -374,64 +510,28 @@ jobs:
         run: make test-${{ matrix.target }} REGISTRY=local PG=18
 
   # ---------------------------------------------------------------------------
-  # Publish (push / schedule / dispatch only), gated on the tests above.
-  # Build each architecture natively (no QEMU) and push per-arch tags.
+  # Promote (publish) -- push-to-main / schedule / dispatch only. Retags the
+  # already-built, already-tested per-arch staging images into the public
+  # multi-arch manifests. NO rebuild.
+  #
+  # On push it reuses the images the PR built + tested (gated by branch
+  # protection on the PR's green run). On schedule/dispatch it runs after this
+  # run's own build+test.
   # ---------------------------------------------------------------------------
-  build:
-    needs: [matrix, checks, test, test-profile, integration]
-    if: ${{ needs.matrix.outputs.publish == 'true' && github.ref == 'refs/heads/main' && fromJson(needs.matrix.outputs.build)[0] != null }}
-    runs-on: ${{ matrix.native && (matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04') || 'ubuntu-24.04' }}
-    permissions:
-      contents: read
-      packages: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJson(needs.matrix.outputs.build) }}
-    continue-on-error: ${{ matrix.pg == '19' }}
-    name: Build (${{ matrix.extension }}, ${{ matrix.pg }}, ${{ matrix.arch }})
-    steps:
-      - uses: actions/checkout@v7
-      - name: Set up QEMU
-        if: ${{ !matrix.native }}
-        uses: docker/setup-qemu-action@v4
-      - uses: docker/setup-buildx-action@v4
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push
-        uses: docker/build-push-action@v7
-        with:
-          context: extensions/${{ matrix.extension }}
-          file: ${{ matrix.dockerfile }}
-          platforms: ${{ matrix.native && format('linux/{0}', matrix.arch) || 'linux/amd64,linux/arm64' }}
-          build-args: |
-            PG_MAJOR=${{ matrix.pg }}
-            PG_TAG=${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
-            EXT_VERSION=${{ matrix.version }}
-            APT_PACKAGE=${{ matrix.apt_package }}
-            EXT_NAME=${{ matrix.extension }}
-            LAYOUT=${{ matrix.pg >= 18 && 'isolated' || 'classic' }}
-          push: true
-          tags: |
-            ${{ matrix.native && format('{0}/{1}/{2}-{3}:{4}-{5}', env.REGISTRY, github.repository_owner, env.PREFIX, matrix.extension, matrix.pg, matrix.arch) || format('{0}/{1}/{2}-{3}:{4}', env.REGISTRY, github.repository_owner, env.PREFIX, matrix.extension, matrix.pg) }}
-            ${{ !matrix.native && format('{0}/{1}/{2}-{3}:{4}-{5}', env.REGISTRY, github.repository_owner, env.PREFIX, matrix.extension, matrix.pg, matrix.version) || '' }}
-          cache-from: |
-            type=gha,scope=${{ matrix.extension }}-${{ matrix.pg }}-${{ matrix.arch }}
-            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-${{ matrix.arch }}
-            ${{ matrix.extension == 'plv8' && format('type=registry,ref={0}/{1}/plv8-v8:{2}', env.REGISTRY, github.repository_owner, matrix.version) || '' }}
-            ${{ matrix.vcpkg_version != '' && format('type=registry,ref={0}/{1}/pg-lake-vcpkg:{2}', env.REGISTRY, github.repository_owner, matrix.vcpkg_version) || '' }}
-          cache-to: |
-            type=gha,mode=max,scope=${{ matrix.extension }}-${{ matrix.pg }}-${{ matrix.arch }}
-            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-${{ matrix.arch }},mode=max
-
-  # Merge per-arch images into multi-arch manifest lists (native builds only).
   manifest:
-    needs: [matrix, build]
-    if: ${{ needs.matrix.outputs.publish == 'true' && github.ref == 'refs/heads/main' && fromJson(needs.matrix.outputs.extensions)[0] != null }}
+    needs: [matrix, checks, build-native, build-apt, test, test-profile, integration]
+    if: >-
+      ${{ always() && !cancelled()
+          && needs.matrix.outputs.publish == 'true'
+          && github.ref == 'refs/heads/main'
+          && fromJson(needs.matrix.outputs.extensions)[0] != null
+          && needs.matrix.result == 'success'
+          && (needs.checks.result == 'success' || needs.checks.result == 'skipped')
+          && (needs['build-native'].result == 'success' || needs['build-native'].result == 'skipped')
+          && (needs['build-apt'].result == 'success' || needs['build-apt'].result == 'skipped')
+          && (needs.test.result == 'success' || needs.test.result == 'skipped')
+          && (needs['test-profile'].result == 'success' || needs['test-profile'].result == 'skipped')
+          && (needs.integration.result == 'success' || needs.integration.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -440,32 +540,39 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.matrix.outputs.extensions) }}
     continue-on-error: ${{ matrix.pg == '19' }}
-    name: Manifest (${{ matrix.extension }}, ${{ matrix.pg }})
+    name: Promote (${{ matrix.extension }}, ${{ matrix.pg }})
     steps:
       - uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Create multi-arch manifest (if per-arch images exist)
+      - name: Promote staging image to public manifests
         run: |
           IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}"
-          if docker buildx imagetools inspect "${IMAGE}:${{ matrix.pg }}-amd64" >/dev/null 2>&1 && \
-             docker buildx imagetools inspect "${IMAGE}:${{ matrix.pg }}-arm64" >/dev/null 2>&1; then
-            docker buildx imagetools create -t "${IMAGE}:${{ matrix.pg }}" \
-              "${IMAGE}:${{ matrix.pg }}-amd64" \
-              "${IMAGE}:${{ matrix.pg }}-arm64"
-            docker buildx imagetools create -t "${IMAGE}:${{ matrix.pg }}-${{ matrix.version }}" \
-              "${IMAGE}:${{ matrix.pg }}-amd64" \
-              "${IMAGE}:${{ matrix.pg }}-arm64"
+          PG="${{ matrix.pg }}"
+          VER="${{ matrix.version }}"
+          if [ -n "${{ matrix.apt_package }}" ]; then
+            # APT layers were pushed multi-arch as :<pg>-<version>; just add :<pg>.
+            docker buildx imagetools create -t "${IMAGE}:${PG}" "${IMAGE}:${PG}-${VER}"
           else
-            echo "Skipping manifest (APT-based extension, already multi-arch)"
+            # Source layers were pushed per-arch as :<pg>-<version>-<arch>; merge
+            # into the multi-arch :<pg> and :<pg>-<version> manifests.
+            docker buildx imagetools create \
+              -t "${IMAGE}:${PG}" \
+              -t "${IMAGE}:${PG}-${VER}" \
+              "${IMAGE}:${PG}-${VER}-amd64" \
+              "${IMAGE}:${PG}-${VER}-arm64"
           fi
 
-  # Compose and push profile images from the freshly published layers.
+  # Compose and push profile images from the freshly promoted layers.
   profile-images:
-    needs: [matrix, checks, test, test-profile, integration, build, manifest]
-    if: ${{ always() && !cancelled() && needs.matrix.outputs.publish == 'true' && github.ref == 'refs/heads/main' && needs.checks.result == 'success' && needs.test.result == 'success' && needs['test-profile'].result == 'success' && needs.integration.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped') && (needs.manifest.result == 'success' || needs.manifest.result == 'skipped') }}
+    needs: [matrix, manifest]
+    if: >-
+      ${{ always() && !cancelled()
+          && needs.matrix.outputs.publish == 'true'
+          && github.ref == 'refs/heads/main'
+          && (needs.manifest.result == 'success' || needs.manifest.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
