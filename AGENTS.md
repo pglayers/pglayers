@@ -123,6 +123,17 @@ This test suite validates:
    combined image, catching runtime failures that `CREATE EXTENSION` alone
    wouldn't surface. `test.sql` is required for every extension.
 
+8. **Startup-log health** (`tests/test-image.sh`, run against the profile
+   images) -- a fresh combined image must boot **without warnings**. The
+   harness scans the main-server log (post-initdb, before the `test.sql`
+   suite mutates the DB) and fails on any PostgreSQL
+   `WARNING`/`ERROR`/`FATAL`/`PANIC`, a background-worker panic, or the
+   `too many background workers` / `increase max_worker_processes` signals.
+   This is what keeps the shipped image from silently regressing to the
+   noise the combined-image config exists to prevent. A provably benign
+   line can be excluded via `LOG_ALLOWLIST` in `tests/test-image.sh`, each
+   entry with a justification comment.
+
 ### When to run tests
 
 - Before committing any change to `extensions/*/Dockerfile`
