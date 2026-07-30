@@ -310,7 +310,7 @@ image: ## Build a combined image with all extensions
 			echo "CMD [\"postgres\"]"; \
 		fi; \
 		autocreate=""; \
-		for ext in $(PGLAYERS_AUTOCREATE); do \
+		for ext in $(subst $(comma), ,$(PGLAYERS_AUTOCREATE)); do \
 			if echo " $$included_exts " | grep -q " $$ext "; then \
 				autocreate="$${autocreate:+$$autocreate }$$ext"; \
 			fi; \

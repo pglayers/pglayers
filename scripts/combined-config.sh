@@ -41,11 +41,11 @@ has_ext() {
 
 # Read one field from an extension's extension.conf (empty if unset).
 ext_field() {
-	bash -c "source extensions/$1/extension.conf 2>/dev/null && printf '%s' \"\${$2:-}\""
+	bash -c "source \"extensions/$1/extension.conf\" 2>/dev/null && printf '%s' \"\${$2:-}\""
 }
 
 # --- Collect the postgresql.conf.sample lines (raw; no shell escaping needed:
-#     they are emitted inside a quoted heredoc so $system/$libdir stay literal).
+#     they are emitted via individual echo calls so $system/$libdir stay literal).
 conf_lines=()
 
 if [ "$PG" -ge 18 ] 2>/dev/null; then
