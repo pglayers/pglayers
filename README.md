@@ -164,7 +164,7 @@ promoted to stable.
 | [pg_hint_plan](https://github.com/ossc-db/pg_hint_plan) | 1.7.1 | 17, 18 | Tweak execution plans using hints in SQL comments |
 | [pg_ivm](https://github.com/sraoss/pg_ivm) | 1.13 | 17, 18 | Incremental View Maintenance for materialized views |
 | [pg_jsonschema](https://github.com/supabase/pg_jsonschema) | 0.3.4 | 17, 18 | JSON Schema validation |
-| [pg_lake](https://github.com/Snowflake-Labs/pg_lake) | 3.4.1 | 17, 18 | Iceberg and data lake access (Parquet, CSV, JSON via DuckDB) |
+| [pg_lake](https://github.com/Snowflake-Labs/pg_lake) | 3.4.1 | 17 | Iceberg and data lake access (Parquet, CSV, JSON via DuckDB) |
 | [pg_net](https://github.com/supabase/pg_net) | 0.20.3 | 17, 18, 19 | Async non-blocking HTTP/HTTPS requests |
 | [pg_partman](https://github.com/pgpartman/pg_partman) | 5.4.3 | 17, 18, 19 | Automated table partition management |
 | [pg_permissions](https://github.com/cybertec-postgresql/pg_permissions) | 1.4.1 | 17, 18, 19 | Review and audit object permissions against a desired state |
@@ -369,6 +369,20 @@ CREATE EXTENSION pg_lake CASCADE;
 
 **Note:** pg_lake conflicts with pg_duckdb (both bundle `libduckdb.so`).
 Do not use both in the same image.
+
+**PostgreSQL 17 only.** pg_lake requires its `pg_extension_base` shim in
+`shared_preload_libraries`. That shim installs a `ProcessUtility` hook
+that intercepts every `CREATE EXTENSION` and looks up the target's
+control file in the hardcoded `$system` sharedir, ignoring PostgreSQL
+18's `extension_control_path`. Because the PG 18+ isolated layout
+installs every extension under `/extensions/<ext>/share` and resolves
+them purely via `extension_control_path`, preloading `pg_extension_base`
+would break `CREATE EXTENSION` for **every** extension in the image (and
+pg_lake itself). pg_lake is therefore built only for the PG 17 classic
+layout until upstream teaches `pg_extension_base` to honor
+`extension_control_path`. See
+[issue #37](https://github.com/pglayers/pglayers/issues/37) and upstream
+[Snowflake-Labs/pg_lake#494](https://github.com/Snowflake-Labs/pg_lake/issues/494).
 
 ### Profile images (auto-configuration)
 
