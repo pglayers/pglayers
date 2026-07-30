@@ -1,6 +1,21 @@
 REGISTRY   ?= ghcr.io/$(or $(shell git remote get-url origin 2>/dev/null | sed -n 's|.*github\.com[:/]\([^/]*\)/.*|\1|p' | tr '[:upper:]' '[:lower:]'),local)
 PREFIX     ?= pgx
 PG_VERSIONS ?= 17 18 19
+
+# Combined-image tuning. The full/azure images preload many background-worker
+# extensions (pg_cron, pg_partman, timescaledb, documentdb, pg_net, ...); the
+# stock max_worker_processes=8 is far too low and causes "too many background
+# workers" errors (and a runaway TimescaleDB launcher retry loop). Keep this in
+# sync with tests/test-layers.sh.
+MAX_WORKER_PROCESSES ?= 64
+
+# Extensions auto-created (CREATE EXTENSION ... CASCADE) in the combined image on
+# first init. documentdb ships a MongoDB-wire gateway + background workers that
+# poll for the extension's SQL objects; without the extension they emit
+# perpetual warnings, so it is created by default. Override at build time
+# (make image PGLAYERS_AUTOCREATE=...) or at runtime (PGLAYERS_CREATE_EXTENSIONS
+# env, "none" to disable).
+PGLAYERS_AUTOCREATE ?= documentdb
 EXTENSIONS := $(sort $(notdir $(patsubst %/,%,$(wildcard extensions/*/))))
 
 # Default PG version for single-extension targets
@@ -290,6 +305,10 @@ image: ## Build a combined image with all extensions
 			[ -n "$$spl" ] && preloads="$${preloads:+$$preloads,}$$spl"; \
 		done; \
 		[ -n "$$preloads" ] && echo "RUN echo \"shared_preload_libraries = '$$preloads'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
+		if echo " $$included_exts " | grep -q ' pgtt '; then \
+			echo "RUN echo \"session_preload_libraries = 'pgtt'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
+		fi; \
+		echo "RUN echo \"max_worker_processes = $(MAX_WORKER_PROCESSES)\" >> /usr/share/postgresql/postgresql.conf.sample"; \
 		for ext in $(EXTENSIONS); do \
 			ver=$$(./scripts/ext-version.sh "$$ext" "$(PG)"); \
 			[ -z "$$ver" ] && continue; \
@@ -307,6 +326,9 @@ image: ## Build a combined image with all extensions
 		done; \
 		if [ "$(PG)" -ge 18 ] 2>/dev/null && echo " $$included_exts " | grep -q ' pgsodium '; then \
 			echo "RUN echo \"pgsodium.getkey_script = '/extensions/pgsodium/share/extension/pgsodium_getkey'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
+		fi; \
+		if [ "$(PG)" -ge 18 ] 2>/dev/null && echo " $$included_exts " | grep -q ' documentdb '; then \
+			echo "RUN mkdir -p /etc/documentdb && ln -sf /extensions/documentdb/etc/documentdb/gateway_config.json /etc/documentdb/gateway_config.json"; \
 		fi; \
 		companions=""; \
 		for ext in $(EXTENSIONS); do \
@@ -330,6 +352,17 @@ image: ## Build a combined image with all extensions
 			echo "   } > /usr/local/bin/pglayers-entrypoint.sh && chmod +x /usr/local/bin/pglayers-entrypoint.sh"; \
 			echo "ENTRYPOINT [\"/usr/local/bin/pglayers-entrypoint.sh\"]"; \
 			echo "CMD [\"postgres\"]"; \
+		fi; \
+		autocreate=""; \
+		for ext in $(PGLAYERS_AUTOCREATE); do \
+			if echo " $$included_exts " | grep -q " $$ext "; then \
+				autocreate="$${autocreate:+$$autocreate }$$ext"; \
+			fi; \
+		done; \
+		if [ -n "$$autocreate" ]; then \
+			echo "COPY scripts/pglayers-autocreate.sh /docker-entrypoint-initdb.d/10-pglayers-autocreate.sh"; \
+			echo "RUN chmod +x /docker-entrypoint-initdb.d/10-pglayers-autocreate.sh"; \
+			echo "ENV PGLAYERS_AUTOCREATE_DEFAULT=\"$$autocreate\""; \
 		fi; \
 		echo "RUN mkdir -p /etc/pglayers && echo '{' > /etc/pglayers/manifest.json \\"; \
 		echo "  && echo '  \"pg_version\": \"$(PG)\",' >> /etc/pglayers/manifest.json \\"; \
