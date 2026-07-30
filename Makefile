@@ -1,6 +1,22 @@
 REGISTRY   ?= ghcr.io/$(or $(shell git remote get-url origin 2>/dev/null | sed -n 's|.*github\.com[:/]\([^/]*\)/.*|\1|p' | tr '[:upper:]' '[:lower:]'),local)
 PREFIX     ?= pgx
 PG_VERSIONS ?= 17 18 19
+
+# Combined-image tuning. The full/azure images preload many background-worker
+# extensions (pg_cron, pg_partman, timescaledb, documentdb, pg_net, ...); the
+# stock max_worker_processes=8 is far too low and causes "too many background
+# workers" errors (and a runaway TimescaleDB launcher retry loop). Consumed by
+# scripts/combined-config.sh (the single source of combined-image config shared
+# with tests/test-layers.sh).
+MAX_WORKER_PROCESSES ?= 64
+
+# Extensions auto-created (CREATE EXTENSION ... CASCADE) in the combined image on
+# first init. documentdb ships a MongoDB-wire gateway + background workers that
+# poll for the extension's SQL objects; without the extension they emit
+# perpetual warnings, so it is created by default. Override at build time
+# (make image PGLAYERS_AUTOCREATE=...) or at runtime (PGLAYERS_CREATE_EXTENSIONS
+# env, "none" to disable).
+PGLAYERS_AUTOCREATE ?= documentdb
 EXTENSIONS := $(sort $(notdir $(patsubst %/,%,$(wildcard extensions/*/))))
 
 # Default PG version for single-extension targets
@@ -268,46 +284,8 @@ image: ## Build a combined image with all extensions
 			included_label="$${included_label:+$$included_label }$$ext"; \
 			included_exts="$${included_exts:+$$included_exts }$$ext"; \
 		done; \
-		if [ "$(PG)" -ge 18 ] 2>/dev/null; then \
-			ext_paths=""; lib_paths=""; \
-			for ext in $$included_exts; do \
-				ext_paths="$${ext_paths}/extensions/$$ext/share:"; \
-				lib_paths="$${lib_paths}/extensions/$$ext/lib:"; \
-			done; \
-			echo "RUN echo \"extension_control_path = '$${ext_paths}\\\$$system'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
-			echo "RUN echo \"dynamic_library_path = '$${lib_paths}\\\$$libdir'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
-		fi; \
-		preloads=""; \
-		for ext in $(EXTENSIONS); do \
-			ver=$$(./scripts/ext-version.sh "$$ext" "$(PG)"); \
-			[ -z "$$ver" ] && continue; \
-			if [ "$(REGISTRY)" = "local" ]; then \
-				docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
-			else \
-				docker buildx imagetools inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
-			fi; \
-			spl=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$$SHARED_PRELOAD"'); \
-			[ -n "$$spl" ] && preloads="$${preloads:+$$preloads,}$$spl"; \
-		done; \
-		[ -n "$$preloads" ] && echo "RUN echo \"shared_preload_libraries = '$$preloads'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
-		for ext in $(EXTENSIONS); do \
-			ver=$$(./scripts/ext-version.sh "$$ext" "$(PG)"); \
-			[ -z "$$ver" ] && continue; \
-			if [ "$(REGISTRY)" = "local" ]; then \
-				docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
-			else \
-				docker buildx imagetools inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
-			fi; \
-			pgconf=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$${PG_CONF:-}"'); \
-			[ -z "$$pgconf" ] && continue; \
-			echo "$$pgconf" | tr '|' '\n' | while IFS= read -r line; do \
-				[ -z "$$line" ] && continue; \
-				echo "RUN echo \"$$line\" >> /usr/share/postgresql/postgresql.conf.sample"; \
-			done; \
-		done; \
-		if [ "$(PG)" -ge 18 ] 2>/dev/null && echo " $$included_exts " | grep -q ' pgsodium '; then \
-			echo "RUN echo \"pgsodium.getkey_script = '/extensions/pgsodium/share/extension/pgsodium_getkey'\" >> /usr/share/postgresql/postgresql.conf.sample"; \
-		fi; \
+		PGLAYERS_MAX_WORKER_PROCESSES="$(MAX_WORKER_PROCESSES)" \
+			./scripts/combined-config.sh "$(PG)" $$included_exts; \
 		companions=""; \
 		for ext in $(EXTENSIONS); do \
 			ver=$$(./scripts/ext-version.sh "$$ext" "$(PG)"); \
@@ -330,6 +308,17 @@ image: ## Build a combined image with all extensions
 			echo "   } > /usr/local/bin/pglayers-entrypoint.sh && chmod +x /usr/local/bin/pglayers-entrypoint.sh"; \
 			echo "ENTRYPOINT [\"/usr/local/bin/pglayers-entrypoint.sh\"]"; \
 			echo "CMD [\"postgres\"]"; \
+		fi; \
+		autocreate=""; \
+		for ext in $(subst $(comma), ,$(PGLAYERS_AUTOCREATE)); do \
+			if echo " $$included_exts " | grep -q " $$ext "; then \
+				autocreate="$${autocreate:+$$autocreate }$$ext"; \
+			fi; \
+		done; \
+		if [ -n "$$autocreate" ]; then \
+			echo "COPY scripts/pglayers-autocreate.sh /docker-entrypoint-initdb.d/10-pglayers-autocreate.sh"; \
+			echo "RUN chmod +x /docker-entrypoint-initdb.d/10-pglayers-autocreate.sh"; \
+			echo "ENV PGLAYERS_AUTOCREATE_DEFAULT=\"$$autocreate\""; \
 		fi; \
 		echo "RUN mkdir -p /etc/pglayers && echo '{' > /etc/pglayers/manifest.json \\"; \
 		echo "  && echo '  \"pg_version\": \"$(PG)\",' >> /etc/pglayers/manifest.json \\"; \

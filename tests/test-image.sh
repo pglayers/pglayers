@@ -54,6 +54,53 @@ for i in $(seq 1 60); do
 done
 echo
 
+# ---------------------------------------------------------------------------
+# Startup log health.
+#
+# A fresh combined image must boot WITHOUT warnings. This is the guard that
+# keeps the shipped image from silently regressing to the class of noise this
+# suite exists to prevent (documentdb gateway panics, "too many background
+# workers", pgnodemx's k8s Downward API warning, ...). It is scanned on the
+# MAIN server (post-initdb) and BEFORE the test.sql suite runs, so it sees the
+# out-of-the-box boot, not log lines produced by our own CREATE EXTENSION test
+# activity.
+#
+# Benign lines can be excluded via LOG_ALLOWLIST (extended-regex patterns).
+# Add entries sparingly, each with a justification comment.
+LOG_ALLOWLIST=(
+    # (none yet -- the full and azure images boot clean)
+)
+
+printf -- "Checking startup log health..."
+sleep 8   # let background workers / the documentdb gateway settle
+startup_log="$(docker logs "$CONTAINER" 2>&1 \
+    | awk '/PostgreSQL init process complete; ready for start up/{p=1} p')"
+# If the init anchor is absent (e.g. an already-initialised volume), scan it all.
+[ -n "$startup_log" ] || startup_log="$(docker logs "$CONTAINER" 2>&1)"
+
+# Problem signatures: any PostgreSQL WARNING/ERROR/FATAL/PANIC (anchored on the
+# "[pid] SEVERITY:" log prefix so it never matches those words inside a message
+# body), a Rust background-worker panic, or the (LOG-level) background-worker
+# exhaustion message.
+problems="$(printf '%s\n' "$startup_log" | grep -E \
+    '\] (WARNING|ERROR|FATAL|PANIC):|thread .* panicked|too many background workers|increase .*max_worker_processes' \
+    || true)"
+if [ "${#LOG_ALLOWLIST[@]}" -gt 0 ]; then
+    for pat in "${LOG_ALLOWLIST[@]}"; do
+        problems="$(printf '%s\n' "$problems" | grep -vE "$pat" || true)"
+    done
+fi
+problems="$(printf '%s\n' "$problems" | grep -vE '^[[:space:]]*$' || true)"
+
+echo
+if [ -z "$problems" ]; then
+    pass "startup log clean (no warnings/errors on boot)"
+else
+    fail "startup log contains warnings/errors on a fresh boot:"
+    printf '%s\n' "$problems" | sed 's/^/       /'
+fi
+echo
+
 # Run each extension's test.sql
 for test_file in extensions/*/test.sql; do
     ext="$(basename "$(dirname "$test_file")")"

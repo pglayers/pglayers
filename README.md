@@ -335,6 +335,15 @@ auto-generated self-signed TLS certificates (clients can connect with or
 without TLS). Override with your own file to customize ports, TLS, or
 blocked roles.
 
+> On the PG 18+ isolated layout the bundled config lives at
+> `/extensions/documentdb/etc/documentdb/gateway_config.json`; the
+> combined profile images add a `/etc/documentdb/gateway_config.json`
+> symlink to it so the gateway finds it. In those profile images the
+> `documentdb` extension is also auto-created on first init (see
+> [Profile images](#profile-images-auto-configuration)), so the gateway
+> comes up clean without the "extension not yet created" retries. Set
+> `PGLAYERS_CREATE_EXTENSIONS=none` to opt out.
+
 ### pg_lake
 
 pg_lake provides Iceberg table support and data lake file access
@@ -391,12 +400,33 @@ automatically handle all runtime configuration:
 
 - **`shared_preload_libraries`** -- set from each extension's
   `SHARED_PRELOAD` field.
+- **`max_worker_processes`** -- raised to `64` (the stock default of `8`
+  is far too low once a dozen background-worker extensions are preloaded,
+  and causes `too many background workers` errors and a runaway
+  TimescaleDB launcher retry loop).
 - **postgresql.conf settings** -- GUC parameters required by extensions
   (e.g., `documentdb_gateway.database`) are appended automatically from
-  each extension's `PG_CONF` field.
+  each extension's `PG_CONF` field. This includes noise-suppressing
+  defaults such as `pgnodemx.kdapi_enabled = off` (no Kubernetes Downward
+  API outside k8s) and `cron.log_statement = off` (don't echo every
+  scheduled job to the server log).
 - **Companion processes** -- extensions that need a background process
   (e.g., pg_lake's `pgduck_server`) are started automatically via a
   generated entrypoint wrapper. No manual process management required.
+- **Auto-created extensions** -- extensions that ship an always-on
+  background worker or wire-protocol gateway which polls for their SQL
+  objects (currently **documentdb**) are created automatically on first
+  init via `CREATE EXTENSION ... CASCADE`, so a fresh container starts
+  without perpetual "not yet created" warnings. Override with the
+  `PGLAYERS_CREATE_EXTENSIONS` env var (a space/comma-separated list of
+  SQL extension names, or `none` to disable):
+
+  ```bash
+  # disable auto-creation entirely
+  docker run -e PGLAYERS_CREATE_EXTENSIONS=none ghcr.io/pglayers/pglayers-full:18
+  # auto-create a different set
+  docker run -e PGLAYERS_CREATE_EXTENSIONS="vector,postgis" ghcr.io/pglayers/pglayers-full:18
+  ```
 
 When using profile images, you don't need to configure any of the above
 manually -- just `docker run` and `CREATE EXTENSION`.
