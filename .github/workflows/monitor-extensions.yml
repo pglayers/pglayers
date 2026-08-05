@@ -13,15 +13,25 @@ jobs:
       contents: write
       pull-requests: write
     steps:
+      # Mint a short-lived GitHub App installation token. Unlike GITHUB_TOKEN,
+      # an App token is a distinct identity, so the PR it opens (and the merge
+      # push) DO trigger ci.yml -- required for the build-once pipeline to build,
+      # test, and promote the version bump. Unlike a PAT it is generated fresh
+      # each run and expires in ~1h, so there is nothing to rotate.
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - uses: actions/checkout@v7
         with:
-          # Use PAT so that pushes and PRs trigger downstream workflows.
-          # Falls back to GITHUB_TOKEN if PAT_TOKEN is not set.
-          token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Check for extension updates
         env:
-          GH_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -eo pipefail
 
