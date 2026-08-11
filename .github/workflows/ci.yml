@@ -275,37 +275,48 @@ jobs:
         run: ./scripts/ci-free-disk.sh
       - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Single quotes are intentional: the token must expand inside sh -c on
+          # each retry attempt, not once when the outer shell parses the line.
+          # shellcheck disable=SC2016
+          ./scripts/ci-retry.sh -n 4 -w 15 sh -c \
+            'echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin'
       - name: Build and push per-arch staging image
-        uses: docker/build-push-action@v7
-        with:
-          context: extensions/${{ matrix.extension }}
-          file: ${{ matrix.dockerfile }}
-          platforms: linux/${{ matrix.arch }}
-          build-args: |
-            PG_MAJOR=${{ matrix.pg }}
-            PG_TAG=${{ matrix.pg == '19' && '19beta2' || matrix.pg }}
-            EXT_VERSION=${{ matrix.version }}
-            EXT_NAME=${{ matrix.extension }}
-            LAYOUT=${{ matrix.pg >= 18 && 'isolated' || 'classic' }}
-          push: true
-          # Immutable per-version, per-arch staging tag -- never the public :<pg>.
-          tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}-${{ matrix.version }}-${{ matrix.arch }}
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}
+        run: |
           # Registry-only cache. The type=gha cache is deliberately NOT used: on
           # a full rebuild (build_all) hundreds of jobs share the repo's 10 GB
           # GHA cache, which evicts entries mid-build ("cache entry no longer
           # exists"). The GHCR buildcache has no such cap and gives the same
           # cross-run reuse.
-          cache-from: |
-            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-${{ matrix.arch }}
-            ${{ matrix.extension == 'plv8' && format('type=registry,ref={0}/{1}/plv8-v8:{2}', env.REGISTRY, github.repository_owner, matrix.version) || '' }}
-            ${{ matrix.vcpkg_version != '' && format('type=registry,ref={0}/{1}/pg-lake-vcpkg:{2}', env.REGISTRY, github.repository_owner, matrix.vcpkg_version) || '' }}
-          cache-to: |
-            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-${{ matrix.arch }},mode=max
+          cache_from="--cache-from type=registry,ref=${IMAGE}:buildcache-${{ matrix.pg }}-${{ matrix.arch }}"
+          if [ "${{ matrix.extension }}" = plv8 ]; then
+            cache_from="$cache_from --cache-from type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/plv8-v8:${{ matrix.version }}"
+          fi
+          if [ -n "${{ matrix.vcpkg_version }}" ]; then
+            cache_from="$cache_from --cache-from type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/pg-lake-vcpkg:${{ matrix.vcpkg_version }}"
+          fi
+          # ci-retry retries transient GHCR auth/push failures (denied / 403 /
+          # oauth token) that hit a handful of jobs on a full-rebuild fan-out.
+          # $cache_from is intentionally word-split into separate --cache-from flags.
+          # shellcheck disable=SC2086
+          ./scripts/ci-retry.sh docker buildx build \
+            --platform linux/${{ matrix.arch }} \
+            --build-arg PG_MAJOR=${{ matrix.pg }} \
+            --build-arg PG_TAG=${{ matrix.pg == '19' && '19beta2' || matrix.pg }} \
+            --build-arg EXT_VERSION=${{ matrix.version }} \
+            --build-arg EXT_NAME=${{ matrix.extension }} \
+            --build-arg LAYOUT=${{ matrix.pg >= 18 && 'isolated' || 'classic' }} \
+            --file ${{ matrix.dockerfile }} \
+            --tag ${IMAGE}:${{ matrix.pg }}-${{ matrix.version }}-${{ matrix.arch }} \
+            $cache_from \
+            --cache-to type=registry,ref=${IMAGE}:buildcache-${{ matrix.pg }}-${{ matrix.arch }},mode=max \
+            --push \
+            extensions/${{ matrix.extension }}
 
   build-apt:
     needs: matrix
@@ -330,31 +341,36 @@ jobs:
         uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Single quotes are intentional: the token must expand inside sh -c on
+          # each retry attempt, not once when the outer shell parses the line.
+          # shellcheck disable=SC2016
+          ./scripts/ci-retry.sh -n 4 -w 15 sh -c \
+            'echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin'
       - name: Build and push multi-arch staging image
-        uses: docker/build-push-action@v7
-        with:
-          context: extensions/${{ matrix.extension }}
-          file: ${{ matrix.dockerfile }}
-          platforms: linux/amd64,linux/arm64
-          build-args: |
-            PG_MAJOR=${{ matrix.pg }}
-            PG_TAG=${{ matrix.pg == '19' && '19beta2' || matrix.pg }}
-            EXT_VERSION=${{ matrix.version }}
-            APT_PACKAGE=${{ matrix.apt_package }}
-            EXT_NAME=${{ matrix.extension }}
-            LAYOUT=${{ matrix.pg >= 18 && 'isolated' || 'classic' }}
-          push: true
-          # Immutable, multi-arch per-version staging tag -- never the public :<pg>.
-          tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:${{ matrix.pg }}-${{ matrix.version }}
-          cache-from: |
-            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-all
-          cache-to: |
-            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}:buildcache-${{ matrix.pg }}-all,mode=max
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.PREFIX }}-${{ matrix.extension }}
+        run: |
+          # ci-retry retries transient GHCR auth/push failures (denied / 403 /
+          # oauth token) that hit a handful of jobs on a full-rebuild fan-out.
+          # shellcheck disable=SC2086 # IMAGE is a controlled ref, no splitting risk
+          ./scripts/ci-retry.sh docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --build-arg PG_MAJOR=${{ matrix.pg }} \
+            --build-arg PG_TAG=${{ matrix.pg == '19' && '19beta2' || matrix.pg }} \
+            --build-arg EXT_VERSION=${{ matrix.version }} \
+            --build-arg APT_PACKAGE=${{ matrix.apt_package }} \
+            --build-arg EXT_NAME=${{ matrix.extension }} \
+            --build-arg LAYOUT=${{ matrix.pg >= 18 && 'isolated' || 'classic' }} \
+            --file ${{ matrix.dockerfile }} \
+            --tag ${IMAGE}:${{ matrix.pg }}-${{ matrix.version }} \
+            --cache-from type=registry,ref=${IMAGE}:buildcache-${{ matrix.pg }}-all \
+            --cache-to type=registry,ref=${IMAGE}:buildcache-${{ matrix.pg }}-all,mode=max \
+            --push \
+            extensions/${{ matrix.extension }}
 
   # ---------------------------------------------------------------------------
   # Layer + combined-image tests (collision, self-containment, cross-layer
