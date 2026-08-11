@@ -491,6 +491,7 @@ declare -A EXT_SQL_NAMES=(
     [pgaudit]="pgaudit"
     [pgjwt]="pgjwt"
     [pglogical]="pglogical"
+    [pgmq]="pgmq"
     [pgrouting]="pgrouting"
     [pgsodium]="pgsodium"
     [pgsphere]="pg_sphere"
