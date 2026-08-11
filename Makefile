@@ -36,7 +36,7 @@ endif
 # Default: native architecture only (fast local builds).
 PLATFORM ?=
 
-.PHONY: help list build build-all image push push-all dockerfile clean clean-all test test-image list-profiles check-profiles check-licenses add-apt-ext
+.PHONY: help list build build-all image push push-all dockerfile clean clean-all test test-image verify-multiarch list-profiles check-profiles check-licenses add-apt-ext
 
 help: ## Show this help
 	@printf "Usage:\n"
@@ -369,6 +369,7 @@ image: ## Build a combined image with all extensions
 			-f "$$TMPFILE" \
 			--push \
 			.; \
+		./scripts/verify-multiarch.sh $(IMAGE_TAG) $(subst $(comma), ,$(PLATFORM)); \
 	else \
 		docker build -t $(IMAGE_TAG) -f "$$TMPFILE" .; \
 	fi; \
@@ -404,6 +405,10 @@ test: ## Run layer collision and functional tests
 
 test-image: ## Run integration tests against the combined image
 	@./tests/test-image.sh $(IMAGE_NAME):$(PG)
+
+# PLATFORM defaults to amd64+arm64; override to check a different set.
+verify-multiarch: ## Assert a pushed image is a multi-arch manifest (IMAGE_TAG=..., PLATFORM=...)
+	@./scripts/verify-multiarch.sh $(IMAGE_TAG) $(if $(PLATFORM),$(subst $(comma), ,$(PLATFORM)),linux/amd64 linux/arm64)
 
 test-k8s: ## Run Kubernetes ImageVolume integration test (requires k3d, PG 18+)
 	@./tests/test-k8s.sh $(REGISTRY) $(PG)
