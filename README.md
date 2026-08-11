@@ -181,6 +181,7 @@ promoted to stable.
 | [pgfincore](https://github.com/klando/pgfincore) | 1.4.0 | 17, 18, 19 | Inspect and manage OS page cache for data files |
 | [pgjwt](https://github.com/michelp/pgjwt) | master | 17, 18, 19 | JSON Web Token (JWT) generation and validation |
 | [pglogical](https://github.com/2ndQuadrant/pglogical) | 2.4.7 | 17, 18, 19 | Logical streaming replication using publish/subscribe model |
+| [pgmq](https://github.com/pgmq/pgmq) | 1.12.0 | 17, 18, 19 | Lightweight message queue on Postgres (like AWS SQS/RSMQ) |
 | [pgnodemx](https://github.com/CrunchyData/pgnodemx) | 2.0.1 | 17, 18 | Expose node OS/cgroup metrics as SQL (container-aware monitoring) |
 | [pgpcre](https://github.com/petere/pgpcre) | 0.20190509 | 17, 18, 19 | Perl-compatible regular expression (PCRE) type and functions |
 | [pgrouting](https://github.com/pgRouting/pgrouting) | 4.0.1 | 17, 18, 19 | Geospatial routing and network analysis on PostGIS |
