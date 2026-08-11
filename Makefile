@@ -201,7 +201,7 @@ add-apt-ext: ## Scaffold a new APT extension (PKG=<apt package> [NAME=<dir>] [PG
 	@test -n "$(PKG)" || { echo "Usage: make add-apt-ext PKG=<apt package> [NAME=<dir>] [PG=17]"; exit 1; }
 	@name="$(or $(NAME),$(subst -,_,$(PKG)))"; \
 	pg="$(or $(PG),17)"; \
-	pgtag="$$pg"; [ "$$pg" = "19" ] && pgtag="19beta1"; \
+	pgtag="$$pg"; [ "$$pg" = "19" ] && pgtag="19beta2"; \
 	dir="extensions/$$name"; \
 	if [ -e "$$dir" ]; then echo "Error: $$dir already exists"; exit 1; fi; \
 	echo "Probing PGDG for postgresql-$$pg-$(PKG)..."; \
