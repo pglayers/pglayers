@@ -230,6 +230,19 @@ This means:
    `make add-apt-ext` generates a starter `test.sql` stub with the load
    assertion; replace the placeholder with real checks.
 
+5. **Profile membership (required)** -- Every extension **must** be added
+   to `profiles/full.txt` (unless it carries `CI_SKIP=1` in
+   `extension.conf`). CI runs `make check-profiles`, which fails if
+   `profiles/full.txt` is out of sync with the `extensions/` directory --
+   forgetting this breaks the build. Insert the extension's **directory
+   name** in the file's existing sort order (locale-aware `sort`, which
+   ignores underscores -- e.g. `pgmq` goes between `pglogical` and
+   `pg_net`) and run `make check-profiles` to confirm. If the extension is
+   also available in a managed PostgreSQL service, add it to the matching
+   service profile too (e.g. `profiles/azure.txt`); those profiles are
+   curated (not required to list every extension) and must never contain
+   `CONFLICTS` pairs.
+
 The collision, overwrite, and ldd checks are automatic for all
 extensions in the `extensions/` directory -- no manual update needed
 for those. (Collision and overwrite checks are skipped for PG 18+ since
@@ -304,9 +317,12 @@ adding a new source-built extension:
 4. **GitLab-hosted repos** -- Automatically detected from the `REPO`
    URL. The workflow uses the GitLab Releases API instead of GitHub.
 
-5. **Profile membership** -- If the extension is available in a managed
-   PostgreSQL service (e.g., Azure), add it to the appropriate profile
-   in `profiles/`. Run `make check-profiles` to validate.
+5. **Profile membership** -- Every source-built extension must be in
+   `profiles/full.txt` like any other (see the "Adding a new extension
+   checklist" above; `make check-profiles` enforces it). Additionally, if
+   the extension is available in a managed PostgreSQL service (e.g.,
+   Azure), add it to the appropriate service profile in `profiles/`. Run
+   `make check-profiles` to validate.
 
 ### Dockerfile requirements
 
@@ -512,23 +528,30 @@ must be updated in the same commit**:
    extension name (linked to its repo), PG versions, and description.
    Also update the `shared_preload_libraries` table if applicable.
 
-2. **`README.md` "Configuration notes" section** -- If the extension
+2. **`profiles/full.txt` membership (required, CI-enforced)** -- Add the
+   extension's directory name in the file's existing sort order (unless it
+   carries `CI_SKIP=1`). `make check-profiles` runs in CI and fails the
+   build if `profiles/full.txt` is out of sync with `extensions/` --
+   this is the step most easily forgotten. Also add it to any service
+   profile (e.g. `profiles/azure.txt`) where the extension is available.
+
+3. **`README.md` "Configuration notes" section** -- If the extension
    requires any special configuration beyond `shared_preload_libraries`
    (e.g., environment variables, GUC parameters, init scripts, or
    runtime setup), document it in the README under "Configuration
    notes" with a dedicated subsection.
 
-3. **`make list` output** -- This is automatic (driven by
+4. **`make list` output** -- This is automatic (driven by
    `extension.conf` files), but verify the description is concise and
    the PG version columns are correct.
 
-4. **`tests/test-layers.sh`** -- As described above (name mapping,
+5. **`tests/test-layers.sh`** -- As described above (name mapping,
    `SKIP_CREATE_EXT` if needed) plus a required `extensions/<ext>/test.sql`.
 
-5. **`extension.conf` LICENSE field** -- Every extension must document
+6. **`extension.conf` LICENSE field** -- Every extension must document
    its license. Run `make list` and verify the new extension appears.
 
-6. **`extension.conf` DEPENDS field** -- If the extension requires
+7. **`extension.conf` DEPENDS field** -- If the extension requires
    another extension at runtime, add a `DEPENDS` field with a
    comma-separated list of SQL extension names (not directory names):
    ```bash
@@ -540,7 +563,7 @@ must be updated in the same commit**:
    running `CREATE EXTENSION`. Both pglayers extensions and built-in
    contrib extensions are valid values.
 
-7. **`extension.conf` PG_CONF field** -- If the extension requires
+8. **`extension.conf` PG_CONF field** -- If the extension requires
    GUC settings in `postgresql.conf` beyond `shared_preload_libraries`,
    add a `PG_CONF` field with pipe-delimited config lines:
    ```bash
@@ -565,7 +588,7 @@ must be updated in the same commit**:
    > `combined-config.sh` (or, for per-extension GUCs, to `PG_CONF`) so
    > both consumers stay in lockstep.
 
-8. **`extension.conf` COMPANION_CMD field** -- If the extension
+9. **`extension.conf` COMPANION_CMD field** -- If the extension
    requires a standalone background process running alongside
    PostgreSQL, add a `COMPANION_CMD` field:
    ```bash
@@ -581,7 +604,7 @@ must be updated in the same commit**:
    because it embeds a multi-threaded engine incompatible with
    PostgreSQL's process model).
 
-9. **`extension.conf` CONFLICTS field** -- Some extensions cannot be
+10. **`extension.conf` CONFLICTS field** -- Some extensions cannot be
    loaded into the same backend *no matter how well the layers are
    isolated*, because the conflict is at the **runtime/symbol** level, not
    the file level, and file/soname isolation can't fix it. PostgreSQL loads
