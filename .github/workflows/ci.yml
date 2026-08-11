@@ -288,7 +288,7 @@ jobs:
           platforms: linux/${{ matrix.arch }}
           build-args: |
             PG_MAJOR=${{ matrix.pg }}
-            PG_TAG=${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
+            PG_TAG=${{ matrix.pg == '19' && '19beta2' || matrix.pg }}
             EXT_VERSION=${{ matrix.version }}
             EXT_NAME=${{ matrix.extension }}
             LAYOUT=${{ matrix.pg >= 18 && 'isolated' || 'classic' }}
@@ -343,7 +343,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           build-args: |
             PG_MAJOR=${{ matrix.pg }}
-            PG_TAG=${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
+            PG_TAG=${{ matrix.pg == '19' && '19beta2' || matrix.pg }}
             EXT_VERSION=${{ matrix.version }}
             APT_PACKAGE=${{ matrix.apt_package }}
             EXT_NAME=${{ matrix.extension }}
@@ -388,8 +388,8 @@ jobs:
       - name: Tag beta image as major version
         if: matrix.pg == '19'
         run: |
-          docker pull postgres:19beta1
-          docker tag postgres:19beta1 postgres:19
+          docker pull postgres:19beta2
+          docker tag postgres:19beta2 postgres:19
       - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
         uses: docker/login-action@v4
@@ -401,7 +401,7 @@ jobs:
         env:
           SOURCE_REGISTRY: ${{ env.REGISTRY }}/${{ github.repository_owner }}
           PREFIX: ${{ env.PREFIX }}
-          PG_TAG: ${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
+          PG_TAG: ${{ matrix.pg == '19' && '19beta2' || matrix.pg }}
           CHANGED: ${{ needs.matrix.outputs.changed }}
           DOCKER_BUILDKIT: '1'
         run: |
@@ -410,7 +410,7 @@ jobs:
           ./scripts/ci-prepare-images.sh ${{ matrix.pg }} $exts
       - name: Run test suite
         env:
-          PG_TAG: ${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
+          PG_TAG: ${{ matrix.pg == '19' && '19beta2' || matrix.pg }}
         run: make test REGISTRY=local PG=${{ matrix.pg }} PG_TAG="$PG_TAG"
 
   # ---------------------------------------------------------------------------
@@ -443,8 +443,8 @@ jobs:
       - name: Tag beta image as major version
         if: matrix.pg == '19'
         run: |
-          docker pull postgres:19beta1
-          docker tag postgres:19beta1 postgres:19
+          docker pull postgres:19beta2
+          docker tag postgres:19beta2 postgres:19
       - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
         uses: docker/login-action@v4
@@ -456,7 +456,7 @@ jobs:
         env:
           SOURCE_REGISTRY: ${{ env.REGISTRY }}/${{ github.repository_owner }}
           PREFIX: ${{ env.PREFIX }}
-          PG_TAG: ${{ matrix.pg == '19' && '19beta1' || matrix.pg }}
+          PG_TAG: ${{ matrix.pg == '19' && '19beta2' || matrix.pg }}
           CHANGED: ${{ needs.matrix.outputs.changed }}
           DOCKER_BUILDKIT: '1'
         run: |
@@ -599,7 +599,7 @@ jobs:
       - name: Build and push multi-arch profile image
         run: |
           make image PG=${{ matrix.pg }} PROFILE=${{ matrix.profile }} \
-            PG_TAG=${{ matrix.pg == '19' && '19beta1' || matrix.pg }} \
+            PG_TAG=${{ matrix.pg == '19' && '19beta2' || matrix.pg }} \
             REGISTRY=${{ env.REGISTRY }}/${{ github.repository_owner }} \
             IMAGE_TAG=${{ env.REGISTRY }}/${{ github.repository_owner }}/pglayers-${{ matrix.profile }}:${{ matrix.pg }} \
             PLATFORM=linux/amd64,linux/arm64
