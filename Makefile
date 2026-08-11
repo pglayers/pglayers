@@ -253,8 +253,18 @@ add-apt-ext: ## Scaffold a new APT extension (PKG=<apt package> [NAME=<dir>] [PG
 	echo "  - build: make build EXT=$$name PG=$$pg REGISTRY=local"
 
 IMAGE_NAME ?= pglayers$(if $(PROFILE),-$(PROFILE))
+# Final tag for the combined image. Defaults to the local <name>:<pg> tag; CI
+# overrides it with the fully-qualified registry path it pushes to.
+IMAGE_TAG  ?= $(IMAGE_NAME):$(PG)
 
 image: ## Build a combined image with all extensions
+	@# A multi-arch PLATFORM (e.g. linux/amd64,linux/arm64) builds with buildx and
+	@# pushes straight to the registry: buildx cannot --load a multi-platform
+	@# manifest, and its container driver only resolves the COPY --from extension
+	@# layers / base image from a registry -- so this path requires
+	@# REGISTRY=<registry> (multi-arch layers already published there). A
+	@# single/empty PLATFORM uses classic docker build against the local store,
+	@# as before (works with REGISTRY=local layers for tests/local dev).
 	@echo "Building combined image $(IMAGE_NAME):$(PG)..."
 	@TMPFILE=$$(mktemp); \
 	skipped=""; \
@@ -264,7 +274,7 @@ image: ## Build a combined image with all extensions
 	total=0; \
 	included_exts=""; \
 	{ \
-		echo "FROM postgres:$(PG)"; \
+		echo "FROM postgres:$(or $(PG_TAG),$(PG))"; \
 		for ext in $(EXTENSIONS); do \
 			ver=$$(./scripts/ext-version.sh "$$ext" "$(PG)"); \
 			[ -z "$$ver" ] && continue; \
@@ -352,9 +362,18 @@ image: ## Build a combined image with all extensions
 	else \
 		echo "Included $$included/$$total extensions"; \
 	fi; \
-	docker build -t $(IMAGE_NAME):$(PG) -f "$$TMPFILE" .; \
+	if [ -n "$(findstring $(comma),$(PLATFORM))" ]; then \
+		docker buildx build \
+			--platform $(PLATFORM) \
+			-t $(IMAGE_TAG) \
+			-f "$$TMPFILE" \
+			--push \
+			.; \
+	else \
+		docker build -t $(IMAGE_TAG) -f "$$TMPFILE" .; \
+	fi; \
 	rm -f "$$TMPFILE"
-	@echo "Done: $(IMAGE_NAME):$(PG)"
+	@echo "Done: $(IMAGE_TAG)"
 
 clean: _check-ext ## Remove built image for a single extension
 	@for pg in $(PG_VERSIONS); do \
