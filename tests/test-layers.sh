@@ -468,6 +468,7 @@ declare -A EXT_SQL_NAMES=(
     [jsquery]="jsquery"
     [orafce]="orafce"
     [pg_bigm]="pg_bigm"
+    [pg_clickhouse]="pg_clickhouse"
     [pg_cron]="pg_cron"
     [pg_duckdb]="pg_duckdb"
     [pg_durable]="pg_durable"

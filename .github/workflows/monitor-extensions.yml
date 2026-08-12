@@ -204,6 +204,16 @@ jobs:
                   | tail -1) || true
                 [ -n "$pg_latest" ] && new_ver="$pg_latest"
               fi
+              # Preserve the conf's existing tag-prefix convention. Some
+              # upstreams tag releases as vX.Y.Z but publish the artifact the
+              # Dockerfile consumes (e.g. a Docker image tag) as X.Y.Z. When the
+              # pinned VERSION_XX is stored without a leading "v", keep it v-less
+              # so the bumped value still matches that artifact (e.g.
+              # pg_clickhouse -> ghcr.io/clickhouse/pg_clickhouse:<pg>-X.Y.Z).
+              case "$old_ver" in
+                v*) ;;
+                *)  new_ver="${new_ver#v}" ;;
+              esac
               sed -i "s|^VERSION_${pg}=.*|VERSION_${pg}=\"${new_ver}\"|" "$conf_file"
             done
 
