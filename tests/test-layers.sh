@@ -481,6 +481,7 @@ declare -A EXT_SQL_NAMES=(
     [pg_net]="pg_net"
     [pg_partman]="pg_partman"
     [pg_qualstats]="pg_qualstats"
+    [pg_re2]="re2"
     [pg_repack]="pg_repack"
     [pg_roaringbitmap]="roaringbitmap"
     [pg_similarity]="pg_similarity"

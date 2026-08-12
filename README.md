@@ -155,7 +155,7 @@ promoted to stable.
 | [pg_statviz](https://github.com/vyruss/pg_statviz) | 1.1 | 17, 18, 19 | Time-series snapshots of PostgreSQL statistics for visualization |
 | [pgaudit](https://github.com/pgaudit/pgaudit) | 17.1 | 17, 18 | Audit logging (session and object-level) |
 | [pg_bigm](https://github.com/pgbigm/pg_bigm) | 1.2 | 17, 18 | 2-gram full text search (better for CJK languages) |
-| [pg_clickhouse](https://github.com/ClickHouse/pg_clickhouse) | 0.10.0 | 17, 18 | Query ClickHouse databases from PostgreSQL (FDW with pushdown; bundles the `re2` companion extension) |
+| [pg_clickhouse](https://github.com/ClickHouse/pg_clickhouse) | 0.10.0 | 17, 18 | Query ClickHouse databases from PostgreSQL (FDW with pushdown; depends on `re2` for regex pushdown) |
 | [pg_cron](https://github.com/citusdata/pg_cron) | 1.6.7 | 17, 18 | Job scheduler (periodic jobs inside the database) |
 | [pg_duckdb](https://github.com/duckdb/pg_duckdb) | 1.1.1 | 17, 18 | DuckDB columnar analytics engine embedded in Postgres |
 | [pg_durable](https://github.com/microsoft/pg_durable) | 0.2.3 | 17, 18 | In-database durable execution (fault-tolerant workflows) |
@@ -170,6 +170,7 @@ promoted to stable.
 | [pg_partman](https://github.com/pgpartman/pg_partman) | 5.4.3 | 17, 18, 19 | Automated table partition management |
 | [pg_permissions](https://github.com/cybertec-postgresql/pg_permissions) | 1.4.1 | 17, 18, 19 | Review and audit object permissions against a desired state |
 | [pg_qualstats](https://github.com/powa-team/pg_qualstats) | 2.1.4 | 17, 18, 19 | Statistics collector for WHERE clause predicates |
+| [pg_re2](https://github.com/ClickHouse/pg_re2) | 0.4.1 | 17, 18, 19 | ClickHouse-compatible regex functions using RE2 |
 | [pg_repack](https://github.com/reorg/pg_repack) | 1.5.3 | 17, 18, 19 | Online table reorganization without heavy locks |
 | [pg_roaringbitmap](https://github.com/ChenHuajun/pg_roaringbitmap) | 1.2.0 | 17, 18 | Roaring bitmap data type for fast set operations |
 | [pg_rrule](https://github.com/Natureshadow/pg_rrule) | 0.3.0 | 17, 18, 19 | iCalendar RRULE recurrence type and occurrence expansion |
