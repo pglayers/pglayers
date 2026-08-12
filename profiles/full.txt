@@ -19,6 +19,7 @@ periods
 pgaudit
 pg_background
 pg_bigm
+pg_clickhouse
 pg_cron
 pg_csv
 pg_dirtyread

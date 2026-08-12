@@ -155,6 +155,7 @@ promoted to stable.
 | [pg_statviz](https://github.com/vyruss/pg_statviz) | 1.1 | 17, 18, 19 | Time-series snapshots of PostgreSQL statistics for visualization |
 | [pgaudit](https://github.com/pgaudit/pgaudit) | 17.1 | 17, 18 | Audit logging (session and object-level) |
 | [pg_bigm](https://github.com/pgbigm/pg_bigm) | 1.2 | 17, 18 | 2-gram full text search (better for CJK languages) |
+| [pg_clickhouse](https://github.com/ClickHouse/pg_clickhouse) | 0.10.0 | 17, 18 | Query ClickHouse databases from PostgreSQL (FDW with pushdown; bundles the `re2` companion extension) |
 | [pg_cron](https://github.com/citusdata/pg_cron) | 1.6.7 | 17, 18 | Job scheduler (periodic jobs inside the database) |
 | [pg_duckdb](https://github.com/duckdb/pg_duckdb) | 1.1.1 | 17, 18 | DuckDB columnar analytics engine embedded in Postgres |
 | [pg_durable](https://github.com/microsoft/pg_durable) | 0.2.3 | 17, 18 | In-database durable execution (fault-tolerant workflows) |
