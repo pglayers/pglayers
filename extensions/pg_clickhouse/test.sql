@@ -2,8 +2,10 @@
 --
 -- pg_clickhouse is a Foreign Data Wrapper: real queries require a running
 -- ClickHouse server, which isn't available in CI. These checks validate that
--- the extension (and its bundled re2 companion) load and that their SQL objects
--- work without a live ClickHouse backend.
+-- the extension loads, its FDW objects work, and its re2 regex-pushdown wiring
+-- is correct -- all without a live ClickHouse backend (EXPLAIN without ANALYZE
+-- never contacts the remote). The re2 functions themselves are covered by
+-- extensions/pg_re2/test.sql.
 
 -- 1. Load / sanity: the clickhouse_fdw foreign data wrapper is registered.
 --    (Doubles as the smoke test.)
@@ -35,23 +37,48 @@ END;
 
 DROP SERVER IF EXISTS pgclickhouse_test_srv CASCADE;
 
--- 3. Bundled companion: the re2 extension (ClickHouse-compatible RE2 regex,
---    used for regex pushdown) loads and matches correctly.
+-- 3. re2 regex pushdown wiring (the reason pg_clickhouse DEPENDS on re2).
+--    pg_clickhouse's deparser must recognize functions/operators owned by the
+--    're2' extension and translate them into ClickHouse's regex functions.
+--    We assert that a re2 match (the '@~' operator) is pushed down as
+--    ClickHouse `match(...)` in the generated Remote SQL. EXPLAIN (no ANALYZE)
+--    builds the remote query WITHOUT contacting ClickHouse, so this is safe in
+--    CI. This check proves the re2 companion is correctly connected; if re2
+--    were absent, the '@~' operator wouldn't exist and pushdown wouldn't occur.
 CREATE EXTENSION IF NOT EXISTS re2;
 
+CREATE SERVER pgclickhouse_re2_srv
+    FOREIGN DATA WRAPPER clickhouse_fdw
+    OPTIONS (host 'localhost', port '9000');
+CREATE USER MAPPING FOR CURRENT_USER
+    SERVER pgclickhouse_re2_srv OPTIONS (user 'default', password '');
+CREATE FOREIGN TABLE pgclickhouse_re2_ft (a text)
+    SERVER pgclickhouse_re2_srv OPTIONS (table_name 'dummy');
+
+CREATE OR REPLACE FUNCTION pg_temp.pgch_re2_pushdown() RETURNS boolean AS $$
+DECLARE
+    ln    text;
+    found boolean := false;
+BEGIN
+    FOR ln IN
+        EXECUTE $q$EXPLAIN (VERBOSE)
+                   SELECT a FROM pgclickhouse_re2_ft WHERE a @~ 'foo.*bar'$q$
+    LOOP
+        IF ln LIKE '%match(a,%' THEN
+            found := true;
+        END IF;
+    END LOOP;
+    RETURN found;
+END;
+$$ LANGUAGE plpgsql;
+
 SELECT CASE
-    WHEN re2match('hello world', 'w.rld') IS TRUE
-     AND re2match('hello world', '^x') IS FALSE
-    THEN 'PASS pg_clickhouse: re2match regex evaluation works'
-    ELSE 'FAIL pg_clickhouse: re2match regex evaluation broken'
+    WHEN pg_temp.pgch_re2_pushdown()
+    THEN 'PASS pg_clickhouse: re2 regex pushed down to ClickHouse match() (re2 wired)'
+    ELSE 'FAIL pg_clickhouse: re2 regex NOT pushed down (re2 not connected)'
 END;
 
--- 4. re2 extraction returns the captured group.
-SELECT CASE
-    WHEN re2extract('2024-08-12', '([0-9]{4})') = '2024'
-     AND re2countmatches('a1b2c3', '[0-9]') = 3
-    THEN 'PASS pg_clickhouse: re2extract/re2countmatches work'
-    ELSE 'FAIL pg_clickhouse: re2extract/re2countmatches broken'
-END;
+DROP FOREIGN TABLE IF EXISTS pgclickhouse_re2_ft;
+DROP SERVER IF EXISTS pgclickhouse_re2_srv CASCADE;
 
-DROP EXTENSION IF EXISTS re2;
+

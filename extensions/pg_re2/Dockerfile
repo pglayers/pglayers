@@ -2,61 +2,42 @@
 ARG PG_MAJOR=17
 ARG PG_TAG=${PG_MAJOR}
 ARG LAYOUT=classic
-ARG EXT_VERSION=0.10.0
 
-# Use ClickHouse's official pre-built pg_clickhouse image (avoids compiling the
-# extension + the RE2/abseil dependency stack). Same approach as pg_duckdb.
-# NOTE: upstream tags the image WITHOUT a leading "v" (e.g. 18-0.10.0), so
-# EXT_VERSION/VERSION_XX are stored v-less to match this tag directly.
-FROM ghcr.io/clickhouse/pg_clickhouse:${PG_MAJOR}-${EXT_VERSION} AS upstream
-
-# Snapshot base image libraries for diffing (by soname, not canonical path)
 FROM postgres:${PG_TAG} AS base
 RUN find /usr/lib -name '*.so*' \( -type f -o -type l \) 2>/dev/null \
     | sed 's|.*/||' | sort -u > /tmp/base-libs.txt
 
-# Collector: extract extension + bundle missing runtime deps.
-# The upstream image ships two extensions (pg_clickhouse + re2). We extract ONLY
-# pg_clickhouse here; the recommended re2 companion (ClickHouse-compatible RE2
-# regex, used for regex pushdown) is shipped as its own pglayers layer
-# (extensions/pg_re2, built from source) and wired up via DEPENDS="re2". Two
-# layers must never both ship re2 (they would collide at re2.so/re2.control on
-# the PG17 classic layout).
-FROM upstream AS collector
+FROM postgres:${PG_TAG} AS builder
 ARG PG_MAJOR
-COPY --from=base /tmp/base-libs.txt /tmp/base-libs.txt
+ARG EXT_VERSION=v0.4.1
 
-USER root
-
+# pg_re2 is a PGXS C++17 extension that links RE2 (-lre2 -lstdc++) and uses
+# PostgreSQL's ICU headers (libicu-dev). libre2-dev pulls in the abseil stack.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends patchelf
+    apt-get update && apt-get install -y --no-install-recommends \
+    build-essential git ca-certificates patchelf \
+    postgresql-server-dev-${PG_MAJOR} \
+    libre2-dev libicu-dev
 
-# Copy pg_clickhouse extension artifacts to /output (re2 is shipped separately)
+RUN git clone --branch ${EXT_VERSION} --depth 1 \
+    https://github.com/ClickHouse/pg_re2.git /tmp/ext
+
+WORKDIR /tmp/ext
+
+RUN make -j"$(nproc)" && make install DESTDIR=/output \
+    && find /output -name '*.so' -exec strip --strip-unneeded {} \;
+
+# Bundle ALL runtime shared libraries not in the base postgres image so the
+# layer is fully self-contained (re2 links libre2.so.11, which pulls in the
+# whole libabsl_* stack -- none of which is in the base image). libstdc++ is
+# already in the base image, so it is not bundled. Collisions in the flat
+# classic layout are prevented later by relocating these into a private dir
+# with RUNPATH + mangled sonames.
+COPY --from=base /tmp/base-libs.txt /tmp/base-libs.txt
 RUN set -eux; \
     PG=${PG_MAJOR}; \
-    LIB="/usr/lib/postgresql/${PG}/lib"; \
-    SHARE="/usr/share/postgresql/${PG}/extension"; \
-    mkdir -p "/output${LIB}/bitcode" \
-             "/output${SHARE}"; \
-    cp "${LIB}/pg_clickhouse.so" "/output${LIB}/"; \
-    cp "${SHARE}"/pg_clickhouse* "/output${SHARE}/"; \
-    # Bitcode: pg_clickhouse index file + subtree. Copy only our files so we
-    # never overwrite the base image's bitcode entries.
-    [ -f "${LIB}/bitcode/pg_clickhouse.index.bc" ] && \
-        cp "${LIB}/bitcode/pg_clickhouse.index.bc" "/output${LIB}/bitcode/" || true; \
-    [ -d "${LIB}/bitcode/pg_clickhouse" ] && \
-        cp -r "${LIB}/bitcode/pg_clickhouse" "/output${LIB}/bitcode/" || true
-
-# Bundle ALL runtime shared libraries that pg_clickhouse needs but the base
-# postgres image doesn't have (libcurl + transitive brotli/nghttp/ssh2/rtmp/psl),
-# so the layer is fully self-contained (never rely on a sibling layer to provide
-# libcurl et al.). Compare by soname to avoid bundling older versions of libs
-# already in the base image. Collisions in the flat classic layout are prevented
-# later by relocating these into a private dir with RUNPATH + mangled sonames.
-RUN set -eux; \
-    PG=${PG_MAJOR}; \
-    ldd /usr/lib/postgresql/${PG}/lib/pg_clickhouse.so 2>/dev/null \
+    find /output/usr/lib/postgresql/${PG}/lib -name '*.so' -exec ldd {} + 2>/dev/null \
         | awk '/=>/ && /\// {print $3}' | sort -u > /tmp/all-deps.txt; \
     while IFS= read -r lib; do \
         soname="$(basename "$lib")"; \
@@ -65,19 +46,19 @@ RUN set -eux; \
         fi; \
         dest="$(echo "$lib" | sed 's|^/lib/|/usr/lib/|')"; \
         mkdir -p "/output$(dirname "$dest")"; \
-        cp -aL "$lib" "/output${dest}" 2>/dev/null || true; \
+        cp -aL "$lib" "/output$dest" 2>/dev/null || true; \
     done < /tmp/all-deps.txt; \
     find /output -name '*.so*' -type f -exec strip --strip-unneeded {} \; 2>/dev/null || true
 
 # --- Layout selection ---
 # Classic (PG 17): relocate bundled deps into an extension-private directory
-# and point each ELF object's RUNPATH at it via $ORIGIN. Keeps the flat layout
+# and point the extension's RUNPATH at it via $ORIGIN. Keeps the flat layout
 # self-contained AND collision-free (private dir name is unique per ext).
-FROM collector AS classic-relocate
+FROM builder AS classic-relocate
 ARG PG_MAJOR
 RUN set -eux; \
     PG=${PG_MAJOR}; \
-    EXT=pg_clickhouse; \
+    EXT=pg_re2; \
     LIBDIR="/output/usr/lib/postgresql/${PG}/lib"; \
     DEPS_DIR="${LIBDIR}/${EXT}-deps"; \
     tag="pglx_${EXT}_"; \
@@ -85,11 +66,9 @@ RUN set -eux; \
     find /output/usr/lib -path '/output/usr/lib/postgresql' -prune -o \
         -name '*.so*' \( -type f -o -type l \) -print \
         | while IFS= read -r lib; do mv "$lib" "$DEPS_DIR/"; done; \
-    # Mangle each bundled dep's soname with a per-extension prefix. sonames are
-    # process-global, so a private dir + RUNPATH alone does NOT isolate symbols:
-    # if a sibling extension loads its own libssh2.so.1 first, our libcurl would
-    # bind to it and hit undefined symbols. Unique sonames make cross-layer
-    # clashes impossible while keeping the layer self-contained.
+    # Mangle bundled dep sonames with a per-extension prefix so they can never
+    # satisfy another layer's soname in the shared postgres process. See
+    # extensions/pg_duckdb/Dockerfile for the rationale.
     find "$DEPS_DIR" -type l -delete 2>/dev/null || true; \
     for dep in "$DEPS_DIR"/*.so*; do \
         [ -f "$dep" ] || continue; \
@@ -98,7 +77,6 @@ RUN set -eux; \
         patchelf --set-soname "${tag}${soname}" "$dep"; \
         mv "$dep" "$DEPS_DIR/${tag}${soname}"; \
     done; \
-    # Rewrite NEEDED refs to bundled libs across every ELF object we ship.
     for obj in "$LIBDIR"/*.so* "$DEPS_DIR"/*.so*; do \
         [ -f "$obj" ] || continue; \
         for need in $(patchelf --print-needed "$obj" 2>/dev/null); do \
@@ -108,7 +86,6 @@ RUN set -eux; \
             fi; \
         done; \
     done; \
-    # Point RUNPATHs at the private dir ($ORIGIN for siblings + deps).
     for so in "$LIBDIR"/*.so*; do \
         [ -f "$so" ] || continue; \
         patchelf --set-rpath "\$ORIGIN:\$ORIGIN/${EXT}-deps" "$so"; \
@@ -126,13 +103,12 @@ COPY --from=classic-relocate /output/ /
 # Each extension resolves its OWN bundled deps from its private
 # /extensions/<ext>/lib via $ORIGIN RUNPATH -- never through a global ld.so
 # cache. Bundled-dep sonames are mangled with a per-extension prefix so two
-# layers that ship the same soname (e.g. libssh2.so.1 pulled in via libcurl by
-# both postgis and pg_clickhouse) can't clash in the shared postgres process.
-FROM collector AS normalizer
+# layers that ship the same soname can't clash in the shared postgres process.
+FROM builder AS normalizer
 ARG PG_MAJOR
 RUN set -eux; \
     PG=${PG_MAJOR}; \
-    tag="pglx_pg_clickhouse_"; \
+    tag="pglx_pg_re2_"; \
     mkdir -p /isolated/lib /isolated/share/extension; \
     find /output/usr/lib/postgresql/${PG}/lib -maxdepth 1 -type f \
         -exec cp -a {} /isolated/lib/ \; ; \

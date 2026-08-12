@@ -43,6 +43,7 @@ pgpcre
 pg_permissions
 pg_pwhash
 pg_qualstats
+pg_re2
 pg_repack
 pg_roaringbitmap
 pgrouting
