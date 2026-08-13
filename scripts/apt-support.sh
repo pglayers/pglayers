@@ -21,7 +21,7 @@ set -euo pipefail
 
 CACHE_DIR="${PGLAYERS_APT_CACHE_DIR:-/tmp/pglayers-apt-cache}"
 
-_pg_tag() { [ "$1" = "19" ] && echo "19beta2" || echo "$1"; }
+_pg_tag() { [ "$1" = "19" ] && echo "19beta3" || echo "$1"; }
 
 # Debian apt version -> clean, docker-tag-safe upstream version.
 # e.g. 0.8.5-1.pgdg13+1 -> 0.8.5 ; 3.6.4+dfsg-2.pgdg13+1 -> 3.6.4
