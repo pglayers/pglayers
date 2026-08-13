@@ -687,8 +687,8 @@ make build EXT=pgvector PG=17
 make build-all PG=17
 
 # Build for PG 19 (beta -- requires PG_TAG override until GA)
-make build EXT=pgvector PG=19 PG_TAG=19beta2
-make build-all PG=19 PG_TAG=19beta2
+make build EXT=pgvector PG=19 PG_TAG=19beta3
+make build-all PG=19 PG_TAG=19beta3
 
 # Build a combined image with ALL extensions included
 make image PG=17 REGISTRY=local
