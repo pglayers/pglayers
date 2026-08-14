@@ -46,27 +46,44 @@ jobs:
           fi
 
           for pg in 17 18 19; do
-            # Get current manifest digest from Docker Hub
-            current=$(docker buildx imagetools inspect \
-              --raw "docker.io/library/postgres:${pg}" 2>/dev/null \
-              | sha256sum | awk '{print "sha256:"$1}')
+            # Map the PG major to the actual published Docker tag. PG 19 has no
+            # GA tag yet, so the build (Makefile, scripts/detect-license.sh) uses
+            # postgres:19beta3 -- track the same tag so beta rebuilds are caught.
+            # Remove this mapping once postgres:19 goes GA.
+            tag="$pg"
+            [ "$pg" = "19" ] && tag="19beta3"
+            image="docker.io/library/postgres:${tag}"
 
-            if [ -z "$current" ] || [ "$current" = "sha256:" ]; then
-              echo "::warning::Failed to fetch digest for postgres:${pg}"
+            # Fetch the raw manifest to a file and check the inspect exit status
+            # DIRECTLY. Do NOT pipe the command into sha256sum: on failure the
+            # inspect prints nothing and "'' | sha256sum" still yields the sha256
+            # of empty input (e3b0c442...b855) -- a bogus "digest" that passes the
+            # old non-empty guard, silently overwrites a good value, and fires a
+            # spurious PR + full rebuild. On any failure/empty output, skip this
+            # PG and leave the stored digest untouched.
+            manifest="$(mktemp)"
+            if ! docker buildx imagetools inspect --raw "$image" >"$manifest" 2>/dev/null \
+               || [ ! -s "$manifest" ]; then
+              echo "::warning::Failed to fetch manifest for ${image}; leaving stored digest untouched"
+              rm -f "$manifest"
               continue
             fi
+            # Hash the exact manifest bytes (sha256sum < file == the old
+            # "docker ... | sha256sum"), so 17/18 baselines are unchanged.
+            current="sha256:$(sha256sum <"$manifest" | awk '{print $1}')"
+            rm -f "$manifest"
 
-            # Get stored digest
+            # Stored digest is keyed by PG major, independent of the tag.
             stored=$(jq -r ".\"postgres:${pg}\" // \"\"" "$DIGEST_FILE")
 
             if [ "$current" != "$stored" ]; then
-              echo "postgres:${pg} changed: ${stored:-<new>} -> ${current}"
+              echo "postgres:${pg} (${tag}) changed: ${stored:-<new>} -> ${current}"
               CHANGED_VERSIONS="${CHANGED_VERSIONS:+${CHANGED_VERSIONS} }${pg}"
               # Update the file
               jq --arg key "postgres:${pg}" --arg val "$current" \
                 '.[$key] = $val' "$DIGEST_FILE" > tmp.json && mv tmp.json "$DIGEST_FILE"
             else
-              echo "postgres:${pg} unchanged: ${current}"
+              echo "postgres:${pg} (${tag}) unchanged: ${current}"
             fi
           done
 
