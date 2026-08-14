@@ -14,11 +14,22 @@ jobs:
       pull-requests: write
       actions: write
     steps:
+      # Mint a short-lived GitHub App installation token. Unlike GITHUB_TOKEN,
+      # an App token is a distinct identity, so the PR it opens (and the branch
+      # push) DO trigger ci.yml -- required so the "Test PG 17" status check runs
+      # and auto-merge can complete. With GITHUB_TOKEN, GitHub suppresses those
+      # triggers, the required check never runs, the PR stays BLOCKED, and every
+      # scheduled run piles another commit onto the long-lived branch.
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - uses: actions/checkout@v7
         with:
-          # Full history so we can merge main into a divergent auto-update
-          # branch without hitting "refusing to merge unrelated histories".
-          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -64,47 +75,25 @@ jobs:
       - name: Create or update PR with updated digests
         if: steps.check.outputs.changed != ''
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
+          set -eo pipefail
           changed="${{ steps.check.outputs.changed }}"
           branch="auto/base-image-update"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Preserve the freshly-computed digest file. The checkout below may
-          # switch branches, and we want exactly this content on the branch.
-          cp .github/base-image-digests.json /tmp/base-image-digests.json
-
-          # Discard the working-tree modification made by the check step. It is
-          # already preserved in /tmp and re-applied on the target branch below.
-          # Without this, "git checkout -B" aborts with "local changes would be
-          # overwritten by checkout".
-          git checkout -- .github/base-image-digests.json
-
-          # Always build on top of the remote branch when it exists so the
-          # push is a fast-forward. This never force-pushes and never deletes
-          # a branch, so an open PR (even one this workflow failed to detect)
-          # can never be clobbered. A leftover branch from a previously
-          # merged/closed PR is simply reused; the PR diff against main only
-          # shows the new digest change.
-          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-            git fetch origin "$branch"
-            git checkout -B "$branch" "origin/$branch"
-            git merge origin/main --no-edit || { git merge --abort || true; }
-          else
-            git checkout -b "$branch"
-          fi
-
-          cp /tmp/base-image-digests.json .github/base-image-digests.json
+          # The digest file is a COMPLETE snapshot of the desired state, so the
+          # branch never needs prior history. Recreate it from the current main
+          # (HEAD) carrying the working-tree change from the check step, as a
+          # single commit, and force-push. This keeps the PR to exactly one
+          # commit every run and avoids the merge-commit accumulation that a
+          # reused, merge-forward branch produced.
+          git checkout -B "$branch"
           git add .github/base-image-digests.json
-
-          if git diff --cached --quiet; then
-            echo "No new changes to commit"
-          else
-            git commit -m "chore: base image updated (PG ${changed})"
-            git push origin "$branch"
-          fi
+          git commit -m "chore: base image updated (PG ${changed})"
+          git push -f -u origin "$branch"
 
           # Ensure a PR exists and its title reflects the changed versions.
           existing_pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')
@@ -119,9 +108,13 @@ jobs:
           This PR updates the tracked digests. Once status checks pass, it will auto-merge and trigger a rebuild." \
               --head "$branch" \
               --base main
-
-            gh pr merge "$branch" --auto --squash
           fi
+
+          # Enable auto-merge. The App-token push above triggers ci.yml, so the
+          # required "Test PG 17" check runs and the PR merges once it passes.
+          # Falls back gracefully if auto-merge is disabled on the repo.
+          gh pr merge "$branch" --auto --squash \
+            || echo "WARN: could not enable auto-merge (enable it in repo settings)."
 
       - name: Trigger rebuild for changed versions
         if: steps.check.outputs.changed != ''
