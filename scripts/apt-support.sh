@@ -21,7 +21,9 @@ set -euo pipefail
 
 CACHE_DIR="${PGLAYERS_APT_CACHE_DIR:-/tmp/pglayers-apt-cache}"
 
-_pg_tag() { [ "$1" = "19" ] && echo "19beta3" || echo "$1"; }
+# Base-image Docker tag for a PG major -- resolved via the single source of
+# truth (scripts/pg-tag.sh) so the 19->19beta3 mapping lives in exactly one place.
+_pg_tag() { "$(dirname "$0")/pg-tag.sh" "$1"; }
 
 # Debian apt version -> clean, docker-tag-safe upstream version.
 # e.g. 0.8.5-1.pgdg13+1 -> 0.8.5 ; 3.6.4+dfsg-2.pgdg13+1 -> 3.6.4

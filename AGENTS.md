@@ -81,45 +81,40 @@ PG major to the **actual published Docker tag**. Today that mapping is:
 19 -> 19beta3     # 17, 18 map to themselves
 ```
 
-**This mapping is duplicated in several files and they MUST stay in
-lockstep.** A mismatch is the "PG 19 drift" bug: e.g. the base-image monitor
-tracks the `19beta3` digest while `ci.yml` builds on `19beta2`, so PG 19 looks
-*perpetually changed*, the monitor opens endless PRs, and the shipped images
-never match the tracked base. Every place that hardcodes the pre-release tag:
+**`scripts/pg-tag.sh` is the single source of truth for this mapping.** It
+takes a PG major and echoes the Docker tag. Everything resolves the tag through
+it, so there is exactly one place to edit:
 
-1. `Makefile` -- the `add-apt-ext` scaffold
-   (`pgtag="$pg"; [ "$pg" = "19" ] && pgtag="19beta3"`).
-2. `scripts/apt-support.sh` -- `_pg_tag()`.
-3. `scripts/detect-license.sh` -- the `tag=` line.
-4. `.github/workflows/ci.yml` -- **every** occurrence: the
-   `${{ matrix.pg == '19' && '19beta3' || matrix.pg }}` build-args / `PG_TAG`
-   envs, the `docker pull postgres:19beta3` + `docker tag ... postgres:19`
-   lines, and the `profile-images` `PG_TAG=...`.
-5. `.github/workflows/monitor-base-image.yml` -- the check-step
-   `[ "$pg" = "19" ] && tag="19beta3"`.
+- `Makefile` -- `PG_TAG ?= $(shell ./scripts/pg-tag.sh $(PG))` (and the
+  `add-apt-ext` scaffold calls it directly).
+- `scripts/apt-support.sh` and `scripts/detect-license.sh` -- call
+  `pg-tag.sh` (via `$(dirname "$0")/pg-tag.sh`).
+- `.github/workflows/ci.yml` -- the `matrix` job builds a `pg_tags`
+  (`{"17":"17","18":"18","19":"19beta3"}`) output from `pg-tag.sh`; every
+  build/test/profile job reads `fromJson(needs.matrix.outputs.pg_tags)[matrix.pg]`.
+- `.github/workflows/monitor-base-image.yml` -- the check step calls `pg-tag.sh`.
+
+Never hardcode `19beta3` (or any pre-release tag) anywhere else. A stray literal
+is the "PG 19 drift" bug: e.g. if `ci.yml` built on `19beta2` while the monitor
+tracked `19beta3`, PG 19 would look *perpetually changed*, the monitor would
+open endless PRs, and the shipped images would never match the tracked base.
 
 **When the pre-release tag rolls** (`19beta3` -> `19beta4` -> `19rc1`):
 
-1. Update the tag in **all five** locations above (one find-and-replace of the
-   old tag string -- it only ever appears as this tag).
-2. Verify no drift remains -- there must be exactly one tag string across the
-   repo:
+1. Edit the single `19)` case line in `scripts/pg-tag.sh`.
+2. Verify no stray literal was reintroduced (the tag must appear only in
+   `pg-tag.sh`):
    ```bash
    grep -rn '19beta\|19rc' Makefile scripts/ .github/ \
-     | grep -v base-image-digests.json
+     | grep -v -e base-image-digests.json -e scripts/pg-tag.sh
    ```
-   Every hit must show the **same** new tag.
-3. `make test REGISTRY=local PG=19` (the base monitor will record the new
-   digest on its next run).
+   This must print nothing.
+3. `make test REGISTRY=local PG=19` (the base monitor records the new digest on
+   its next run).
 
-**When the major goes GA** (`postgres:19` is published): **remove** the mapping
-entirely from all five files so PG 19 maps to itself (`19`), then run the grep
-above to confirm no `19beta`/`19rc` remains, and `make test ... PG=19`.
-
-> The mapping's duplication is exactly what caused the drift. If you touch this
-> more than once, prefer centralizing it into a single helper
-> (e.g. `scripts/pg-tag.sh <major>` echoing the tag) that the Makefile,
-> scripts, and both workflows call, so there is one source of truth.
+**When the major goes GA** (`postgres:19` is published): **delete** the `19)`
+case line in `scripts/pg-tag.sh` so PG 19 maps to itself, then run the grep
+above (it must print nothing) and `make test ... PG=19`.
 
 ## Testing Requirements
 
