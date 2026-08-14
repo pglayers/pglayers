@@ -65,8 +65,15 @@ on:
         default: ''
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Only cancel superseded runs on the SAME pull request. Main builds
+  # (push / schedule / workflow_dispatch) must NEVER cancel each other:
+  # doing so let a digest-PR merge (push) cancel an in-flight base-image
+  # rebuild (workflow_dispatch) mid-promote, leaving the public per-extension
+  # images un-promoted while only the profile images got rebuilt. Keying the
+  # group on the event name puts each main trigger in its own lane, and
+  # cancel-in-progress is limited to pull_request events.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   REGISTRY: ghcr.io
@@ -307,7 +314,7 @@ jobs:
           ./scripts/ci-retry.sh docker buildx build \
             --platform linux/${{ matrix.arch }} \
             --build-arg PG_MAJOR=${{ matrix.pg }} \
-            --build-arg PG_TAG=${{ matrix.pg == '19' && '19beta2' || matrix.pg }} \
+            --build-arg PG_TAG=${{ matrix.pg == '19' && '19beta3' || matrix.pg }} \
             --build-arg EXT_VERSION=${{ matrix.version }} \
             --build-arg EXT_NAME=${{ matrix.extension }} \
             --build-arg LAYOUT=${{ matrix.pg >= 18 && 'isolated' || 'classic' }} \
@@ -360,7 +367,7 @@ jobs:
           ./scripts/ci-retry.sh docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --build-arg PG_MAJOR=${{ matrix.pg }} \
-            --build-arg PG_TAG=${{ matrix.pg == '19' && '19beta2' || matrix.pg }} \
+            --build-arg PG_TAG=${{ matrix.pg == '19' && '19beta3' || matrix.pg }} \
             --build-arg EXT_VERSION=${{ matrix.version }} \
             --build-arg APT_PACKAGE=${{ matrix.apt_package }} \
             --build-arg EXT_NAME=${{ matrix.extension }} \
@@ -404,8 +411,8 @@ jobs:
       - name: Tag beta image as major version
         if: matrix.pg == '19'
         run: |
-          docker pull postgres:19beta2
-          docker tag postgres:19beta2 postgres:19
+          docker pull postgres:19beta3
+          docker tag postgres:19beta3 postgres:19
       - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
         uses: docker/login-action@v4
@@ -417,7 +424,7 @@ jobs:
         env:
           SOURCE_REGISTRY: ${{ env.REGISTRY }}/${{ github.repository_owner }}
           PREFIX: ${{ env.PREFIX }}
-          PG_TAG: ${{ matrix.pg == '19' && '19beta2' || matrix.pg }}
+          PG_TAG: ${{ matrix.pg == '19' && '19beta3' || matrix.pg }}
           CHANGED: ${{ needs.matrix.outputs.changed }}
           DOCKER_BUILDKIT: '1'
         run: |
@@ -426,7 +433,7 @@ jobs:
           ./scripts/ci-prepare-images.sh ${{ matrix.pg }} $exts
       - name: Run test suite
         env:
-          PG_TAG: ${{ matrix.pg == '19' && '19beta2' || matrix.pg }}
+          PG_TAG: ${{ matrix.pg == '19' && '19beta3' || matrix.pg }}
         run: make test REGISTRY=local PG=${{ matrix.pg }} PG_TAG="$PG_TAG"
 
   # ---------------------------------------------------------------------------
@@ -459,8 +466,8 @@ jobs:
       - name: Tag beta image as major version
         if: matrix.pg == '19'
         run: |
-          docker pull postgres:19beta2
-          docker tag postgres:19beta2 postgres:19
+          docker pull postgres:19beta3
+          docker tag postgres:19beta3 postgres:19
       - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
         uses: docker/login-action@v4
@@ -472,7 +479,7 @@ jobs:
         env:
           SOURCE_REGISTRY: ${{ env.REGISTRY }}/${{ github.repository_owner }}
           PREFIX: ${{ env.PREFIX }}
-          PG_TAG: ${{ matrix.pg == '19' && '19beta2' || matrix.pg }}
+          PG_TAG: ${{ matrix.pg == '19' && '19beta3' || matrix.pg }}
           CHANGED: ${{ needs.matrix.outputs.changed }}
           DOCKER_BUILDKIT: '1'
         run: |
@@ -615,7 +622,7 @@ jobs:
       - name: Build and push multi-arch profile image
         run: |
           make image PG=${{ matrix.pg }} PROFILE=${{ matrix.profile }} \
-            PG_TAG=${{ matrix.pg == '19' && '19beta2' || matrix.pg }} \
+            PG_TAG=${{ matrix.pg == '19' && '19beta3' || matrix.pg }} \
             REGISTRY=${{ env.REGISTRY }}/${{ github.repository_owner }} \
             IMAGE_TAG=${{ env.REGISTRY }}/${{ github.repository_owner }}/pglayers-${{ matrix.profile }}:${{ matrix.pg }} \
             PLATFORM=linux/amd64,linux/arm64
