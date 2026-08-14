@@ -12,7 +12,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      actions: write
     steps:
       # Mint a short-lived GitHub App installation token. Unlike GITHUB_TOKEN,
       # an App token is a distinct identity, so the PR it opens (and the branch
@@ -46,12 +45,11 @@ jobs:
           fi
 
           for pg in 17 18 19; do
-            # Map the PG major to the actual published Docker tag. PG 19 has no
-            # GA tag yet, so the build (Makefile, scripts/detect-license.sh) uses
-            # postgres:19beta3 -- track the same tag so beta rebuilds are caught.
-            # Remove this mapping once postgres:19 goes GA.
-            tag="$pg"
-            [ "$pg" = "19" ] && tag="19beta3"
+            # Map the PG major to the actual published Docker tag via the single
+            # source of truth (scripts/pg-tag.sh); a pre-release major has no bare
+            # tag, so this tracks the same tag the build uses. No mapping lives
+            # here -- edit scripts/pg-tag.sh when the tag rolls / goes GA.
+            tag="$(./scripts/pg-tag.sh "$pg")"
             image="docker.io/library/postgres:${tag}"
 
             # Fetch the raw manifest to a file and check the inspect exit status
@@ -127,23 +125,11 @@ jobs:
               --base main
           fi
 
-          # Enable auto-merge. The App-token push above triggers ci.yml, so the
-          # required "Test PG 17" check runs and the PR merges once it passes.
-          # Falls back gracefully if auto-merge is disabled on the repo.
+          # Enable auto-merge. The App-token push above triggers ci.yml on the
+          # digest PR (base-image-digests.json is a full-rebuild trigger), so the
+          # PR builds+tests every layer on the fresh base; when it auto-merges,
+          # the push promotes them and rebuilds the profile images. There is a
+          # single rebuild path (the merge) -- no separate workflow dispatch, so
+          # nothing races/cancels it. Falls back gracefully if auto-merge is off.
           gh pr merge "$branch" --auto --squash \
             || echo "WARN: could not enable auto-merge (enable it in repo settings)."
-
-      - name: Trigger rebuild for changed versions
-        if: steps.check.outputs.changed != ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          changed="${{ steps.check.outputs.changed }}"
-          # If multiple versions changed, rebuild everything
-          if [ "$(echo "$changed" | wc -w)" -gt 1 ]; then
-            echo "Multiple versions changed, triggering full rebuild"
-            gh workflow run ci.yml
-          else
-            echo "Triggering rebuild for PG ${changed}"
-            gh workflow run ci.yml -f pg_version="${changed}"
-          fi

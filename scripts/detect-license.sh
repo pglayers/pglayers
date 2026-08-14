@@ -12,7 +12,7 @@ set -euo pipefail
 
 pg="${1:?usage: detect-license.sh <pg> <apt_package>}"
 pkg="${2:?usage: detect-license.sh <pg> <apt_package>}"
-tag="$pg"; [ "$pg" = "19" ] && tag="19beta3"
+tag="$("$(dirname "$0")/pg-tag.sh" "$pg")"  # base-image tag via single source of truth
 
 # Fetch the whole copyright file once. Distinguish an infrastructure failure
 # (docker/apt error -> fail fast, non-zero) from a package that installs but

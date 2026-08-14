@@ -22,6 +22,11 @@ EXTENSIONS := $(sort $(notdir $(patsubst %/,%,$(wildcard extensions/*/))))
 # Default PG version for single-extension targets
 PG ?= 17
 
+# Base-image Docker tag for $(PG). Resolved via the single source of truth
+# (scripts/pg-tag.sh) so a pre-release major (19 -> 19beta3) is handled in one
+# place. Override explicitly with `make ... PG_TAG=<tag>` if needed.
+PG_TAG ?= $(shell ./scripts/pg-tag.sh $(PG))
+
 # Profile support: override EXTENSIONS with a subset from profiles/<name>.txt
 ifdef PROFILE
   _PROFILE_FILE := profiles/$(PROFILE).txt
@@ -113,7 +118,7 @@ build: _check-ext ## Build a single extension image
 		$(if $(CACHE_REGISTRY),--cache-from type=registry$(comma)ref=$(CACHE_REGISTRY)/$(PREFIX)-$(EXT):$(PG)) \
 		$(if $(CACHE_SCOPE),--cache-to type=gha$(comma)mode=max$(comma)scope=$(EXT)-$(PG)-$(CACHE_ARCH)) \
 		--build-arg PG_MAJOR=$(PG) \
-		--build-arg PG_TAG=$(or $(PG_TAG),$(PG)) \
+		--build-arg PG_TAG=$(PG_TAG) \
 		--build-arg EXT_VERSION=$(EXT_VERSION) \
 		--build-arg APT_PACKAGE=$(EXT_APT_PACKAGE) \
 		--build-arg EXT_NAME=$(EXT) \
@@ -201,7 +206,7 @@ add-apt-ext: ## Scaffold a new APT extension (PKG=<apt package> [NAME=<dir>] [PG
 	@test -n "$(PKG)" || { echo "Usage: make add-apt-ext PKG=<apt package> [NAME=<dir>] [PG=17]"; exit 1; }
 	@name="$(or $(NAME),$(subst -,_,$(PKG)))"; \
 	pg="$(or $(PG),17)"; \
-	pgtag="$$pg"; [ "$$pg" = "19" ] && pgtag="19beta3"; \
+	pgtag="$$(./scripts/pg-tag.sh "$$pg")"; \
 	dir="extensions/$$name"; \
 	if [ -e "$$dir" ]; then echo "Error: $$dir already exists"; exit 1; fi; \
 	echo "Probing PGDG for postgresql-$$pg-$(PKG)..."; \
@@ -274,7 +279,7 @@ image: ## Build a combined image with all extensions
 	total=0; \
 	included_exts=""; \
 	{ \
-		echo "FROM postgres:$(or $(PG_TAG),$(PG))"; \
+		echo "FROM postgres:$(PG_TAG)"; \
 		for ext in $(EXTENSIONS); do \
 			ver=$$(./scripts/ext-version.sh "$$ext" "$(PG)"); \
 			[ -z "$$ver" ] && continue; \
