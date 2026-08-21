@@ -41,23 +41,26 @@ jobs:
           # ------------------------------------------------------------------
           # Release-artifact availability probe.
           #
-          # Some extensions do not build from the git tag's source; they
-          # download a prebuilt, versioned artifact (e.g. documentdb pulls a
-          # .deb from its GitHub *release* assets). Upstream routinely pushes
-          # the git *tag* days before the corresponding release *binaries* are
-          # uploaded. Bumping to such a tag yields a branch that 404s at build
-          # time (exactly what broke the documentdb v0.116-0 PR).
+          # Some extensions do not build from the git tag's source; they consume
+          # a prebuilt, versioned artifact -- either a downloadable file (e.g.
+          # documentdb pulls a .deb from its GitHub release assets) or a registry
+          # image (e.g. pg_clickhouse does FROM a versioned upstream image).
+          # Upstream routinely pushes the git *tag* days before the corresponding
+          # release *binaries* are published. Bumping to such a tag yields a
+          # branch that 404s / fails to pull at build time (exactly what broke
+          # the documentdb v0.116-0 PR).
           #
-          # When an extension.conf sets RELEASE_ASSET_URL, the monitor probes
-          # that the artifact for the candidate version is actually fetchable
-          # -- for every PG major we build, on both arches -- BEFORE opening a
-          # PR. If any is still missing it logs explicitly and waits; the next
-          # scheduled run re-checks and opens the PR once the artifact lands.
+          # When an extension.conf sets RELEASE_ASSET_URL (a file) or
+          # RELEASE_IMAGE (a registry image), the monitor verifies the artifact
+          # for the candidate version is actually published -- for every PG major
+          # we build -- BEFORE opening a PR. If any is still missing it logs
+          # explicitly and waits; the next scheduled run re-checks and opens the
+          # PR once the artifact lands.
           #
           # URL tokens: %TAG% = git tag (e.g. v0.116-0)
           #             %VER% = tag without a leading "v" (e.g. 0.116-0)
           #             %PG%  = PG major (17/18/19)
-          #             %ARCH%= amd64/arm64
+          #             %ARCH%= amd64/arm64 (files only)
           asset_published() {
             url_tmpl="$1"; tag="$2"; miss=0
             for pg in 17 18 19; do
@@ -77,6 +80,45 @@ jobs:
                   miss=1
                 fi
               done
+            done
+            return "$miss"
+          }
+
+          # Registry-image variant of asset_published, for extensions that FROM a
+          # versioned prebuilt upstream image (e.g. pg_clickhouse ->
+          # ghcr.io/clickhouse/pg_clickhouse:<pg>-<ver>) instead of downloading a
+          # file. Set RELEASE_IMAGE in extension.conf to the image-ref template.
+          # `docker buildx imagetools inspect` is cross-registry, resolves public
+          # images anonymously, and is preinstalled on the runner. We require both
+          # linux/amd64 and linux/arm64 in the manifest list, matching our build
+          # matrix; a missing tag (inspect fails) reports both arches missing.
+          # Same URL tokens as asset_published (%ARCH% is unused for images).
+          image_published() {
+            ref_tmpl="$1"; tag="$2"; miss=0
+            for pg in 17 18 19; do
+              ver_var="VERSION_${pg}"
+              [ -n "${!ver_var:-}" ] || continue
+              ref="$ref_tmpl"
+              ref="${ref//%TAG%/$tag}"
+              ref="${ref//%VER%/${tag#v}}"
+              ref="${ref//%PG%/$pg}"
+              if ! platforms=$(docker buildx imagetools inspect "$ref" \
+                   --format '{{range .Manifest.Manifests}}{{.Platform.OS}}/{{.Platform.Architecture}} {{end}}' 2>/dev/null); then
+                echo "    missing: $ref (tag not published)"
+                miss=1
+                continue
+              fi
+              # Multi-arch manifest list: require both arches we build. A
+              # single-arch image yields an empty platform list here; accept it
+              # (the tag exists) rather than false-waiting forever.
+              if [ -n "${platforms// /}" ]; then
+                for want in linux/amd64 linux/arm64; do
+                  case " $platforms " in
+                    *" $want "*) ;;
+                    *) echo "    missing: $ref ($want not in manifest)"; miss=1 ;;
+                  esac
+                done
+              fi
             done
             return "$miss"
           }
@@ -133,9 +175,13 @@ jobs:
             tag_filter="${TAG_FILTER:-}"
             TAG_FILTER=""
 
-            # Optional prebuilt-artifact probe URL (see asset_published above).
+            # Optional prebuilt-artifact probes (see asset_published /
+            # image_published above). Reset per-iteration so a value sourced from
+            # one extension.conf never leaks into the next.
             release_asset_url="${RELEASE_ASSET_URL:-}"
             RELEASE_ASSET_URL=""
+            release_image="${RELEASE_IMAGE:-}"
+            RELEASE_IMAGE=""
 
             # ============================================================
             # Source-built extensions: check GitHub/GitLab releases
@@ -217,18 +263,24 @@ jobs:
 
             echo "UPDATE $ext: ${current} -> ${latest}"
 
-            # For extensions that download a prebuilt release artifact, only
-            # open a PR once that artifact is actually published upstream.
-            # Upstream can push the git tag days before uploading the binaries;
-            # opening a PR in that gap produces an unbuildable branch (404 on
-            # download). Log the missing artifact and wait for the next run.
+            # For extensions that consume a prebuilt release artifact (a
+            # downloadable file or a registry image), only open a PR once that
+            # artifact is actually published upstream. Upstream can push the git
+            # tag days before publishing the binaries; a PR in that gap is
+            # unbuildable (404 on download / missing image tag). Log what's
+            # missing and wait for the next scheduled run.
+            artifact_missing=0
             if [ -n "$release_asset_url" ]; then
-              echo "  probing release artifact availability for ${latest}..."
-              if ! asset_published "$release_asset_url" "$latest"; then
-                echo "WAIT $ext: tag ${latest} exists upstream but its release binaries are not published yet -- no PR opened; will retry on the next scheduled run"
-                continue
-              fi
-              echo "  release artifact for ${latest} is available"
+              echo "  probing release asset availability for ${latest}..."
+              asset_published "$release_asset_url" "$latest" || artifact_missing=1
+            fi
+            if [ -n "$release_image" ]; then
+              echo "  probing release image availability for ${latest}..."
+              image_published "$release_image" "$latest" || artifact_missing=1
+            fi
+            if [ "$artifact_missing" -ne 0 ]; then
+              echo "WAIT $ext: tag ${latest} exists upstream but its release artifacts are not published yet -- no PR opened; will retry on the next scheduled run"
+              continue
             fi
 
             # Check if a PR already exists
