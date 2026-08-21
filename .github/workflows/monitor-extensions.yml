@@ -38,6 +38,49 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # ------------------------------------------------------------------
+          # Release-artifact availability probe.
+          #
+          # Some extensions do not build from the git tag's source; they
+          # download a prebuilt, versioned artifact (e.g. documentdb pulls a
+          # .deb from its GitHub *release* assets). Upstream routinely pushes
+          # the git *tag* days before the corresponding release *binaries* are
+          # uploaded. Bumping to such a tag yields a branch that 404s at build
+          # time (exactly what broke the documentdb v0.116-0 PR).
+          #
+          # When an extension.conf sets RELEASE_ASSET_URL, the monitor probes
+          # that the artifact for the candidate version is actually fetchable
+          # -- for every PG major we build, on both arches -- BEFORE opening a
+          # PR. If any is still missing it logs explicitly and waits; the next
+          # scheduled run re-checks and opens the PR once the artifact lands.
+          #
+          # URL tokens: %TAG% = git tag (e.g. v0.116-0)
+          #             %VER% = tag without a leading "v" (e.g. 0.116-0)
+          #             %PG%  = PG major (17/18/19)
+          #             %ARCH%= amd64/arm64
+          asset_published() {
+            url_tmpl="$1"; tag="$2"; miss=0
+            for pg in 17 18 19; do
+              ver_var="VERSION_${pg}"
+              [ -n "${!ver_var:-}" ] || continue
+              for arch in amd64 arm64; do
+                url="$url_tmpl"
+                url="${url//%TAG%/$tag}"
+                url="${url//%VER%/${tag#v}}"
+                url="${url//%PG%/$pg}"
+                url="${url//%ARCH%/$arch}"
+                # Ranged GET (1 byte) follows redirects and is cheap; a 200/206
+                # means the object exists, 404 (or anything else) means it does not.
+                code=$(curl -s -o /dev/null -w '%{http_code}' -r 0-0 -L "$url" || echo 000)
+                if [ "$code" != "200" ] && [ "$code" != "206" ]; then
+                  echo "    missing: $url -> HTTP $code"
+                  miss=1
+                fi
+              done
+            done
+            return "$miss"
+          }
+
           # Extensions pinned to a branch or with complex tag formats not yet handled
           SKIP_MONITOR="age pgjwt"
 
@@ -89,6 +132,10 @@ jobs:
             # Determine tag filter pattern (for source-built extensions)
             tag_filter="${TAG_FILTER:-}"
             TAG_FILTER=""
+
+            # Optional prebuilt-artifact probe URL (see asset_published above).
+            release_asset_url="${RELEASE_ASSET_URL:-}"
+            RELEASE_ASSET_URL=""
 
             # ============================================================
             # Source-built extensions: check GitHub/GitLab releases
@@ -169,6 +216,20 @@ jobs:
             fi
 
             echo "UPDATE $ext: ${current} -> ${latest}"
+
+            # For extensions that download a prebuilt release artifact, only
+            # open a PR once that artifact is actually published upstream.
+            # Upstream can push the git tag days before uploading the binaries;
+            # opening a PR in that gap produces an unbuildable branch (404 on
+            # download). Log the missing artifact and wait for the next run.
+            if [ -n "$release_asset_url" ]; then
+              echo "  probing release artifact availability for ${latest}..."
+              if ! asset_published "$release_asset_url" "$latest"; then
+                echo "WAIT $ext: tag ${latest} exists upstream but its release binaries are not published yet -- no PR opened; will retry on the next scheduled run"
+                continue
+              fi
+              echo "  release artifact for ${latest} is available"
+            fi
 
             # Check if a PR already exists
             branch="deps/update-${ext}-${latest}"
