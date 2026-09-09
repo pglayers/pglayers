@@ -2,14 +2,14 @@
 ARG PG_MAJOR=17
 ARG PG_TAG=${PG_MAJOR}
 ARG LAYOUT=classic
-ARG EXT_VERSION=3.1.1
+ARG EXT_VERSION=3.2.2
 
 # Stage 1: Install cargo-pgrx (PG-independent, cached across PG versions)
 FROM rustlang/rust:nightly-bookworm AS pgrx-builder
 ARG EXT_VERSION
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    cargo install cargo-pgrx --version 0.18.0 --locked
+    cargo install cargo-pgrx --version 0.19.1 --locked
 
 RUN git clone --branch ${EXT_VERSION} --depth 1 \
     https://gitlab.com/dalibo/postgresql_anonymizer.git /tmp/ext
