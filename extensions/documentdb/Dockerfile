@@ -69,6 +69,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
 # ── Stage 4: Build pg_documentdb_gw_host (PG-specific) ─────────────
 FROM rust:1.92-bookworm AS rust-builder
 ARG PG_MAJOR
+ARG TARGETARCH
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
@@ -88,8 +89,19 @@ RUN cargo pgrx init "--pg${PG_MAJOR}=/usr/lib/postgresql/${PG_MAJOR}/bin/pg_conf
 
 WORKDIR /tmp/ext/pg_documentdb_gw_host
 
+# Upstream ships pg_documentdb_gw_host/.cargo/config.toml pinning
+# `target-cpu=x86-64-v3` + `target_feature=+avx2` for x86_64, so the gateway
+# emits AVX2 instructions. pglayers ships a general-purpose image, and on any
+# host CPU without AVX2 (x86-64-v3) the "DocumentDB Gateway Host" background
+# worker dies with SIGILL (signal 4, illegal instruction), which cascades into
+# a full server crash (issue #94). Override RUSTFLAGS to the portable baseline
+# `x86-64` target on amd64 -- the RUSTFLAGS env var takes precedence over the
+# config's `target.'cfg(...)'.rustflags`, replacing the v3/AVX2 flags entirely.
+# arm64 is unaffected (the upstream cfg gate is x86_64-only), so leave its
+# RUSTFLAGS untouched to keep the aarch64 baseline.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/tmp/ext/pg_documentdb_gw_host/target \
+    case "$TARGETARCH" in amd64) export RUSTFLAGS="-C target-cpu=x86-64" ;; esac; \
     cargo pgrx package --no-default-features --features "pg${PG_MAJOR}" \
         --pg-config "/usr/lib/postgresql/${PG_MAJOR}/bin/pg_config" \
     && mkdir -p /output \
