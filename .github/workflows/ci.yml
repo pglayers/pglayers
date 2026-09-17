@@ -17,8 +17,15 @@ name: CI
 #   pull_request (fork)      -> same, but `build` is skipped (forks cannot push
 #                               to GHCR); the test jobs compile changed layers
 #                               locally instead. Nothing is published.
-#   push to main             -> matrix + promote only. Reuses the staging images
+#   push to main (same-repo) -> matrix + promote only. Reuses the staging images
 #                               the PR already built and tested; no rebuild.
+#   push to main (fork/direct) -> matrix + REBUILD changed layers + promote. A
+#                               fork PR (build skipped) or a direct push never
+#                               refreshed the version-keyed staging tags, so the
+#                               merge rebuilds the changed layers before
+#                               promoting -- otherwise `promote` would republish
+#                               a stale same-version layer (e.g. a Dockerfile-only
+#                               fix that did not bump VERSION; see issue #94).
 #   schedule / dispatch      -> full (or targeted) build + test + promote.
 #
 # scripts/ci-prepare-images.sh is the single source of truth for assembling the
@@ -85,12 +92,16 @@ jobs:
   # ---------------------------------------------------------------------------
   matrix:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read   # look up the PR a merge commit came from (fork detection)
     outputs:
       changed: ${{ steps.set.outputs.changed }}       # exts changed in this run
       build_native: ${{ steps.set.outputs.build_native }} # source builds (per-arch)
       build_apt: ${{ steps.set.outputs.build_apt }}    # apt builds (multi-arch)
       extensions: ${{ steps.set.outputs.extensions }} # promote/manifest matrix
       publish: ${{ steps.set.outputs.publish }}        # 'true' on push/schedule/dispatch
+      rebuild_on_merge: ${{ steps.set.outputs.rebuild_on_merge }} # 'true' when a merge must rebuild before promote
       test_pgs: ${{ steps.set.outputs.test_pgs }}      # PG majors the test jobs cover
       pg_tags: ${{ steps.set.outputs.pg_tags }}        # PG major -> base-image docker tag (pg-tag.sh)
     steps:
@@ -100,6 +111,8 @@ jobs:
 
       - name: Plan build/test matrices
         id: set
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           pg_filter="${{ github.event.inputs.pg_version }}"
           ext_filter="${{ github.event.inputs.extension }}"
@@ -147,6 +160,27 @@ jobs:
              git diff --name-only HEAD~1 \
                | grep -qE '^(\.github/workflows/ci\.yml|\.github/base-image-digests\.json|Makefile|scripts/)'; then
             build_all=true
+          fi
+
+          # --- merge that must rebuild before promoting ---
+          # On push-to-main we normally only PROMOTE (retag) the staging images
+          # the PR's `build` job already pushed. That is safe ONLY for a
+          # same-repo PR. A fork PR (build skipped -- forks can't push to GHCR)
+          # or a direct push never refreshed the version-keyed staging tags, so
+          # promoting them would republish a STALE, same-version layer -- e.g. a
+          # Dockerfile-only fix that did not bump VERSION (issue #94: the
+          # documentdb AVX2 fix passed the fork PR's from-source tests but the
+          # merge re-promoted the old AVX2 layer). Detect that case so the
+          # changed layers are rebuilt on the merge before promotion. Trust
+          # (promote-only) ONLY a confirmed same-repo PR merge; treat a fork PR,
+          # a direct push, or an inconclusive lookup as untrusted -> rebuild.
+          rebuild_on_merge=false
+          if [ "$event" = "push" ]; then
+            head_repo="$(gh api \
+              "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+              --jq '.[0].head.repo.full_name' 2>/dev/null || true)"
+            [ "$head_repo" = "$GITHUB_REPOSITORY" ] || rebuild_on_merge=true
+            echo "merge head repo: ${head_repo:-<none>} | rebuild_on_merge: $rebuild_on_merge"
           fi
 
           extensions="[]"
@@ -246,6 +280,7 @@ jobs:
             echo "build_apt=$build_apt"
             echo "extensions=$extensions"
             echo "publish=$publish"
+            echo "rebuild_on_merge=$rebuild_on_merge"
             echo "test_pgs=$test_pgs"
             echo "pg_tags=$pg_tags"
           } >> "$GITHUB_OUTPUT"
@@ -267,8 +302,12 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Build each layer ONCE and push an immutable staging tag. Runs on the PR
-  # (same-repo only -- forks cannot push to GHCR), schedule and dispatch; NOT on
-  # push-to-main (the merge reuses these images via `promote`).
+  # (same-repo only -- forks cannot push to GHCR), schedule and dispatch. On
+  # push-to-main it normally does NOT run (the merge reuses the same-repo PR's
+  # images via `promote`) -- EXCEPT when the merge came from a fork PR or a
+  # direct push (`rebuild_on_merge`), whose staging tags were never refreshed:
+  # then it rebuilds the changed layers so `promote` cannot republish a stale
+  # same-version layer.
   #
   # Split into two jobs so neither matrix approaches GitHub's 256-job limit on a
   # full rebuild: source extensions build natively per-arch (no QEMU); APT
@@ -277,9 +316,10 @@ jobs:
   build-native:
     needs: matrix
     if: >-
-      ${{ github.event_name != 'push'
-          && (github.event_name != 'pull_request'
+      ${{ (github.event_name != 'pull_request'
               || github.event.pull_request.head.repo.full_name == github.repository)
+          && (github.event_name != 'push'
+              || needs.matrix.outputs.rebuild_on_merge == 'true')
           && fromJson(needs.matrix.outputs.build_native)[0] != null }}
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     permissions:
@@ -343,9 +383,10 @@ jobs:
   build-apt:
     needs: matrix
     if: >-
-      ${{ github.event_name != 'push'
-          && (github.event_name != 'pull_request'
+      ${{ (github.event_name != 'pull_request'
               || github.event.pull_request.head.repo.full_name == github.repository)
+          && (github.event_name != 'push'
+              || needs.matrix.outputs.rebuild_on_merge == 'true')
           && fromJson(needs.matrix.outputs.build_apt)[0] != null }}
     runs-on: ubuntu-24.04
     permissions:
@@ -398,7 +439,8 @@ jobs:
   # Layer + combined-image tests (collision, self-containment, cross-layer
   # leak, CREATE EXTENSION, functional) against images pulled from `build`
   # (fork PRs compile changed layers from source instead). Not run on push --
-  # the merge trusts the PR's green run and only promotes.
+  # the merge trusts the PR's green run; it only rebuilds (fork/direct pushes)
+  # and promotes.
   # ---------------------------------------------------------------------------
   test:
     needs: [matrix, build-native, build-apt]
@@ -551,11 +593,13 @@ jobs:
   # ---------------------------------------------------------------------------
   # Promote (publish) -- push-to-main / schedule / dispatch only. Retags the
   # already-built, already-tested per-arch staging images into the public
-  # multi-arch manifests. NO rebuild.
+  # multi-arch manifests. NO rebuild of its own.
   #
-  # On push it reuses the images the PR built + tested (gated by branch
-  # protection on the PR's green run). On schedule/dispatch it runs after this
-  # run's own build+test.
+  # On a same-repo push it reuses the images the PR built + tested (gated by
+  # branch protection on the PR's green run). On a fork/direct push the
+  # `build-*` jobs above rebuilt the changed layers first (rebuild_on_merge), so
+  # the staging tags retagged here are fresh, never a stale same-version layer.
+  # On schedule/dispatch it runs after this run's own build+test.
   # ---------------------------------------------------------------------------
   manifest:
     needs: [matrix, checks, build-native, build-apt, test, test-profile, integration]
