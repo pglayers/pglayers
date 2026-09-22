@@ -21,11 +21,15 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS documentdb;
+CREATE EXTENSION IF NOT EXISTS documentdb_extended_rum;
 
 SELECT CASE
-    WHEN EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'documentdb')
-    THEN 'PASS documentdb: full extension loaded with dependencies'
-    ELSE 'FAIL documentdb: full extension loaded with dependencies'
+    WHEN (
+        SELECT count(*) FROM pg_extension
+        WHERE extname IN ('documentdb', 'documentdb_extended_rum')
+    ) = 2
+    THEN 'PASS documentdb: full extension and extended RUM loaded'
+    ELSE 'FAIL documentdb: full extension and extended RUM loaded'
 END;
 
 -- Test: Gateway background worker registered (check GUC presence only).
