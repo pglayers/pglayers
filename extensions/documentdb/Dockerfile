@@ -2,7 +2,7 @@
 ARG PG_MAJOR=17
 ARG PG_TAG=${PG_MAJOR}
 ARG LAYOUT=classic
-ARG EXT_VERSION=v0.114-0
+ARG EXT_VERSION=v0.117-0
 
 # ── Stage 1: Snapshot base image libs (for dep-bundling) ────────────
 FROM postgres:${PG_TAG} AS base
@@ -21,11 +21,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     curl ca-certificates patchelf
 
 # Download DocumentDB deb from GitHub releases.
-# Tag format: v0.114-0 -> deb version: 0.114-0
-# Use deb13 (trixie) to match the postgres:17+ base image.
+# Tag format: v0.117-0 -> deb version: 0.117-0
+# v0.117 publishes Ubuntu 24.04 packages for both supported architectures.
 RUN DEB_VERSION="${EXT_VERSION#v}" && \
     curl -fsSL -o /tmp/documentdb.deb \
-    "https://github.com/documentdb/documentdb/releases/download/${EXT_VERSION}/deb13-postgresql-${PG_MAJOR}-documentdb_${DEB_VERSION}_${TARGETARCH}.deb"
+    "https://github.com/documentdb/documentdb/releases/download/${EXT_VERSION}/ubuntu24.04-postgresql-${PG_MAJOR}-documentdb_${DEB_VERSION}_${TARGETARCH}.deb"
 
 # Extract deb contents without installing (avoids dependency resolution)
 RUN mkdir -p /extracted && dpkg-deb -x /tmp/documentdb.deb /extracted
