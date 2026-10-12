@@ -64,7 +64,12 @@ fi
 preloads=""
 for e in "${exts[@]}"; do
 	spl="$(ext_field "$e" SHARED_PRELOAD)"
-	[ -n "$spl" ] && preloads="${preloads:+${preloads},}${spl}"
+	IFS=',' read -ra spl_items <<< "$spl"
+	for preload in "${spl_items[@]}"; do
+		if [[ -n "$preload" && ",${preloads}," != *",${preload},"* ]]; then
+			preloads="${preloads:+${preloads},}${preload}"
+		fi
+	done
 done
 [ -n "$preloads" ] && conf_lines+=("shared_preload_libraries = '${preloads}'")
 

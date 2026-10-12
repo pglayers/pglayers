@@ -2,7 +2,7 @@
 ARG PG_MAJOR=17
 ARG PG_TAG=${PG_MAJOR}
 ARG LAYOUT=classic
-ARG EXT_VERSION=v0.114-0
+ARG EXT_VERSION=v0.117-0
 
 # ── Stage 1: Snapshot base image libs (for dep-bundling) ────────────
 FROM postgres:${PG_TAG} AS base
@@ -18,14 +18,26 @@ ARG TARGETARCH
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates patchelf
+    patchelf
 
-# Download DocumentDB deb from GitHub releases.
-# Tag format: v0.114-0 -> deb version: 0.114-0
-# Use deb13 (trixie) to match the postgres:17+ base image.
-RUN DEB_VERSION="${EXT_VERSION#v}" && \
-    curl -fsSL -o /tmp/documentdb.deb \
-    "https://github.com/documentdb/documentdb/releases/download/${EXT_VERSION}/deb13-postgresql-${PG_MAJOR}-documentdb_${DEB_VERSION}_${TARGETARCH}.deb"
+# Download the matching Debian build from the PGDG APT repository configured
+# in the official postgres image. Do not use upstream's Ubuntu release asset:
+# it is linked against Ubuntu's ICU ABI and cannot load on Debian.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    set -eux; \
+    DEB_VERSION="${EXT_VERSION#v}"; \
+    package="postgresql-${PG_MAJOR}-documentdb"; \
+    apt-get update; \
+    apt_version="$(apt-cache madison "$package" \
+        | awk -v version="${DEB_VERSION}-" 'index($3, version) == 1 { print $3; exit }')"; \
+    [ -n "$apt_version" ] || { \
+        echo "No Debian PGDG package found for ${package} ${DEB_VERSION}" >&2; \
+        exit 1; \
+    }; \
+    cd /tmp; \
+    apt-get download "${package}=${apt_version}"; \
+    mv "${package}_${apt_version}_${TARGETARCH}.deb" documentdb.deb
 
 # Extract deb contents without installing (avoids dependency resolution)
 RUN mkdir -p /extracted && dpkg-deb -x /tmp/documentdb.deb /extracted

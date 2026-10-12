@@ -41,18 +41,19 @@ jobs:
           # ------------------------------------------------------------------
           # Release-artifact availability probe.
           #
-          # Some extensions do not build from the git tag's source; they consume
-          # a prebuilt, versioned artifact -- either a downloadable file (e.g.
-          # documentdb pulls a .deb from its GitHub release assets) or a registry
-          # image (e.g. pg_clickhouse does FROM a versioned upstream image).
+          # Some extensions do not build entirely from the git tag's source;
+          # they consume a prebuilt, versioned artifact -- either a downloadable
+          # file, a PGDG package (e.g. documentdb), or a registry image (e.g.
+          # pg_clickhouse does FROM a versioned upstream image).
           # Upstream routinely pushes the git *tag* days before the corresponding
           # release *binaries* are published. Bumping to such a tag yields a
           # branch that 404s / fails to pull at build time (exactly what broke
           # the documentdb v0.116-0 PR).
           #
-          # When an extension.conf sets RELEASE_ASSET_URL (a file) or
-          # RELEASE_IMAGE (a registry image), the monitor verifies the artifact
-          # for the candidate version is actually published -- for every PG major
+          # When an extension.conf sets RELEASE_ASSET_URL (a file),
+          # RELEASE_APT_PACKAGE (a PGDG package suffix), or RELEASE_IMAGE (a
+          # registry image), the monitor verifies the artifact for the candidate
+          # version is actually published -- for every PG major and architecture
           # we build -- BEFORE opening a PR. If any is still missing it logs
           # explicitly and waits; the next scheduled run re-checks and opens the
           # PR once the artifact lands.
@@ -123,6 +124,45 @@ jobs:
             return "$miss"
           }
 
+          # PGDG-package variant for hybrid builds that pin an upstream tag but
+          # obtain their native extension binaries from apt (e.g. documentdb,
+          # whose gateway host is still built from source). The candidate tag's
+          # upstream version must exist for every supported PG major and both
+          # architectures; Debian revision suffixes are deliberately accepted.
+          apt_package_published() {
+            pkg_suffix="$1"; tag="$2"; miss=0
+            version="${tag#v}"
+            for pg in 17 18 19; do
+              ver_var="VERSION_${pg}"
+              [ -n "${!ver_var:-}" ] || continue
+              pg_tag="$(./scripts/pg-tag.sh "$pg")"
+              package="postgresql-${pg}-${pkg_suffix}"
+              if ! missing_arches="$(docker run --rm "postgres:${pg_tag}" bash -c '
+                set -eo pipefail
+                package="$1"; version="$2"; missing=""
+                dpkg --add-architecture arm64
+                apt-get update >/dev/null 2>&1
+                for arch in amd64 arm64; do
+                  if ! apt-cache madison "${package}:${arch}" \
+                    | awk -v version="${version}-" '\''index($3, version) == 1 { found=1 } END { exit !found }'\''; then
+                    missing="${missing:+${missing} }${arch}"
+                  fi
+                done
+                [ -z "$missing" ] || { echo "$missing"; exit 1; }
+              ' _ "$package" "$version" 2>/dev/null)"; then
+                if [ -n "$missing_arches" ]; then
+                  for arch in $missing_arches; do
+                    echo "    missing: ${package} ${version} (${arch})"
+                  done
+                else
+                  echo "    failed to query: ${package} ${version}"
+                fi
+                miss=1
+              fi
+            done
+            return "$miss"
+          }
+
           # Extensions pinned to a branch or with complex tag formats not yet handled
           SKIP_MONITOR="age pgjwt"
 
@@ -180,6 +220,8 @@ jobs:
             # one extension.conf never leaks into the next.
             release_asset_url="${RELEASE_ASSET_URL:-}"
             RELEASE_ASSET_URL=""
+            release_apt_package="${RELEASE_APT_PACKAGE:-}"
+            RELEASE_APT_PACKAGE=""
             release_image="${RELEASE_IMAGE:-}"
             RELEASE_IMAGE=""
 
@@ -263,16 +305,19 @@ jobs:
 
             echo "UPDATE $ext: ${current} -> ${latest}"
 
-            # For extensions that consume a prebuilt release artifact (a
-            # downloadable file or a registry image), only open a PR once that
-            # artifact is actually published upstream. Upstream can push the git
-            # tag days before publishing the binaries; a PR in that gap is
-            # unbuildable (404 on download / missing image tag). Log what's
-            # missing and wait for the next scheduled run.
+            # For extensions that consume a prebuilt release artifact (a file,
+            # PGDG package, or registry image), only open a PR once that artifact
+            # is actually published. Upstream can push the git tag days before
+            # publishing the binaries; a PR in that gap is unbuildable. Log
+            # what's missing and wait for the next scheduled run.
             artifact_missing=0
             if [ -n "$release_asset_url" ]; then
               echo "  probing release asset availability for ${latest}..."
               asset_published "$release_asset_url" "$latest" || artifact_missing=1
+            fi
+            if [ -n "$release_apt_package" ]; then
+              echo "  probing PGDG package availability for ${latest}..."
+              apt_package_published "$release_apt_package" "$latest" || artifact_missing=1
             fi
             if [ -n "$release_image" ]; then
               echo "  probing release image availability for ${latest}..."

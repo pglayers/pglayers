@@ -16,7 +16,7 @@ MAX_WORKER_PROCESSES ?= 64
 # perpetual warnings, so it is created by default. Override at build time
 # (make image PGLAYERS_AUTOCREATE=...) or at runtime (PGLAYERS_CREATE_EXTENSIONS
 # env, "none" to disable).
-PGLAYERS_AUTOCREATE ?= documentdb
+PGLAYERS_AUTOCREATE ?= documentdb,documentdb_extended_rum
 EXTENSIONS := $(sort $(notdir $(patsubst %/,%,$(wildcard extensions/*/))))
 
 # Default PG version for single-extension targets

@@ -135,7 +135,7 @@ promoted to stable.
 | [anon](https://gitlab.com/dalibo/postgresql_anonymizer) | 3.1.1 | 17, 18 | Data anonymization and masking |
 | [credcheck](https://github.com/HexaCluster/credcheck) | 5.0 | 17, 18, 19 | Credential checks on user creation / password change |
 | [db2fce](https://github.com/credativ/db2fce) | 0.0.17 | 17, 18 | DB2 compatibility functions (date/time, string helpers) |
-| [documentdb](https://github.com/documentdb/documentdb) | 0.114-0 | 17, 18 | MongoDB-compatible document database engine (BSON types and CRUD API) |
+| [documentdb](https://github.com/documentdb/documentdb) | 0.117-0 | 17, 18 | MongoDB-compatible document database engine (BSON types and CRUD API) |
 | [extra_window_functions](https://github.com/xocolatl/extra_window_functions) | 1.0 | 17, 18, 19 | Extra window functions (ignore-nulls variants, nth-from-last) |
 | [first_last_agg](https://github.com/wulczer/first_last_agg) | 0.1.4-4-gd63ea3b | 17, 18 | first() and last() aggregate functions |
 | [h3-pg](https://github.com/zachasme/h3-pg) | 4.2.3 | 17, 18 | Uber H3 hexagonal geospatial indexing |
@@ -309,7 +309,8 @@ on PostgreSQL. It consists of two extensions:
 - **`documentdb_core`** -- BSON data type and core operations (no
   dependencies, works standalone).
 - **`documentdb`** -- Full CRUD API surface. Requires `documentdb_core`,
-  `pg_cron`, `vector` (pgvector), `postgis`, and `tsm_system_rows`.
+  `pg_cron`, `vector` (pgvector), `postgis`, `tsm_system_rows`, and
+  `documentdb_extended_rum`.
 
 The layer also includes `pg_documentdb_gw_host`, a background worker
 that provides MongoDB wire protocol compatibility on port 10260. When
@@ -322,12 +323,17 @@ Create extensions in order:
 CREATE EXTENSION IF NOT EXISTS documentdb_core;
 -- For the full API (requires pg_cron, vector, postgis layers):
 CREATE EXTENSION IF NOT EXISTS documentdb;
+CREATE EXTENSION IF NOT EXISTS documentdb_extended_rum;
 ```
+
+DocumentDB 0.117 requires Extended RUM by default for index operations.
+`CREATE EXTENSION documentdb CASCADE` does not create
+`documentdb_extended_rum`, so it must be created separately.
 
 Gateway configuration (add to `postgresql.conf`):
 
 ```ini
-shared_preload_libraries = 'pg_documentdb_gw_host'
+shared_preload_libraries = 'pg_cron,pg_documentdb_core,pg_documentdb,pg_documentdb_extended_rum,pg_documentdb_gw_host'
 documentdb_gateway.database = 'postgres'
 documentdb_gateway.setup_configuration_file = '/etc/documentdb/gateway_config.json'
 ```
