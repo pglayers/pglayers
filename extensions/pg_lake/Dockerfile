@@ -2,7 +2,7 @@
 ARG PG_MAJOR=17
 ARG PG_TAG=${PG_MAJOR}
 ARG LAYOUT=classic
-ARG EXT_VERSION=v3.4.1
+ARG EXT_VERSION=v3.5.7
 ARG VCPKG_VERSION=2025.10.17
 
 # Capture base image library list for dep-bundling
@@ -104,9 +104,12 @@ RUN mkdir -p /output/usr/local/bin && \
         '#!/bin/bash' \
         '# Start pgduck_server in the background (required by pg_lake extensions).' \
         '# Listens on Unix socket /tmp:5332 -- no external port needed.' \
-        'PG_BINDIR="$(pg_config --bindir 2>/dev/null || echo /usr/lib/postgresql/17/bin)"' \
-        'if [ -x "$PG_BINDIR/pgduck_server" ]; then' \
-        '    "$PG_BINDIR/pgduck_server" --cache_dir /tmp/pg_lake_cache &' \
+        '# Isolated layout (PG 18+): pgduck_server sits next to this script in' \
+        '# /extensions/pg_lake/bin. Classic layout (PG 17): it is in the PG bindir.' \
+        'PGDUCK="$(dirname "$(readlink -f "$0")")/pgduck_server"' \
+        '[ -x "$PGDUCK" ] || PGDUCK="$(pg_config --bindir)/pgduck_server"' \
+        'if [ -x "$PGDUCK" ]; then' \
+        '    "$PGDUCK" --cache_dir /tmp/pg_lake_cache &' \
         'fi' \
         'exec docker-entrypoint.sh "$@"' \
         > /output/usr/local/bin/pg-lake-entrypoint.sh && \
