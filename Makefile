@@ -311,6 +311,9 @@ image: ## Build a combined image with all extensions
 				docker buildx imagetools inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
 			fi; \
 			cmd=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$${COMPANION_CMD:-}"'); \
+			if [ -n "$$cmd" ] && [ "$(PG)" -ge 18 ] 2>/dev/null; then \
+				cmd="/extensions/$$ext/bin/$$cmd"; \
+			fi; \
 			[ -n "$$cmd" ] && companions="$${companions:+$$companions|}$$cmd"; \
 		done; \
 		if [ -n "$$companions" ]; then \
