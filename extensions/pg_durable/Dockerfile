@@ -2,7 +2,7 @@
 ARG PG_MAJOR=17
 ARG PG_TAG=${PG_MAJOR}
 ARG LAYOUT=classic
-ARG EXT_VERSION=v0.2.3
+ARG EXT_VERSION=v0.2.9
 
 # Stage 1: Install cargo-pgrx (PG-independent, cached across PG versions)
 FROM rustlang/rust:nightly-bookworm AS pgrx-builder
