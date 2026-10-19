@@ -11,17 +11,21 @@ Prerequisites:
   - pymongo installed in the test environment
 """
 
+import os
 import sys
+
 
 def main():
     try:
         from pymongo import MongoClient
         from pymongo.errors import ConnectionFailure, OperationFailure
-    except ImportError:
-        print("PASS documentdb_mongo: pymongo not installed, skipping wire protocol tests")
-        return 0
+    except ImportError as e:
+        print(f"FAIL documentdb_mongo: pymongo not installed ({e})")
+        return 1
 
-    uri = "mongodb://docdb_test:docdb_test@localhost:10260/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
+    host = os.environ.get("DOCUMENTDB_GATEWAY_HOST", "localhost")
+    port = os.environ.get("DOCUMENTDB_GATEWAY_PORT", "10260")
+    uri = f"mongodb://docdb_test:docdb_test@{host}:{port}/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
     failures = 0
 
     # Test: connect to gateway

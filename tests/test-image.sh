@@ -78,12 +78,13 @@ startup_log="$(docker logs "$CONTAINER" 2>&1 \
 # If the init anchor is absent (e.g. an already-initialised volume), scan it all.
 [ -n "$startup_log" ] || startup_log="$(docker logs "$CONTAINER" 2>&1)"
 
-# Problem signatures: any PostgreSQL WARNING/ERROR/FATAL/PANIC (anchored on the
-# "[pid] SEVERITY:" log prefix so it never matches those words inside a message
-# body), a Rust background-worker panic, or the (LOG-level) background-worker
-# exhaustion message.
+# Problem signatures: any PostgreSQL WARNING/ERROR/FATAL/PANIC, a gateway
+# WARN/ERROR tracing record, a Rust background-worker panic, or the (LOG-level)
+# background-worker exhaustion message.
+ansi_escape=$'\033\[[0-9;]*[[:alpha:]]'
+startup_log="$(printf '%s\n' "$startup_log" | sed -E "s/${ansi_escape}//g")"
 problems="$(printf '%s\n' "$startup_log" | grep -E \
-    '\] (WARNING|ERROR|FATAL|PANIC):|thread .* panicked|too many background workers|increase .*max_worker_processes' \
+    '\] (WARNING|ERROR|FATAL|PANIC):| (WARN|ERROR)([^[:alpha:]]|$)|thread .* panicked|too many background workers|increase .*max_worker_processes' \
     || true)"
 if [ "${#LOG_ALLOWLIST[@]}" -gt 0 ]; then
     for pat in "${LOG_ALLOWLIST[@]}"; do
@@ -103,6 +104,16 @@ echo
 
 # Run each extension's test.sql
 manifest="$(docker exec "$CONTAINER" cat /etc/pglayers/manifest.json 2>/dev/null || true)"
+if grep -q '"documentdb"' <<<"$manifest"; then
+    autocreated="$(docker exec "$CONTAINER" psql -U postgres -tAc \
+        "SELECT count(*) FROM pg_extension WHERE extname IN ('documentdb_core', 'documentdb', 'documentdb_extended_rum')")"
+    if [ "$autocreated" = "3" ]; then
+        pass "documentdb SQL extensions auto-created"
+    else
+        fail "documentdb SQL extensions not auto-created (found ${autocreated}/3)"
+    fi
+fi
+
 for test_file in extensions/*/test.sql; do
     ext="$(basename "$(dirname "$test_file")")"
 
@@ -134,6 +145,25 @@ for test_file in extensions/*/test.sql; do
         printf '%s\n' "$output" | sed 's/^/       /'
     fi
 done
+
+if grep -q '"documentdb"' <<<"$manifest"; then
+    if output="$(./tests/test-documentdb-gateway.sh "$CONTAINER" 2>&1)"; then
+        passes="$(echo "$output" | grep -c '^PASS' || true)"
+        if [ "$passes" -gt 0 ]; then
+            pass "documentdb mongo protocol (${passes} checks)"
+        else
+            fail "documentdb: gateway test produced no PASS output"
+            # shellcheck disable=SC2001
+            # Prepending indent to each line; no bash-native equivalent for multiline
+            echo "$output" | sed 's/^/       /'
+        fi
+    else
+        fail "documentdb mongo protocol:"
+        # shellcheck disable=SC2001
+        # Prepending indent to each line; no bash-native equivalent for multiline
+        echo "$output" | sed 's/^/       /'
+    fi
+fi
 
 echo
 echo "========================================"

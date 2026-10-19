@@ -106,10 +106,18 @@ for line in "${conf_lines[@]}"; do
 done
 
 # --- Filesystem fixups (not postgresql.conf.sample content) --------------
+# Keep auto-generated gateway certificates under PGDATA's writable owner tree.
+# Without this explicit path the gateway first probes an unwritable system path
+# and logs a warning before falling back to the same location.
+if has_ext documentdb; then
+	printf 'ENV DOCUMENTDB_TLS_STATE_DIR=/var/lib/postgresql/.local/state/documentdb-gateway/tls\n'
+	printf 'RUN mkdir -p /etc/documentdb && printf '\''%%s\\n'\'' '\''{"IsPrimary":"true","SendShutdownResponses":"false"}'\'' > /etc/documentdb/host_config.json\n'
+fi
+
 # documentdb's gateway GUC points at /etc/documentdb/gateway_config.json. On the
 # isolated (PG18+) layout the layer ships it under /extensions/documentdb/etc/,
 # so link it into place. On classic (PG17) the layer already installs it at the
 # system path.
 if [ "$PG" -ge 18 ] 2>/dev/null && has_ext documentdb; then
-	printf 'RUN mkdir -p /etc/documentdb && ln -sf /extensions/documentdb/etc/documentdb/gateway_config.json /etc/documentdb/gateway_config.json\n'
+	printf 'RUN ln -sf /extensions/documentdb/etc/documentdb/gateway_config.json /etc/documentdb/gateway_config.json\n'
 fi

@@ -326,7 +326,9 @@ image: ## Build a combined image with all extensions
 		fi; \
 		autocreate=""; \
 		for ext in $(subst $(comma), ,$(PGLAYERS_AUTOCREATE)); do \
-			if echo " $$included_exts " | grep -q " $$ext "; then \
+			owner="$$ext"; \
+			[ "$$ext" = "documentdb_extended_rum" ] && owner="documentdb"; \
+			if echo " $$included_exts " | grep -q " $$owner "; then \
 				autocreate="$${autocreate:+$$autocreate }$$ext"; \
 			fi; \
 		done; \

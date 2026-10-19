@@ -43,7 +43,8 @@ SELECT CASE
     ELSE 'FAIL documentdb: gateway module loaded (GUC present)'
 END;
 
--- Test: MongoDB wire protocol port is reachable (via SQL insert/find roundtrip)
+-- Test: DocumentDB SQL API insert/find roundtrip. The MongoDB wire protocol is
+-- validated separately by extensions/documentdb/test_mongo.py.
 SELECT documentdb_api.insert_one('test_db', 'test_coll', '{"_id": 1, "msg": "hello from pglayers"}');
 
 SELECT CASE

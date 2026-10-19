@@ -348,7 +348,7 @@ blocked roles.
 > `/extensions/documentdb/etc/documentdb/gateway_config.json`; the
 > combined profile images add a `/etc/documentdb/gateway_config.json`
 > symlink to it so the gateway finds it. In those profile images the
-> `documentdb` extension is also auto-created on first init (see
+> `documentdb` and `documentdb_extended_rum` are also auto-created on first init (see
 > [Profile images](#profile-images-auto-configuration)), so the gateway
 > comes up clean without the "extension not yet created" retries. Set
 > `PGLAYERS_CREATE_EXTENSIONS=none` to opt out.

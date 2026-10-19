@@ -659,49 +659,21 @@ fi
 if has_ext documentdb; then
     info "Phase 9: DocumentDB MongoDB wire protocol test..."
     wait_for_ready
-
-    # Create a test user (BlockedRolePrefixes blocks 'pg*' prefix)
-    docker exec pgx-func-test psql -U postgres -c \
-        "CREATE ROLE docdb_test WITH LOGIN PASSWORD 'docdb_test' SUPERUSER;" >/dev/null 2>&1 || true
-
-    # Install pymongo in the container
-    if docker exec pgx-func-test bash -c \
-        "apt-get update -qq && apt-get install -qq -y python3-pip >/dev/null 2>&1 && pip3 install --break-system-packages pymongo >/dev/null 2>&1" 2>/dev/null; then
-
-        # Wait for gateway to be ready (port 10260)
-        gw_ready=false
-        for i in $(seq 1 15); do
-            if docker exec pgx-func-test bash -c 'timeout 1 bash -c "echo > /dev/tcp/localhost/10260" 2>/dev/null'; then
-                gw_ready=true
-                break
-            fi
-            sleep 1
-        done
-
-        if [ "$gw_ready" = true ]; then
-            output="$(docker exec -i pgx-func-test python3 < extensions/documentdb/test_mongo.py 2>&1)" || true
-            failures="$(echo "$output" | grep '^FAIL' || true)"
-            passes="$(echo "$output" | grep -c '^PASS' || true)"
-            if [ -n "$failures" ]; then
-                # The DocumentDB extension itself is validated in Phases 7-8;
-                # the Mongo wire-protocol path additionally needs gateway user
-                # provisioning that this smoke test does not set up, so treat a
-                # protocol/auth failure as a warning rather than a hard gate.
-                warn "mongo protocol (non-gating):"
-                # shellcheck disable=SC2001
-                # Prepending indent to each line; no bash-native equivalent for multiline
-                echo "$failures" | sed 's/^/       /'
-            elif [ "$passes" -gt 0 ]; then
-                pass "mongo protocol (${passes} checks)"
-            else
-                warn "documentdb: test_mongo.py produced no PASS/FAIL output"
-                echo "$output" | tail -5 | sed 's/^/       /'
-            fi
+    if output="$(./tests/test-documentdb-gateway.sh pgx-func-test 2>&1)"; then
+        passes="$(echo "$output" | grep -c '^PASS' || true)"
+        if [ "$passes" -gt 0 ]; then
+            pass "mongo protocol (${passes} checks)"
         else
-            warn "documentdb: gateway port 10260 not ready after 15s, skipping mongo tests"
+            fail "documentdb: gateway test produced no PASS output"
+            # shellcheck disable=SC2001
+            # Prepending indent to each line; no bash-native equivalent for multiline
+            echo "$output" | sed 's/^/       /'
         fi
     else
-        warn "documentdb: could not install pymongo, skipping mongo protocol tests"
+        fail "mongo protocol:"
+        # shellcheck disable=SC2001
+        # Prepending indent to each line; no bash-native equivalent for multiline
+        echo "$output" | sed 's/^/       /'
     fi
     echo
 fi
