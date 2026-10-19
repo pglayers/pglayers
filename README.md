@@ -163,6 +163,7 @@ promoted to stable.
 | [pg_graphql](https://github.com/supabase/pg_graphql) | 1.6.1 | 17, 18 | GraphQL support for PostgreSQL |
 | [pg_hashids](https://github.com/iCyberon/pg_hashids) | 1.2.1 | 17, 18, 19 | Short unique hash IDs from integers |
 | [pg_hint_plan](https://github.com/ossc-db/pg_hint_plan) | 1.7.1 | 17, 18 | Tweak execution plans using hints in SQL comments |
+| [pg_incremental](https://github.com/CrunchyData/pg_incremental) | 1.5.0 | 17, 18, 19 | Incremental batch processing pipelines scheduled with pg_cron |
 | [pg_ivm](https://github.com/sraoss/pg_ivm) | 1.13 | 17, 18 | Incremental View Maintenance for materialized views |
 | [pg_jsonschema](https://github.com/supabase/pg_jsonschema) | 0.3.4 | 17, 18 | JSON Schema validation |
 | [pg_lake](https://github.com/Snowflake-Labs/pg_lake) | 3.5.7 | 17, 18 | Iceberg and data lake access (Parquet, CSV, JSON via DuckDB) |
@@ -392,6 +393,23 @@ Do not use both in the same image.
 `/extensions/pg_lake/`, so the entrypoint wrapper and `pgduck_server` live in
 `/extensions/pg_lake/bin/` (use that path as the `ENTRYPOINT` when
 composing the layer by hand).
+
+### pg_incremental
+
+pg_incremental runs each pipeline as a periodic pg_cron job, so it needs
+the `pg_cron` layer (preloaded, see
+[shared_preload_libraries](#shared_preload_libraries)). Create it in the
+database that holds pg_cron (`cron.database_name`, `postgres` by default):
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+CREATE EXTENSION IF NOT EXISTS pg_incremental;
+```
+
+Pipelines created with `schedule := NULL` are not scheduled and can be run
+by hand with `CALL incremental.execute_pipeline('<name>')`. File list
+pipelines list new files with pg_lake's `lake_file.list` by default, so
+they pair with the `pg_lake` layer.
 
 ### Profile images (auto-configuration)
 

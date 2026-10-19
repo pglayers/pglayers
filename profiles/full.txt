@@ -30,6 +30,7 @@ pgfincore
 pg_graphql
 pg_hashids
 pg_hint_plan
+pg_incremental
 pg_ivm
 pg_jsonschema
 pgjwt

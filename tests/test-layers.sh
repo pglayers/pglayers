@@ -475,6 +475,7 @@ declare -A EXT_SQL_NAMES=(
     [pg_graphql]="pg_graphql"
     [pg_hashids]="pg_hashids"
     [pg_hint_plan]="pg_hint_plan"
+    [pg_incremental]="pg_incremental"
     [pg_ivm]="pg_ivm"
     [pg_jsonschema]="pg_jsonschema"
     [pg_lake]="pg_lake"
