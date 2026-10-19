@@ -73,12 +73,12 @@ or license change. Stale versions are a bug.
 
 Supported PG majors are **17, 18, 19**. The Docker tag for a GA major is
 just the major (`postgres:17`), but a **pre-release major has no bare tag** --
-Docker Hub publishes only pre-release tags (`postgres:19beta3`, later
-`19beta4`, `19rc1`, and finally the GA `postgres:19`). So the build maps each
+Docker Hub publishes only pre-release tags (`postgres:19beta4`, later
+`19rc1`, and finally the GA `postgres:19`). So the build maps each
 PG major to the **actual published Docker tag**. Today that mapping is:
 
 ```
-19 -> 19beta3     # 17, 18 map to themselves
+19 -> 19beta4     # 17, 18 map to themselves
 ```
 
 **`scripts/pg-tag.sh` is the single source of truth for this mapping.** It
@@ -90,16 +90,18 @@ it, so there is exactly one place to edit:
 - `scripts/apt-support.sh` and `scripts/detect-license.sh` -- call
   `pg-tag.sh` (via `$(dirname "$0")/pg-tag.sh`).
 - `.github/workflows/ci.yml` -- the `matrix` job builds a `pg_tags`
-  (`{"17":"17","18":"18","19":"19beta3"}`) output from `pg-tag.sh`; every
+  (`{"17":"17","18":"18","19":"19beta4"}`) output from `pg-tag.sh`; every
   build/test/profile job reads `fromJson(needs.matrix.outputs.pg_tags)[matrix.pg]`.
-- `.github/workflows/monitor-base-image.yml` -- the check step calls `pg-tag.sh`.
+- `.github/workflows/monitor-base-image.yml` -- detects newer PG 19 beta/RC/GA
+  tags, updates `pg-tag.sh`, and tracks the resolved image digest.
 
-Never hardcode `19beta3` (or any pre-release tag) anywhere else. A stray literal
+Never hardcode `19beta4` (or any pre-release tag) anywhere else. A stray literal
 is the "PG 19 drift" bug: e.g. if `ci.yml` built on `19beta2` while the monitor
-tracked `19beta3`, PG 19 would look *perpetually changed*, the monitor would
+tracked `19beta4`, PG 19 would look *perpetually changed*, the monitor would
 open endless PRs, and the shipped images would never match the tracked base.
 
-**When the pre-release tag rolls** (`19beta3` -> `19beta4` -> `19rc1`):
+The base-image monitor normally advances the mapping automatically when a new
+beta, RC, or GA tag appears. To roll it manually (`19beta4` -> `19rc1`):
 
 1. Edit the single `19)` case line in `scripts/pg-tag.sh`.
 2. Verify no stray literal was reintroduced (the tag must appear only in

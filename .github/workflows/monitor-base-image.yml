@@ -38,6 +38,58 @@ jobs:
         run: |
           DIGEST_FILE=".github/base-image-digests.json"
           CHANGED_VERSIONS=""
+          PG19_TAG_CHANGED="false"
+
+          image_exists() {
+            docker buildx imagetools inspect "$1" >/dev/null 2>&1
+          }
+
+          # A prerelease tag is immutable, so digest monitoring alone cannot see
+          # beta/RC rollovers. Advance the checked-in mapping when Docker Hub
+          # publishes a newer PG 19 prerelease (or the bare GA tag). The digest
+          # change below then triggers a full rebuild and test in the PR.
+          current_19="$(./scripts/pg-tag.sh 19)"
+          latest_19="$current_19"
+          if [ "$current_19" != "19" ]; then
+            if image_exists "docker.io/library/postgres:19"; then
+              latest_19="19"
+            else
+              case "$current_19" in
+                *beta*)
+                  n=1
+                  while image_exists "docker.io/library/postgres:19rc${n}"; do
+                    latest_19="19rc${n}"
+                    n=$((n + 1))
+                  done
+                  if [ "$latest_19" = "$current_19" ]; then
+                    n="${current_19##*beta}"
+                    n=$((n + 1))
+                    while image_exists "docker.io/library/postgres:19beta${n}"; do
+                      latest_19="19beta${n}"
+                      n=$((n + 1))
+                    done
+                  fi
+                  ;;
+                *rc*)
+                  n="${current_19##*rc}"
+                  n=$((n + 1))
+                  while image_exists "docker.io/library/postgres:19rc${n}"; do
+                    latest_19="19rc${n}"
+                    n=$((n + 1))
+                  done
+                  ;;
+              esac
+            fi
+          fi
+          if [ "$latest_19" != "$current_19" ]; then
+            echo "postgres:19 prerelease advanced: ${current_19} -> ${latest_19}"
+            PG19_TAG_CHANGED="true"
+            if [ "$latest_19" = "19" ]; then
+              sed -i '/^[[:space:]]*19) echo /d' scripts/pg-tag.sh
+            else
+              sed -i "s/19) echo \"${current_19}\"/19) echo \"${latest_19}\"/" scripts/pg-tag.sh
+            fi
+          fi
 
           # Initialize if file doesn't exist
           if [ ! -f "$DIGEST_FILE" ]; then
@@ -74,7 +126,8 @@ jobs:
             # Stored digest is keyed by PG major, independent of the tag.
             stored=$(jq -r ".\"postgres:${pg}\" // \"\"" "$DIGEST_FILE")
 
-            if [ "$current" != "$stored" ]; then
+            if [ "$current" != "$stored" ] \
+               || { [ "$pg" = "19" ] && [ "$PG19_TAG_CHANGED" = "true" ]; }; then
               echo "postgres:${pg} (${tag}) changed: ${stored:-<new>} -> ${current}"
               CHANGED_VERSIONS="${CHANGED_VERSIONS:+${CHANGED_VERSIONS} }${pg}"
               # Update the file
@@ -106,7 +159,7 @@ jobs:
           # commit every run and avoids the merge-commit accumulation that a
           # reused, merge-forward branch produced.
           git checkout -B "$branch"
-          git add .github/base-image-digests.json
+          git add .github/base-image-digests.json scripts/pg-tag.sh
           git commit -m "chore: base image updated (PG ${changed})"
           git push -f -u origin "$branch"
 

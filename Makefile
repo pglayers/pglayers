@@ -23,7 +23,7 @@ EXTENSIONS := $(sort $(notdir $(patsubst %/,%,$(wildcard extensions/*/))))
 PG ?= 17
 
 # Base-image Docker tag for $(PG). Resolved via the single source of truth
-# (scripts/pg-tag.sh) so a pre-release major (19 -> 19beta3) is handled in one
+# (scripts/pg-tag.sh) so a pre-release major is handled in one
 # place. Override explicitly with `make ... PG_TAG=<tag>` if needed.
 PG_TAG ?= $(shell ./scripts/pg-tag.sh $(PG))
 

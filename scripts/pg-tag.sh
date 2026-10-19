@@ -4,7 +4,7 @@
 #
 # A GA major's image tag is just the major ("postgres:17"), but a PRE-RELEASE
 # major has no bare tag yet -- Docker Hub publishes only pre-release tags
-# ("postgres:19beta3", later "19beta4", "19rc1", and finally the GA
+# ("postgres:19beta4", later "19rc1", and finally the GA
 # "postgres:19"). Every consumer (Makefile, scripts, and the CI / base-image
 # workflows) resolves the tag through THIS script, so a tag roll is a one-line
 # edit here instead of a find-and-replace across the repo (the "PG 19 drift").
@@ -17,6 +17,6 @@
 set -eu
 
 case "${1:?usage: pg-tag.sh <pg-major>}" in
-    19) echo "19beta3" ;;
+    19) echo "19beta4" ;;
     *)  echo "$1" ;;
 esac

@@ -14,15 +14,16 @@
 #   apt-support.sh available <pg> <apt_package> # exit 0 if available, else 1
 #   apt-support.sh list <pg>                    # prints "pkg version" lines
 #
-# Results are cached per PG major under $PGLAYERS_APT_CACHE_DIR (default
-# /tmp/pglayers-apt-cache) so repeated lookups in one run are cheap.
+# Results are cached per PG major and resolved Docker tag under
+# $PGLAYERS_APT_CACHE_DIR (default /tmp/pglayers-apt-cache), so repeated lookups
+# are cheap without reusing stale metadata across a prerelease tag rollover.
 
 set -euo pipefail
 
 CACHE_DIR="${PGLAYERS_APT_CACHE_DIR:-/tmp/pglayers-apt-cache}"
 
 # Base-image Docker tag for a PG major -- resolved via the single source of
-# truth (scripts/pg-tag.sh) so the 19->19beta3 mapping lives in exactly one place.
+# truth (scripts/pg-tag.sh) so the prerelease mapping lives in exactly one place.
 _pg_tag() { "$(dirname "$0")/pg-tag.sh" "$1"; }
 
 # Debian apt version -> clean, docker-tag-safe upstream version.
@@ -46,23 +47,37 @@ _clean_version() {
 # silently treating every package as "unavailable".
 _ensure_cache() {
     local pg="$1"
-    local list="${CACHE_DIR}/pg${pg}.list"
+    local tag list
+    tag="$(_pg_tag "$pg")"
+    list="${CACHE_DIR}/pg${pg}-${tag}.list"
     if [ -s "$list" ]; then return 0; fi
     mkdir -p "$CACHE_DIR"
-    local tag tmp
-    tag="$(_pg_tag "$pg")"
-    tmp="$(mktemp "${CACHE_DIR}/pg${pg}.XXXXXX")"
+    local tmp
+    tmp="$(mktemp "${CACHE_DIR}/pg${pg}-${tag}.XXXXXX")"
     # One container: apt-get update, then dump name+version for the prefix.
     # pipefail (set at top) makes the pipeline fail if the docker run fails.
     if ! docker run --rm "postgres:${tag}" bash -c '
         set -e
         apt-get update >/dev/null 2>&1
+        base_version="$(/usr/lib/postgresql/'"$pg"'/bin/postgres --version | awk "{print \$3}")"
+        case "$base_version" in
+            *alpha*|*beta*|*rc*)
+                apt_version="$(apt-cache policy postgresql-'"$pg"' | awk "/Candidate:/{print \$2}")"
+                apt_version="${apt_version#*:}"
+                apt_version="${apt_version%%-*}"
+                apt_version="${apt_version/\~/}"
+                if [ "$base_version" != "$apt_version" ]; then
+                    echo "PG prerelease mismatch: postgres:'"$tag"' is ${base_version}, PGDG serves ${apt_version}" >&2
+                    exit 1
+                fi
+                ;;
+        esac
         for p in $(apt-cache pkgnames "postgresql-'"$pg"'-" 2>/dev/null); do
             case "$p" in *-dbgsym) continue ;; esac
             v="$(apt-cache show "$p" 2>/dev/null | awk "/^Version:/{print \$2; exit}")"
             [ -n "$v" ] && echo "$p $v"
         done
-    ' 2>/dev/null | sort -u > "$tmp"; then
+    ' | sort -u > "$tmp"; then
         rm -f "$tmp"
         echo "apt-support: PGDG package query failed for PG ${pg} (docker/apt error)" >&2
         return 1
@@ -77,9 +92,11 @@ _ensure_cache() {
 
 _raw_version() {
     local pg="$1" pkg="$2"
-    _ensure_cache "$pg"
+    local tag
+    tag="$(_pg_tag "$pg")"
+    _ensure_cache "$pg" || return
     awk -v n="postgresql-${pg}-${pkg}" '$1==n {print $2; exit}' \
-        "${CACHE_DIR}/pg${pg}.list"
+        "${CACHE_DIR}/pg${pg}-${tag}.list"
 }
 
 cmd="${1:-}"; pg="${2:-}"; pkg="${3:-}"
@@ -103,12 +120,14 @@ case "$cmd" in
     available)
         [ -n "$pkg" ] || exit 1
         _ensure_cache "$pg"
+        tag="$(_pg_tag "$pg")"
         awk -v n="postgresql-${pg}-${pkg}" '$1==n{f=1} END{exit !f}' \
-            "${CACHE_DIR}/pg${pg}.list"
+            "${CACHE_DIR}/pg${pg}-${tag}.list"
         ;;
     list)
         _ensure_cache "$pg"
-        cat "${CACHE_DIR}/pg${pg}.list"
+        tag="$(_pg_tag "$pg")"
+        cat "${CACHE_DIR}/pg${pg}-${tag}.list"
         ;;
     *)
         echo "usage: $0 {version|aptversion|available|list} <pg> [apt_package]" >&2

@@ -120,7 +120,7 @@ The `$system` and `$libdir` suffixes ensure built-in contrib extensions
 |---------|--------|
 | PostgreSQL 17 | Stable |
 | PostgreSQL 18 | Stable |
-| PostgreSQL 19 | Experimental (beta -- supported until officially released) |
+| PostgreSQL 19 | Experimental (beta 4 -- supported until officially released) |
 
 All extensions are built and tested against PG 17 and 18. Support for
 PG 19 is best-effort while it remains in beta; some extensions may not
@@ -692,9 +692,9 @@ make build EXT=pgvector PG=17
 # Build all extensions for a PG version
 make build-all PG=17
 
-# Build for PG 19 (beta -- requires PG_TAG override until GA)
-make build EXT=pgvector PG=19 PG_TAG=19beta3
-make build-all PG=19 PG_TAG=19beta3
+# Build for PG 19 (the current prerelease tag is resolved automatically)
+make build EXT=pgvector PG=19
+make build-all PG=19
 
 # Build a combined image with ALL extensions included
 make image PG=17 REGISTRY=local

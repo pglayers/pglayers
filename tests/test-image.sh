@@ -102,15 +102,23 @@ fi
 echo
 
 # Run each extension's test.sql
+manifest="$(docker exec "$CONTAINER" cat /etc/pglayers/manifest.json 2>/dev/null || true)"
 for test_file in extensions/*/test.sql; do
     ext="$(basename "$(dirname "$test_file")")"
 
-    # Skip if extension is not installed in this image
-    installed="$(docker exec "$CONTAINER" psql -U postgres -tAc \
-        "SELECT count(*) FROM pg_available_extensions WHERE name LIKE '${ext//_/%}'" 2>/dev/null || echo "0")"
-    [ "$installed" = "0" ] && continue
+    # Directory names do not always match SQL extension names (pgvector ->
+    # vector), so use the combined-image manifest rather than a fuzzy catalog
+    # lookup. This also distinguishes a missing layer from a layer that cannot
+    # load against the current PostgreSQL ABI.
+    if [ -n "$manifest" ]; then
+        grep -q "\"${ext}\"" <<<"$manifest" || continue
+    else
+        installed="$(docker exec "$CONTAINER" psql -U postgres -tAc \
+            "SELECT count(*) FROM pg_available_extensions WHERE name LIKE '${ext//_/%}'" 2>/dev/null || echo "0")"
+        [ "$installed" = "0" ] && continue
+    fi
 
-    output="$(docker exec -i "$CONTAINER" psql -U postgres -tA -v ON_ERROR_STOP=0 < "$test_file" 2>&1)"
+    output="$(docker exec -i "$CONTAINER" psql -U postgres -tA -v ON_ERROR_STOP=0 < "$test_file" 2>&1 || true)"
     failures="$(echo "$output" | grep '^FAIL' || true)"
     passes="$(echo "$output" | grep -c '^PASS' || true)"
 
@@ -121,6 +129,9 @@ for test_file in extensions/*/test.sql; do
         echo "$failures" | sed 's/^/       /'
     elif [ "$passes" -gt 0 ]; then
         pass "${ext} (${passes} checks)"
+    else
+        fail "${ext}: test.sql produced no PASS/FAIL output (extension failed to load or assert)"
+        printf '%s\n' "$output" | sed 's/^/       /'
     fi
 done
 
