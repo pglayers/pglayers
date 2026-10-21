@@ -17,6 +17,6 @@
 set -eu
 
 case "${1:?usage: pg-tag.sh <pg-major>}" in
-    19) echo "19beta4" ;;
+    19) echo "19rc1" ;;
     *)  echo "$1" ;;
 esac
