@@ -25,7 +25,7 @@ def main():
 
     host = os.environ.get("DOCUMENTDB_GATEWAY_HOST", "localhost")
     port = os.environ.get("DOCUMENTDB_GATEWAY_PORT", "10260")
-    uri = f"mongodb://docdb_test:docdb_test@{host}:{port}/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
+    uri = f"mongodb://docdb_test:PglayersDocDB42@{host}:{port}/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
     failures = 0
 
     # Test: connect to gateway
