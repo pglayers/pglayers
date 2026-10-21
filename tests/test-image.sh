@@ -45,7 +45,17 @@ docker run -d --name "$CONTAINER" \
 # Wait for PostgreSQL to be ready
 printf -- "Waiting for PostgreSQL..."
 for i in $(seq 1 60); do
-    if docker exec "$CONTAINER" pg_isready -U postgres >/dev/null 2>&1; then
+    logs="$(docker logs "$CONTAINER" 2>&1)"
+    if grep -q 'PostgreSQL init process complete; ready for start up' <<<"$logs"; then
+        post_init_log="$(printf '%s\n' "$logs" \
+            | awk '/PostgreSQL init process complete; ready for start up/{p=1} p')"
+        if grep -q 'database system is ready to accept connections' <<<"$post_init_log" \
+           && docker exec "$CONTAINER" psql -U postgres -h 127.0.0.1 -tAc "SELECT 1" >/dev/null 2>&1; then
+            echo " ready."
+            break
+        fi
+    elif docker exec "$CONTAINER" psql -U postgres -h 127.0.0.1 -tAc "SELECT 1" >/dev/null 2>&1; then
+        # Existing data directories skip docker-entrypoint's init marker.
         echo " ready."
         break
     fi
@@ -162,6 +172,21 @@ if grep -q '"documentdb"' <<<"$manifest"; then
         # shellcheck disable=SC2001
         # Prepending indent to each line; no bash-native equivalent for multiline
         echo "$output" | sed 's/^/       /'
+    fi
+fi
+
+if grep -q '"pg_lake"' <<<"$manifest"; then
+    pgduck_result=""
+    for _ in $(seq 1 30); do
+        pgduck_result="$(docker exec "$CONTAINER" psql -h /tmp -p 5332 -d postgres -tAc \
+            "SELECT 42;" 2>/dev/null || true)"
+        [ "$pgduck_result" = "42" ] && break
+        sleep 1
+    done
+    if [ "$pgduck_result" = "42" ]; then
+        pass "pg_lake companion executes DuckDB query"
+    else
+        fail "pg_lake companion did not answer on /tmp:5332"
     fi
 fi
 

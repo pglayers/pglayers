@@ -284,6 +284,19 @@ image: ## Build a combined image with all extensions
 			ver=$$(./scripts/ext-version.sh "$$ext" "$(PG)"); \
 			[ -z "$$ver" ] && continue; \
 			total=$$((total + 1)); \
+			conflicts=" $$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$${CONFLICTS:-}"' | tr ',' ' ') "; \
+			conflict=""; \
+			for kept in $$included_exts; do \
+				kept_conflicts=" $$(bash -c 'source extensions/'"$$kept"'/extension.conf && echo "$${CONFLICTS:-}"' | tr ',' ' ') "; \
+				case "$$conflicts" in *" $$kept "*) conflict="$$kept" ;; esac; \
+				case "$$kept_conflicts" in *" $$ext "*) conflict="$$kept" ;; esac; \
+				[ -n "$$conflict" ] && break; \
+			done; \
+			if [ -n "$$conflict" ]; then \
+				echo "# Excluding $$ext (CONFLICTS with $$conflict)"; \
+				skipped="$${skipped:+$$skipped }$$ext"; \
+				continue; \
+			fi; \
 			if [ "$(REGISTRY)" = "local" ]; then \
 				docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || { skipped="$${skipped:+$$skipped }$$ext"; continue; }; \
 			else \
@@ -302,25 +315,27 @@ image: ## Build a combined image with all extensions
 		PGLAYERS_MAX_WORKER_PROCESSES="$(MAX_WORKER_PROCESSES)" \
 			./scripts/combined-config.sh "$(PG)" $$included_exts; \
 		companions=""; \
-		for ext in $(EXTENSIONS); do \
-			ver=$$(./scripts/ext-version.sh "$$ext" "$(PG)"); \
-			[ -z "$$ver" ] && continue; \
-			if [ "$(REGISTRY)" = "local" ]; then \
-				docker image inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
-			else \
-				docker buildx imagetools inspect "$(REGISTRY)/$(PREFIX)-$$ext:$(PG)" >/dev/null 2>&1 || continue; \
-			fi; \
+		companion_ready=""; \
+		for ext in $$included_exts; do \
 			cmd=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$${COMPANION_CMD:-}"'); \
+			user=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$${COMPANION_USER:-}"'); \
+			ready=$$(bash -c 'source extensions/'"$$ext"'/extension.conf && echo "$${COMPANION_READY_CMD:-}"'); \
 			if [ -n "$$cmd" ] && [ "$(PG)" -ge 18 ] 2>/dev/null; then \
 				cmd="/extensions/$$ext/bin/$$cmd"; \
 			fi; \
+			[ -n "$$cmd" ] && [ -n "$$user" ] && cmd="gosu $$user $$cmd"; \
 			[ -n "$$cmd" ] && companions="$${companions:+$$companions|}$$cmd"; \
+			[ -n "$$ready" ] && companion_ready="$${companion_ready:+$$companion_ready|}$$ready"; \
 		done; \
 		if [ -n "$$companions" ]; then \
 			echo "RUN { echo '#!/bin/bash'; \\"; \
 			echo "$${companions}" | tr '|' '\n' | while IFS= read -r c; do \
 				[ -z "$$c" ] && continue; \
 				echo "     echo '$$c &'; \\"; \
+			done; \
+			echo "$${companion_ready}" | tr '|' '\n' | while IFS= read -r c; do \
+				[ -z "$$c" ] && continue; \
+				echo "     echo '$$c'; \\"; \
 			done; \
 			echo "     echo 'exec docker-entrypoint.sh \"\$$@\"'; \\"; \
 			echo "   } > /usr/local/bin/pglayers-entrypoint.sh && chmod +x /usr/local/bin/pglayers-entrypoint.sh"; \
