@@ -114,6 +114,14 @@ if has_ext documentdb; then
 	printf 'RUN mkdir -p /etc/documentdb && printf '\''%%s\\n'\'' '\''{"IsPrimary":"true","SendShutdownResponses":"false"}'\'' > /etc/documentdb/host_config.json\n'
 fi
 
+# pgduck_server downloads DuckDB extensions over HTTPS on first start. In the
+# isolated layout its bundled trust store stays inside the pg_lake namespace.
+if has_ext pg_lake; then
+	if [ "$PG" -ge 18 ] 2>/dev/null; then
+		printf 'RUN mkdir -p /etc/ssl/certs && ln -sf /extensions/pg_lake/etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt\n'
+	fi
+fi
+
 # documentdb's gateway GUC points at /etc/documentdb/gateway_config.json. On the
 # isolated (PG18+) layout the layer ships it under /extensions/documentdb/etc/,
 # so link it into place. On classic (PG17) the layer already installs it at the
