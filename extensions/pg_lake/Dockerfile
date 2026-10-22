@@ -2,7 +2,7 @@
 ARG PG_MAJOR=17
 ARG PG_TAG=${PG_MAJOR}
 ARG LAYOUT=classic
-ARG EXT_VERSION=v3.4.1
+ARG EXT_VERSION=v3.5.7
 ARG VCPKG_VERSION=2025.10.17
 
 # Capture base image library list for dep-bundling
@@ -98,15 +98,33 @@ RUN mkdir -p /output && \
     find /output -name '*.so' -exec strip --strip-unneeded {} \; && \
     find /output -name 'pgduck_server' -exec strip --strip-unneeded {} \;
 
+# pgduck_server installs DuckDB extensions over HTTPS on first start. The
+# official postgres runtime does not ship Debian's CA bundle, so carry it in
+# this layer or the companion exits before binding its Unix socket.
+RUN mkdir -p /output/etc/ssl/certs && \
+    cp /etc/ssl/certs/ca-certificates.crt /output/etc/ssl/certs/
+
 # Create auto-start entrypoint wrapper
 RUN mkdir -p /output/usr/local/bin && \
     printf '%s\n' \
         '#!/bin/bash' \
         '# Start pgduck_server in the background (required by pg_lake extensions).' \
         '# Listens on Unix socket /tmp:5332 -- no external port needed.' \
-        'PG_BINDIR="$(pg_config --bindir 2>/dev/null || echo /usr/lib/postgresql/17/bin)"' \
-        'if [ -x "$PG_BINDIR/pgduck_server" ]; then' \
-        '    "$PG_BINDIR/pgduck_server" --cache_dir /tmp/pg_lake_cache &' \
+        '# Isolated layout (PG 18+): pgduck_server sits next to this script in' \
+        '# /extensions/pg_lake/bin. Classic layout (PG 17): it is in the PG bindir.' \
+        'if [ ! -r /etc/ssl/certs/ca-certificates.crt ]; then' \
+        '    mkdir -p /etc/ssl/certs' \
+        '    ln -sf "$(dirname "$(readlink -f "$0")")/../etc/ssl/certs/ca-certificates.crt" /etc/ssl/certs/ca-certificates.crt' \
+        'fi' \
+        'PGDUCK="$(dirname "$(readlink -f "$0")")/pgduck_server"' \
+        '[ -x "$PGDUCK" ] || PGDUCK="$(pg_config --bindir)/pgduck_server"' \
+        'if [ -x "$PGDUCK" ]; then' \
+        '    gosu postgres "$PGDUCK" --cache_dir /tmp/pg_lake_cache &' \
+        '    for _ in $(seq 1 60); do' \
+        '        pg_isready -h /tmp -p 5332 >/dev/null 2>&1 && break' \
+        '        sleep 1' \
+        '    done' \
+        '    pg_isready -h /tmp -p 5332 >/dev/null 2>&1 || exit 1' \
         'fi' \
         'exec docker-entrypoint.sh "$@"' \
         > /output/usr/local/bin/pg-lake-entrypoint.sh && \
@@ -210,10 +228,13 @@ ARG PG_MAJOR
 RUN set -eux; \
     PG=${PG_MAJOR}; \
     tag="pglx_pg_lake_"; \
-    mkdir -p /isolated/lib /isolated/share/extension /isolated/bin; \
+    mkdir -p /isolated/lib /isolated/share/extension /isolated/bin /isolated/etc/ssl/certs; \
     find /output/usr/lib/postgresql/${PG}/lib -maxdepth 1 -type f \
         -exec cp -a {} /isolated/lib/ \; ; \
     cp -a /output/usr/share/postgresql/${PG}/extension/* /isolated/share/extension/; \
+    # $libdir bypasses dynamic_library_path and points at PostgreSQL's system
+    # libdir. Bare module names resolve through the isolated layer path.
+    sed -i 's|\$libdir/||g' /isolated/share/extension/*.control; \
     : > /tmp/bundled.txt; \
     find /output/usr/lib -name '*.so*' ! -path '*/postgresql/*' \
         \( -type f -o -type l \) 2>/dev/null | while IFS= read -r f; do \
@@ -224,6 +245,7 @@ RUN set -eux; \
     fi; \
     find /output/usr/local/bin -type f \
         -exec sh -c 'cp -a "$1" /isolated/bin/' _ {} \; 2>/dev/null || true; \
+    cp -a /output/etc/ssl/certs/ca-certificates.crt /isolated/etc/ssl/certs/; \
     cp -a /output/usr/lib/postgresql/${PG}/lib/bitcode /isolated/lib/bitcode \
         2>/dev/null || true; \
     if [ -s /tmp/bundled.txt ]; then \

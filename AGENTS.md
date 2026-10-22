@@ -653,6 +653,13 @@ must be updated in the same commit**:
    because it embeds a multi-threaded engine incompatible with
    PostgreSQL's process model).
 
+   If PostgreSQL must not start until the companion is ready, also set
+   `COMPANION_READY_CMD` to a shell command that blocks until readiness or
+   exits non-zero. Combined profile entrypoints run it after starting all
+   companions and before delegating to the standard PostgreSQL entrypoint.
+   Set `COMPANION_USER` when the process must run as a non-root user (typically
+   `postgres` for a Unix socket consumed by PostgreSQL background workers).
+
 10. **`extension.conf` CONFLICTS field** -- Some extensions cannot be
    loaded into the same backend *no matter how well the layers are
    isolated*, because the conflict is at the **runtime/symbol** level, not
