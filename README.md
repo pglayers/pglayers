@@ -163,7 +163,7 @@ promoted to stable.
 | [pg_graphql](https://github.com/supabase/pg_graphql) | 1.6.1 | 17, 18 | GraphQL support for PostgreSQL |
 | [pg_hashids](https://github.com/iCyberon/pg_hashids) | 1.2.1 | 17, 18, 19 | Short unique hash IDs from integers |
 | [pg_hint_plan](https://github.com/ossc-db/pg_hint_plan) | 1.7.1 | 17, 18 | Tweak execution plans using hints in SQL comments |
-| [pg_incremental](https://github.com/CrunchyData/pg_incremental) | 1.5.0 | 17, 18, 19 | Incremental batch processing pipelines scheduled with pg_cron |
+| [pg_incremental](https://github.com/CrunchyData/pg_incremental) | 1.5.0 | 17, 18 | Incremental batch processing pipelines scheduled with pg_cron |
 | [pg_ivm](https://github.com/sraoss/pg_ivm) | 1.13 | 17, 18 | Incremental View Maintenance for materialized views |
 | [pg_jsonschema](https://github.com/supabase/pg_jsonschema) | 0.3.4 | 17, 18 | JSON Schema validation |
 | [pg_lake](https://github.com/Snowflake-Labs/pg_lake) | 3.5.7 | 17, 18 | Iceberg and data lake access (Parquet, CSV, JSON via DuckDB) |
