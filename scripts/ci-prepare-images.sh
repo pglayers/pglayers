@@ -86,8 +86,10 @@ isolated_ok() {
 	[ "$PG" -ge 18 ] 2>/dev/null || return 0
 	local cid ok=no
 	cid="$(docker create "$img" true 2>/dev/null)" || return 1
+	# Do not use grep -q here. With pipefail it exits after the first match,
+	# causing tar/docker export to receive SIGPIPE and rejecting valid images.
 	if docker export "$cid" 2>/dev/null | tar -t 2>/dev/null \
-		| grep -q '^lib/\|^share/extension/'; then
+		| grep '^lib/\|^share/extension/' >/dev/null; then
 		ok=yes
 	fi
 	docker rm "$cid" >/dev/null 2>&1 || true
