@@ -4,6 +4,21 @@
 
 Composable PostgreSQL extension Docker layers on top of official images.
 
+## Git History Policy
+
+Keep the Git history **linear**. Never create merge commits.
+
+- **Rebase-merge pull requests** with `gh pr merge <number> --rebase`.
+  Never use `--merge`. Existing automated squash merges are also linear
+  and may remain enabled.
+- **Update branches by rebasing** onto `origin/main`, not by merging
+  `main` into the branch. Never rewrite the published `main` history.
+- **GitHub configuration:** keep merge commits disabled, rebase merges
+  enabled, and **Require linear history** enabled for `main`.
+- **Local repository configuration:** set `git config --local pull.rebase true`
+  and `git config --local merge.ff only` so pulls rebase and ordinary
+  merges refuse to create a merge commit.
+
 ## Licensing Policy
 
 This project only ships extensions with **permissive (or safe
