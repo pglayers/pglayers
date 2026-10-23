@@ -177,6 +177,7 @@ promoted to stable.
 | [pg_rrule](https://github.com/Natureshadow/pg_rrule) | 0.3.0 | 17, 18, 19 | iCalendar RRULE recurrence type and occurrence expansion |
 | [pg_similarity](https://github.com/eulerto/pg_similarity) | 1.0 | 17, 18 | Similarity functions (Levenshtein, Jaro-Winkler, Cosine, Jaccard) |
 | [pg_squeeze](https://github.com/cybertec-postgresql/pg_squeeze) | 1.9.3 | 17, 18, 19 | Remove unused space from tables without heavy locks |
+| [pg_stat_kcache](https://github.com/powa-team/pg_stat_kcache) | 2.3.2 | 17, 18, 19 | Per-query kernel statistics (CPU time, filesystem I/O, page faults) |
 | [pg_stat_monitor](https://github.com/percona/pg_stat_monitor) | 2.3.2 | 17, 18 | Enhanced query statistics with histograms and buckets |
 | [pg_textsearch](https://github.com/timescale/pg_textsearch) | 1.3.1 | 17, 18 | BM25 relevance-ranked full-text search |
 | [pg_uuidv7](https://github.com/fboulnois/pg_uuidv7) | 1.7.0 | 17, 18, 19 | UUIDv7 generation (time-sortable unique identifiers) |
@@ -257,6 +258,7 @@ Extensions that need this:
 | pg_qualstats | `pg_qualstats` |
 | pg_show_plans | `pg_show_plans` |
 | pg_squeeze | `pg_squeeze` |
+| pg_stat_kcache | `pg_stat_statements,pg_stat_kcache` |
 | pg_stat_monitor | `pg_stat_monitor` |
 | pg_textsearch | `pg_textsearch` |
 | pg_wait_sampling | `pg_wait_sampling` |
@@ -410,6 +412,29 @@ Pipelines created with `schedule := NULL` are not scheduled and can be run
 by hand with `CALL incremental.execute_pipeline('<name>')`. File list
 pipelines list new files with pg_lake's `lake_file.list` by default, so
 they pair with the `pg_lake` layer.
+
+### pg_stat_kcache
+
+pg_stat_kcache adds per-query kernel resource statistics to
+`pg_stat_statements`, which is already shipped in the official PostgreSQL
+base image (no extra layer needed). Preload both libraries, then restart
+PostgreSQL:
+
+```ini
+shared_preload_libraries = 'pg_stat_statements,pg_stat_kcache'
+```
+
+Create both extensions in each database where you want to query statistics:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+CREATE EXTENSION IF NOT EXISTS pg_stat_kcache;
+SELECT * FROM pg_stat_kcache_detail;
+```
+
+`pg_stat_kcache_detail` joins per-query CPU time, filesystem I/O, and other
+kernel counters to query text; `pg_stat_kcache` aggregates them by database.
+The full profile configures both preload libraries automatically.
 
 ### Profile images (auto-configuration)
 

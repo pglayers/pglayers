@@ -487,6 +487,7 @@ declare -A EXT_SQL_NAMES=(
     [pg_roaringbitmap]="roaringbitmap"
     [pg_similarity]="pg_similarity"
     [pg_squeeze]="pg_squeeze"
+    [pg_stat_kcache]="pg_stat_kcache"
     [pg_stat_monitor]="pg_stat_monitor"
     [pg_textsearch]="pg_textsearch"
     [pg_uuidv7]="pg_uuidv7"

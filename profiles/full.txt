@@ -54,6 +54,7 @@ pg_similarity
 pgsodium
 pgsphere
 pg_squeeze
+pg_stat_kcache
 pg_stat_monitor
 pg_statviz
 pgtap
