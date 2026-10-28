@@ -135,7 +135,7 @@ promoted to stable.
 | [anon](https://gitlab.com/dalibo/postgresql_anonymizer) | 3.1.1 | 17, 18 | Data anonymization and masking |
 | [credcheck](https://github.com/HexaCluster/credcheck) | 5.0 | 17, 18, 19 | Credential checks on user creation / password change |
 | [db2fce](https://github.com/credativ/db2fce) | 0.0.17 | 17, 18 | DB2 compatibility functions (date/time, string helpers) |
-| [documentdb](https://github.com/documentdb/documentdb) | 0.117-0 | 17, 18 | MongoDB-compatible document database engine (BSON types and CRUD API) |
+| [documentdb](https://github.com/documentdb/documentdb) | 1.0-0 | 17, 18 | MongoDB-compatible document database engine (BSON types and CRUD API) |
 | [extra_window_functions](https://github.com/xocolatl/extra_window_functions) | 1.0 | 17, 18, 19 | Extra window functions (ignore-nulls variants, nth-from-last) |
 | [first_last_agg](https://github.com/wulczer/first_last_agg) | 0.1.4-4-gd63ea3b | 17, 18 | first() and last() aggregate functions |
 | [h3-pg](https://github.com/zachasme/h3-pg) | 4.2.3 | 17, 18 | Uber H3 hexagonal geospatial indexing |
@@ -306,6 +306,16 @@ PostGIS Docker image).
 
 ### DocumentDB
 
+This layer ships stable DocumentDB **1.0**, using the PGDG Debian package
+and matching upstream `v1.0-0` gateway source. The SQL extension version
+is `1.0-0`.
+
+> **Existing databases:** replacing the image does not automatically
+> update installed SQL extensions. Follow the upstream
+> [upgrade guidance](https://documentdb.io/docs/getting-started/release-notes-1.0#upgrading).
+> Upgrades from release-candidate databases to final 1.0 are unsupported;
+> migrate RC data to a fresh instance instead of reusing its data directory.
+
 DocumentDB provides a MongoDB-compatible document database engine built
 on PostgreSQL. It consists of two extensions:
 
@@ -329,7 +339,7 @@ CREATE EXTENSION IF NOT EXISTS documentdb;
 CREATE EXTENSION IF NOT EXISTS documentdb_extended_rum;
 ```
 
-DocumentDB 0.117 requires Extended RUM by default for index operations.
+DocumentDB 1.0 requires Extended RUM by default for index operations.
 `CREATE EXTENSION documentdb CASCADE` does not create
 `documentdb_extended_rum`, so it must be created separately.
 

@@ -10,7 +10,8 @@ END;
 
 -- Test: BSON equality comparison
 SELECT CASE
-    WHEN '{"a": 1}'::documentdb_core.bson = '{"a": 1}'::documentdb_core.bson
+    WHEN '{"a": 1}'::documentdb_core.bson
+         OPERATOR(documentdb_core.=) '{"a": 1}'::documentdb_core.bson
     THEN 'PASS documentdb: BSON equality comparison'
     ELSE 'FAIL documentdb: BSON equality comparison'
 END;
@@ -43,14 +44,18 @@ SELECT CASE
     ELSE 'FAIL documentdb: gateway module loaded (GUC present)'
 END;
 
--- Test: DocumentDB SQL API insert/find roundtrip. The MongoDB wire protocol is
+-- Test: DocumentDB SQL API insert/read roundtrip. The MongoDB wire protocol is
 -- validated separately by extensions/documentdb/test_mongo.py.
 SELECT documentdb_api.insert_one('test_db', 'test_coll', '{"_id": 1, "msg": "hello from pglayers"}');
 
 SELECT CASE
-    WHEN documentdb_api.find_one('test_db', 'test_coll', '{"_id": 1}') IS NOT NULL
-    THEN 'PASS documentdb: insert_one and find_one roundtrip'
-    ELSE 'FAIL documentdb: insert_one and find_one roundtrip'
+    WHEN EXISTS (
+        SELECT 1 FROM documentdb_api.collection('test_db', 'test_coll')
+        WHERE document OPERATOR(documentdb_core.=)
+              '{"_id": 1, "msg": "hello from pglayers"}'::documentdb_core.bson
+    )
+    THEN 'PASS documentdb: insert_one and collection read roundtrip'
+    ELSE 'FAIL documentdb: insert_one and collection read roundtrip'
 END;
 
 -- Cleanup

@@ -2,7 +2,7 @@
 ARG PG_MAJOR=17
 ARG PG_TAG=${PG_MAJOR}
 ARG LAYOUT=classic
-ARG EXT_VERSION=v0.117-0
+ARG EXT_VERSION=v1.0-0
 
 # ── Stage 1: Snapshot base image libs (for dep-bundling) ────────────
 FROM postgres:${PG_TAG} AS base
@@ -23,10 +23,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Download the matching Debian build from the PGDG APT repository configured
 # in the official postgres image. Do not use upstream's Ubuntu release asset:
 # it is linked against Ubuntu's ICU ABI and cannot load on Debian.
+# For prerelease tags, translate upstream's -RC suffix to Debian's ~RC.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     set -eux; \
-    DEB_VERSION="${EXT_VERSION#v}"; \
+    DEB_VERSION="$(printf '%s' "${EXT_VERSION#v}" | sed 's/-RC/~RC/')"; \
     package="postgresql-${PG_MAJOR}-documentdb"; \
     apt-get update; \
     apt_version="$(apt-cache madison "$package" \
@@ -71,10 +72,13 @@ RUN set -eux; \
 FROM rust:1.92-bookworm AS pgrx-builder
 ARG EXT_VERSION
 
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
+# Serialize Cargo cache writes when different PG majors build concurrently.
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     cargo install cargo-pgrx --version 0.16.0 --locked
 
-RUN apt-get update && apt-get install -y --no-install-recommends git \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends git \
     && git clone --branch ${EXT_VERSION} --depth 1 \
        https://github.com/documentdb/documentdb.git /tmp/ext
 
@@ -111,8 +115,8 @@ WORKDIR /tmp/ext/pg_documentdb_gw_host
 # config's `target.'cfg(...)'.rustflags`, replacing the v3/AVX2 flags entirely.
 # arm64 is unaffected (the upstream cfg gate is x86_64-only), so leave its
 # RUSTFLAGS untouched to keep the aarch64 baseline.
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/tmp/ext/pg_documentdb_gw_host/target \
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/tmp/ext/pg_documentdb_gw_host/target,sharing=locked \
     case "$TARGETARCH" in amd64) export RUSTFLAGS="-C target-cpu=x86-64" ;; esac; \
     cargo pgrx package --no-default-features --features "pg${PG_MAJOR}" \
         --pg-config "/usr/lib/postgresql/${PG_MAJOR}/bin/pg_config" \

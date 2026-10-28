@@ -131,7 +131,7 @@ jobs:
           # architectures; Debian revision suffixes are deliberately accepted.
           apt_package_published() {
             pkg_suffix="$1"; tag="$2"; miss=0
-            version="${tag#v}"
+            version="$(printf '%s' "${tag#v}" | sed 's/-RC/~RC/')"
             for pg in 17 18 19; do
               ver_var="VERSION_${pg}"
               [ -n "${!ver_var:-}" ] || continue
@@ -292,6 +292,13 @@ jobs:
 
             current_norm="${current#v}"
             latest_norm="${latest#v}"
+            # Hybrid PGDG builds can temporarily pin an upstream -RC tag.
+            # Debian's ~RC spelling sorts below the final release: otherwise
+            # sort -V treats 1.0-0 as older than 1.0-RC1 and never upgrades it.
+            if [ -n "$release_apt_package" ]; then
+              current_norm="$(printf '%s' "$current_norm" | sed 's/-RC/~RC/')"
+              latest_norm="$(printf '%s' "$latest_norm" | sed 's/-RC/~RC/')"
+            fi
             if [ "$current_norm" = "$latest_norm" ]; then
               echo "OK   $ext: ${current} (up to date, prefix difference only)"
               continue
