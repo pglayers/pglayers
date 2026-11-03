@@ -28,14 +28,20 @@ SELECT CASE
     ELSE 'FAIL postgis: GeoJSON output'
 END;
 
--- Test: spatial index
+-- Test: spatial statistics and GiST index query (also exercises PG 19 planner APIs)
 CREATE TABLE test_postgis (id serial, geom geometry(Point, 4326));
-INSERT INTO test_postgis (geom) SELECT ST_SetSRID(ST_GeomFromText('POINT(' || (random()*360-180) || ' ' || (random()*180-90) || ')'), 4326) FROM generate_series(1,100);
+INSERT INTO test_postgis (geom)
+SELECT ST_SetSRID(ST_MakePoint(n % 10, n / 10), 4326)
+FROM generate_series(0, 99) AS n;
 CREATE INDEX ON test_postgis USING gist (geom);
+ANALYZE test_postgis;
+SET enable_seqscan = off;
 SELECT CASE
-    WHEN (SELECT count(*) FROM test_postgis WHERE ST_DWithin(geom, ST_SetSRID(ST_GeomFromText('POINT(0 0)'), 4326), 50)) >= 0
+    WHEN (SELECT count(*) FROM test_postgis
+          WHERE ST_DWithin(geom, ST_SetSRID(ST_MakePoint(5, 5), 4326), 1.5)) = 9
     THEN 'PASS postgis: GiST spatial index query'
     ELSE 'FAIL postgis: GiST spatial index query'
 END;
+RESET enable_seqscan;
 
 DROP TABLE test_postgis;

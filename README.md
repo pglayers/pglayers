@@ -120,10 +120,10 @@ The `$system` and `$libdir` suffixes ensure built-in contrib extensions
 |---------|--------|
 | PostgreSQL 17 | Stable |
 | PostgreSQL 18 | Stable |
-| PostgreSQL 19 | Experimental (beta 4 -- supported until officially released) |
+| PostgreSQL 19 | Experimental (release candidate 1 -- supported until officially released) |
 
 All extensions are built and tested against PG 17 and 18. Support for
-PG 19 is best-effort while it remains in beta; some extensions may not
+PG 19 is best-effort while it remains a prerelease; some extensions may not
 yet have upstream compatibility. Once PG 19 reaches GA, it will be
 promoted to stable.
 
@@ -199,7 +199,7 @@ promoted to stable.
 | [plpgsql_check](https://github.com/okbob/plpgsql_check) | 2.10.1 | 17, 18, 19 | PL/pgSQL linter and validator |
 | [plprofiler](https://github.com/bigsql/plprofiler) | 4.2.5 | 17, 18 | Performance profiler for PL/pgSQL functions |
 | [plv8](https://github.com/plv8/plv8) | 3.2.4 | 17, 18 | JavaScript (V8) procedural language |
-| [PostGIS](https://github.com/postgis/postgis) | 3.6.4 | 17, 18, 19 | Geospatial extensions (geometry, geography, raster, MVT) |
+| [PostGIS](https://github.com/postgis/postgis) | 3.7.0 | 17, 18, 19 | Geospatial extensions (geometry, geography, raster, MVT) |
 | [postgres_protobuf](https://github.com/mpartel/postgres-protobuf) | 0.3.2 | 17, 18, 19 | Protocol Buffer support (query, convert to/from JSON) |
 | [prefix](https://github.com/dimitri/prefix) | 1.2.11 | 17, 18, 19 | Prefix range data type for phone routing lookups |
 | [prioritize](https://github.com/cybertec-postgresql/prioritize) | 1.0.4 | 17, 18 | Get/set OS scheduling priority of backend processes |
@@ -626,7 +626,7 @@ You can also define extensions directly without a catalog:
           reference: ghcr.io/pglayers/pgx-pgvector:18-0.8.4
       - name: postgis
         image:
-          reference: ghcr.io/pglayers/pgx-postgis:18-3.6.4
+          reference: ghcr.io/pglayers/pgx-postgis:18-3.7.0
         ld_library_path:
           - lib
 ```
@@ -654,7 +654,7 @@ spec:
         reference: ghcr.io/pglayers/pgx-pgvector:18-0.8.4
     - name: ext-postgis
       image:
-        reference: ghcr.io/pglayers/pgx-postgis:18-3.6.4
+        reference: ghcr.io/pglayers/pgx-postgis:18-3.7.0
     - name: ext-pg-cron
       image:
         reference: ghcr.io/pglayers/pgx-pg_cron:18-v1.6.7
