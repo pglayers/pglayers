@@ -22,6 +22,9 @@
 
 set -euo pipefail
 
+# shellcheck source=tests/k3d-import.sh
+source "$(dirname "$0")/k3d-import.sh"
+
 REGISTRY="${1:-local}"
 PG="${2:-18}"
 PREFIX="pgx"
@@ -115,18 +118,16 @@ pass "CNPG operator v${CNPG_VERSION} running"
 # ============================================================
 info "Importing images into cluster..."
 
-# Import extension images
+# Import extension images (k3d_import verifies each one is visible to the
+# kubelet, so no settle delay is needed before the pods reference them).
 for ext in "${TEST_EXTENSIONS[@]}"; do
-    k3d image import "${REGISTRY}/${PREFIX}-${ext}:${PG}" -c "$CLUSTER_NAME" 2>/dev/null
+    k3d_import "$CLUSTER_NAME" "${REGISTRY}/${PREFIX}-${ext}:${PG}"
 done
 
 # CNPG operand image must match our extension build distro (Trixie/glibc 2.38+)
 CNPG_PG_IMAGE="ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie"
 docker pull "$CNPG_PG_IMAGE" >/dev/null 2>&1 || true
-k3d image import "$CNPG_PG_IMAGE" -c "$CLUSTER_NAME" 2>/dev/null
-
-# Wait for containerd to fully register imported images (avoids ErrImageNeverPull race)
-sleep 5
+k3d_import "$CLUSTER_NAME" "$CNPG_PG_IMAGE"
 
 pass "Images imported: CNPG PG 18 + ${TEST_EXTENSIONS[*]}"
 
