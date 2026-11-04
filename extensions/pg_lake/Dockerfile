@@ -61,7 +61,16 @@ WORKDIR /tmp/pg_lake
 
 # Build and install everything (avro + extensions + DuckDB + pgduck_server)
 # LIBRARY_PATH ensures pgduck_server linker finds libpgcommon/libpgport in pkglibdir
+#
+# COPT='-include limits.h': PostgreSQL 19's c.h no longer pulls in <limits.h>
+# transitively, but pg_lake (<= v3.6.0) uses INT_MAX etc. without including it
+# (e.g. pg_lake_iceberg/src/init.c: "'INT_MAX' undeclared"). PGXS appends COPT
+# to CFLAGS of every sub-extension, restoring the header without patching
+# upstream sources. Exported via the environment so it reaches the recursive
+# $(MAKE) -C <subdir> builds. Harmless on PG 17/18 (include-guarded). Drop
+# once upstream adds the missing #include <limits.h>.
 RUN LIBRARY_PATH="$(pg_config --pkglibdir):${LIBRARY_PATH:-}" \
+    COPT='-include limits.h' \
     make install -j"$(nproc)"
 
 # Collect output artifacts
