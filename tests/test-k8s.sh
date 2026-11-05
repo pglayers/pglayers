@@ -21,6 +21,9 @@
 
 set -euo pipefail
 
+# shellcheck source=tests/k3d-import.sh
+source "$(dirname "$0")/k3d-import.sh"
+
 REGISTRY="${1:-local}"
 PG="${2:-18}"
 PREFIX="pgx"
@@ -36,7 +39,7 @@ TEST_EXTENSIONS=(pgvector pg_cron postgis)
 if [ -t 1 ]; then
     RED='\033[0;31m'; GREEN='\033[0;32m'; NC='\033[0m'
 else
-    RED=''; GREEN=''; YELLOW=''; NC=''
+    RED=''; GREEN=''; NC=''
 fi
 
 PASS=0
@@ -104,11 +107,12 @@ info "Importing images into cluster..."
 
 # Import postgres base image
 docker pull "postgres:${PG}" >/dev/null 2>&1 || true
-k3d image import "postgres:${PG}" -c "$CLUSTER_NAME" 2>/dev/null
+k3d_import "$CLUSTER_NAME" "postgres:${PG}"
 
-# Import extension images
+# Import extension images (k3d_import fails loudly if the kubelet cannot see
+# the image afterwards, instead of surfacing later as ErrImageNeverPull).
 for ext in "${TEST_EXTENSIONS[@]}"; do
-    k3d image import "${REGISTRY}/${PREFIX}-${ext}:${PG}" -c "$CLUSTER_NAME" 2>/dev/null
+    k3d_import "$CLUSTER_NAME" "${REGISTRY}/${PREFIX}-${ext}:${PG}"
 done
 pass "Images imported: postgres:${PG} + ${TEST_EXTENSIONS[*]}"
 
