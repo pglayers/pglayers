@@ -1,0 +1,26 @@
+diff --git a/pg_lake_iceberg/src/init.c b/pg_lake_iceberg/src/init.c
+--- a/pg_lake_iceberg/src/init.c
++++ b/pg_lake_iceberg/src/init.c
+@@ -19,6 +19,9 @@
+  * pg_lake_iceberg extension entry-point.
+  */
+ #include "postgres.h"
++
++#include <limits.h>
++
+ #include "fmgr.h"
+ #include "miscadmin.h"
+ #include "utils/guc.h"
+diff --git a/pg_lake_table/src/init.c b/pg_lake_table/src/init.c
+--- a/pg_lake_table/src/init.c
++++ b/pg_lake_table/src/init.c
+@@ -19,6 +19,9 @@
+  * pg_lake_copy extension entry-point.
+  */
+ #include "postgres.h"
++
++#include <limits.h>
++
+ #include "fmgr.h"
+ #include "miscadmin.h"
+ 
