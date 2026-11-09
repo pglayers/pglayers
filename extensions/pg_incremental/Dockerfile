@@ -5,7 +5,7 @@ ARG LAYOUT=classic
 
 FROM postgres:${PG_TAG} AS builder
 ARG PG_MAJOR
-ARG EXT_VERSION=v1.5.0
+ARG EXT_VERSION=v1.6.1
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
