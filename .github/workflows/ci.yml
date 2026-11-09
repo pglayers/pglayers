@@ -299,6 +299,8 @@ jobs:
         run: make check-profiles
       - name: Check licenses
         run: make check-licenses
+      - name: Test SQL harness
+        run: make test-harness
 
   # ---------------------------------------------------------------------------
   # Build each layer ONCE and push an immutable staging tag. Runs on the PR

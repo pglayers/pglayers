@@ -41,7 +41,7 @@ endif
 # Default: native architecture only (fast local builds).
 PLATFORM ?=
 
-.PHONY: help list build build-all image push push-all dockerfile clean clean-all test test-image verify-multiarch list-profiles check-profiles check-licenses add-apt-ext
+.PHONY: help list build build-all image push push-all dockerfile clean clean-all test test-harness test-image verify-multiarch list-profiles check-profiles check-licenses add-apt-ext
 
 help: ## Show this help
 	@printf "Usage:\n"
@@ -53,6 +53,7 @@ help: ## Show this help
 	@printf "  make dockerfile EXT=pgvector      Print generated Dockerfile to stdout\n"
 	@printf "  make list                         List available extensions\n"
 	@printf "  make test [REGISTRY=local] [PG=17] Run collision and functional tests\n"
+	@printf "  make test-harness                 Run SQL test-runner regression tests (no Docker)\n"
 	@printf "  make test-image [PG=17]            Run integration tests against combined image\n"
 	@printf "  make list-profiles                 List available profiles\n"
 	@printf "  make check-profiles                Verify profile files are in sync\n"
@@ -425,10 +426,13 @@ clean-all: ## Remove all built extension images
 	done
 	@echo "Done. Run 'docker image prune' to reclaim disk space."
 
-test: ## Run layer collision and functional tests
+test-harness: ## Run SQL test-runner regression tests without Docker
+	@bash tests/test-sql-test-lib.sh
+
+test: test-harness ## Run layer collision and functional tests
 	@PGLAYERS_EXTENSIONS="$(EXTENSIONS)" ./tests/test-layers.sh $(REGISTRY) $(PG)
 
-test-image: ## Run integration tests against the combined image
+test-image: test-harness ## Run integration tests against the combined image
 	@./tests/test-image.sh $(IMAGE_NAME):$(PG)
 
 # PLATFORM defaults to amd64+arm64; override to check a different set.

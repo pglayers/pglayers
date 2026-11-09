@@ -11,6 +11,9 @@
 
 set -euo pipefail
 
+# shellcheck source=tests/sql-test-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/sql-test-lib.sh"
+
 REGISTRY="${1:-local}"
 PG="${2:-17}"
 PREFIX="pgx"
@@ -605,10 +608,6 @@ echo
 # ============================================================
 info "Phase 8: Integration tests (extensions/*/test.sql)..."
 
-# Ensure container is healthy before starting integration tests
-wait_for_ready
-
-phase8_crash=""
 for ext in "${EXTENSIONS[@]}"; do
     # Skip extensions that couldn't be created due to a benign object collision
     # with another extension in the shared combined-image database (see Phase 7).
@@ -621,39 +620,14 @@ for ext in "${EXTENSIONS[@]}"; do
         fail "${ext}: no test.sql (every extension must ship functional tests)"
         continue
     fi
-    output="$(docker exec -i pgx-func-test psql -U postgres -tA -v ON_ERROR_STOP=0 < "$test_file" 2>&1)" || true
-    # Retry up to 3 times if the server was in recovery mode
-    retries=0
-    while [ "$retries" -lt 3 ] && echo "$output" | grep -qE "recovery mode|not yet accepting|crash of another|server closed the connection"; do
-        phase8_crash="$ext"
-        wait_for_ready
-        output="$(docker exec -i pgx-func-test psql -U postgres -tA -v ON_ERROR_STOP=0 < "$test_file" 2>&1)" || true
-        ((retries++)) || true
-    done
-    # A backend crash takes down every connection, so a co-loaded extension can
-    # cascade failures across the rest of the phase. Record it for diagnostics.
-    echo "$output" | grep -qE "crash of another|server closed the connection|terminating connection" && phase8_crash="$ext"
-    failures="$(echo "$output" | grep '^FAIL' || true)"
-    passes="$(echo "$output" | grep -c '^PASS' || true)"
-    if [ -n "$failures" ]; then
-        fail "integration ${ext}:"
-        # shellcheck disable=SC2001
-        # Prepending indent to each line; no bash-native equivalent for multiline
-        echo "$failures" | sed 's/^/       /'
-    elif [ "$passes" -gt 0 ]; then
-        pass "integration ${ext} (${passes} checks)"
-    else
-        fail "${ext}: test.sql produced no PASS/FAIL output (extension failed to load or assert)"
+    # Recover before the next extension, but never retry a crashing test into a
+    # PASS. Its first failure and diagnostics must remain visible.
+    if ! wait_for_ready; then
+        fail "PostgreSQL did not recover before integration ${ext}"
+        break
     fi
+    run_sql_test pgx-func-test "$test_file" "integration ${ext}" || true
 done
-
-# If any backend crash was seen, dump the server log so the culprit .so /
-# extension is visible instead of just a cascade of downstream failures.
-if [ -n "$phase8_crash" ]; then
-    warn "Backend crash detected during Phase 8 (near '${phase8_crash}'); recent server log:"
-    docker logs pgx-func-test 2>&1 | grep -iE "server process|was terminated|signal|PANIC|segmentation|shared object|symbol|ERROR:|FATAL:" \
-        | tail -40 | sed 's/^/       /'
-fi
 
 # ============================================================
 # Phase 9: MongoDB wire protocol test (documentdb gateway)
@@ -679,6 +653,10 @@ if has_ext documentdb; then
     fi
     echo
 fi
+
+# Also gate crashes that happened outside the foreground SQL connection (or
+# were hidden by CREATE EXTENSION recovery retries).
+check_sql_test_logs pgx-func-test || true
 
 # Cleanup
 docker rm -f pgx-func-test >/dev/null 2>&1

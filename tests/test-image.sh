@@ -14,6 +14,9 @@
 
 set -euo pipefail
 
+# shellcheck source=tests/sql-test-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/sql-test-lib.sh"
+
 IMAGE="${1:-pglayers:17}"
 CONTAINER="pgx-test-image-$$"
 
@@ -139,21 +142,7 @@ for test_file in extensions/*/test.sql; do
         [ "$installed" = "0" ] && continue
     fi
 
-    output="$(docker exec -i "$CONTAINER" psql -U postgres -tA -v ON_ERROR_STOP=0 < "$test_file" 2>&1 || true)"
-    failures="$(echo "$output" | grep '^FAIL' || true)"
-    passes="$(echo "$output" | grep -c '^PASS' || true)"
-
-    if [ -n "$failures" ]; then
-        fail "${ext}:"
-        # shellcheck disable=SC2001
-        # Prepending indent to each line; no bash-native equivalent for multiline
-        echo "$failures" | sed 's/^/       /'
-    elif [ "$passes" -gt 0 ]; then
-        pass "${ext} (${passes} checks)"
-    else
-        fail "${ext}: test.sql produced no PASS/FAIL output (extension failed to load or assert)"
-        printf '%s\n' "$output" | sed 's/^/       /'
-    fi
+    run_sql_test "$CONTAINER" "$test_file" "$ext" || true
 done
 
 if grep -q '"documentdb"' <<<"$manifest"; then
@@ -189,6 +178,8 @@ if grep -q '"pg_lake"' <<<"$manifest"; then
         fail "pg_lake companion did not answer on /tmp:5332"
     fi
 fi
+
+check_sql_test_logs "$CONTAINER" || true
 
 echo
 echo "========================================"

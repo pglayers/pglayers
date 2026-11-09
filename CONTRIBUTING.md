@@ -193,6 +193,15 @@ END;
 - Tests must be self-contained: create and clean up their own objects.
 - A **missing** `test.sql`, or one that produces **no** `PASS`/`FAIL`
   output, is a hard failure.
+- SQL files run with `psql -X -v ON_ERROR_STOP=1`. Any SQL error, failed
+  assertion, early exit, or lost connection fails the test, even after an
+  earlier `PASS`. Expected errors must be caught and asserted inside SQL.
+- Backend and background-worker crashes fail the run even if PostgreSQL
+  recovers. Crashing integration tests are not retried into a pass.
+
+Both layer and profile-image tests use `tests/sql-test-lib.sh` for these
+gates. Run its fast regression tests without Docker with `make test-harness`
+(also run by `make test`, `make test-image`, and CI).
 
 In `tests/test-layers.sh`:
 
