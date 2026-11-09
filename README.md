@@ -157,7 +157,7 @@ promoted to stable.
 | [pg_bigm](https://github.com/pgbigm/pg_bigm) | 1.2 | 17, 18 | 2-gram full text search (better for CJK languages) |
 | [pg_clickhouse](https://github.com/ClickHouse/pg_clickhouse) | 0.10.0 | 17, 18 | Query ClickHouse databases from PostgreSQL (FDW with pushdown; depends on `re2` for regex pushdown) |
 | [pg_cron](https://github.com/citusdata/pg_cron) | 1.6.7 | 17, 18 | Job scheduler (periodic jobs inside the database) |
-| [pg_duckdb](https://github.com/duckdb/pg_duckdb) | 1.1.1 | 17, 18 | DuckDB columnar analytics engine embedded in Postgres |
+| [pg_duckdb](https://github.com/duckdb/pg_duckdb) | 1.2.0 | 17, 18 | DuckDB columnar analytics engine embedded in Postgres |
 | [pg_durable](https://github.com/microsoft/pg_durable) | 0.2.9 | 17, 18 | In-database durable execution (fault-tolerant workflows) |
 | [pg_failover_slots](https://github.com/EnterpriseDB/pg_failover_slots) | 1.2.1 | 17, 18 | Logical replication slot manager for failover |
 | [pg_graphql](https://github.com/supabase/pg_graphql) | 1.6.1 | 17, 18 | GraphQL support for PostgreSQL |

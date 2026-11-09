@@ -2,7 +2,7 @@
 ARG PG_MAJOR=17
 ARG PG_TAG=${PG_MAJOR}
 ARG LAYOUT=classic
-ARG EXT_VERSION=v1.1.1
+ARG EXT_VERSION=v1.2.0
 
 # Use official pre-built pg_duckdb image (avoids 10-15 min DuckDB compilation).
 FROM pgduckdb/pgduckdb:${PG_MAJOR}-${EXT_VERSION} AS upstream
