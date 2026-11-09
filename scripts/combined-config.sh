@@ -90,6 +90,14 @@ for e in "${exts[@]}"; do
 	done < <(printf '%s\n' "$pgconf" | tr '|' '\n')
 done
 
+# DuckDB's custom-scan EXPLAIN callback cannot run from ExecutorStart hooks
+# (duckdb/pg_duckdb#1042). Do not let pg_show_plans break ordinary DuckDB queries.
+# Leave capture enabled by default when pg_duckdb is absent; users can opt in
+# per session for PostgreSQL-only queries in a mixed image.
+if has_ext pg_duckdb && has_ext pg_show_plans; then
+	conf_lines+=("pg_show_plans.is_enabled = off")
+fi
+
 # pgsodium's getkey script lives in the isolated namespace on PG18+.
 if [ "$PG" -ge 18 ] 2>/dev/null && has_ext pgsodium; then
 	conf_lines+=("pgsodium.getkey_script = '/extensions/pgsodium/share/extension/pgsodium_getkey'")

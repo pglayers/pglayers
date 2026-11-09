@@ -1,4 +1,11 @@
 -- pg_textsearch integration tests
+CREATE EXTENSION IF NOT EXISTS pg_textsearch;
+
+SELECT CASE
+    WHEN (SELECT count(*) FROM pg_extension WHERE extname = 'pg_textsearch') = 1
+    THEN 'PASS pg_textsearch: extension loads'
+    ELSE 'FAIL pg_textsearch: extension loads'
+END;
 
 -- Test 1: Extension loads and basic index creation works
 CREATE TABLE ts_test_docs (id serial PRIMARY KEY, content text NOT NULL);

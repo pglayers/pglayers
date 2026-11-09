@@ -8,16 +8,18 @@ SELECT CASE
     ELSE 'FAIL pg_uuidv7: uuid_generate_v7 works'
 END;
 
--- Test: UUIDv7 is time-sortable (later call > earlier call)
+-- Test: UUIDv7 is time-sortable, independently of the server clock
 SELECT CASE
-    WHEN uuid_generate_v7() > uuid_generate_v7_from_timestamp('2020-01-01'::timestamptz)
+    WHEN uuid_timestamptz_to_v7('2021-01-01+00'::timestamptz)
+         > uuid_timestamptz_to_v7('2020-01-01+00'::timestamptz)
     THEN 'PASS pg_uuidv7: time-sortable ordering'
     ELSE 'FAIL pg_uuidv7: time-sortable ordering'
 END;
 
--- Test: extract timestamp from UUIDv7
+-- Test: timestamps round-trip at UUIDv7's millisecond precision
 SELECT CASE
-    WHEN uuid_v7_to_timestamp(uuid_generate_v7()) > now() - interval '1 minute'
+    WHEN uuid_v7_to_timestamptz(uuid_timestamptz_to_v7('2020-01-01 12:34:56.789+00'::timestamptz))
+         = '2020-01-01 12:34:56.789+00'::timestamptz
     THEN 'PASS pg_uuidv7: timestamp extraction'
     ELSE 'FAIL pg_uuidv7: timestamp extraction'
 END;

@@ -18,7 +18,7 @@ REGISTRY="${1:-local}"
 PG="${2:-17}"
 PREFIX="pgx"
 IMAGE_TAG="pglayers-test:${PG}"
-PG_TAG="${PG_TAG:-$PG}"
+PG_TAG="${PG_TAG:-$(./scripts/pg-tag.sh "$PG")}"
 
 PASS=0
 FAIL=0

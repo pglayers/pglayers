@@ -16,8 +16,10 @@ SELECT CASE
 END;
 
 -- Test: can run a basic assertion
+SELECT plan(1);
 SELECT CASE
     WHEN ok(1 = 1, 'one equals one') ~ '^ok'
     THEN 'PASS pgtap: ok() assertion works'
     ELSE 'FAIL pgtap: ok() assertion works'
 END;
+SELECT * FROM finish();

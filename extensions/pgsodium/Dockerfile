@@ -11,7 +11,7 @@ ARG LIBSODIUM_VERSION=1.0.22
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git ca-certificates curl patchelf \
+    build-essential git ca-certificates curl patch patchelf \
     postgresql-server-dev-${PG_MAJOR}
 
 # Build libsodium from source (distro version too old for pgsodium 3.1.11+).
@@ -38,6 +38,11 @@ RUN git clone --branch ${EXT_VERSION} --depth 1 \
     https://github.com/michelp/pgsodium.git /tmp/ext
 
 WORKDIR /tmp/ext
+
+# Keep the GUC default alive after backend startup frees PostmasterContext.
+# Backport https://github.com/michelp/pgsodium/pull/128; remove once released.
+COPY patches/getkey-script-lifetime.patch /tmp/getkey-script-lifetime.patch
+RUN patch --batch --forward -p1 < /tmp/getkey-script-lifetime.patch
 
 RUN make -j"$(nproc)" && make install DESTDIR=/output \
     && find /output -name '*.so' -exec strip --strip-unneeded {} \;

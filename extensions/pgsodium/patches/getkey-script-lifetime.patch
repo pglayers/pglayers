@@ -1,0 +1,10 @@
+diff --git a/src/pgsodium.c b/src/pgsodium.c
+--- a/src/pgsodium.c
++++ b/src/pgsodium.c
+@@ -1 +1,2 @@
+ #include "pgsodium.h"
++#include "utils/memutils.h"
+@@ -138 +139,2 @@ _PG_init (void)
+-	path = (char *) palloc0 (MAXPGPATH);
++	/* The GUC retains its default after PostmasterContext is deleted. */
++	path = (char *) MemoryContextAllocZero (TopMemoryContext, MAXPGPATH);

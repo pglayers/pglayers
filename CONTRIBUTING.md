@@ -201,7 +201,8 @@ END;
 
 Both layer and profile-image tests use `tests/sql-test-lib.sh` for these
 gates. Run its fast regression tests without Docker with `make test-harness`
-(also run by `make test`, `make test-image`, and CI).
+(also run by `make test`, `make test-image`, and CI). This also checks
+extension-dependent runtime defaults from `scripts/combined-config.sh`.
 
 In `tests/test-layers.sh`:
 

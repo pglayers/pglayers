@@ -10,9 +10,17 @@ END;
 
 -- Test: encode and decode round-trip
 SELECT CASE
-    WHEN id_decode(id_encode(42, 'salt')) = 42
+    WHEN id_decode(id_encode(42, 'salt'), 'salt') = ARRAY[42]::bigint[]
     THEN 'PASS pg_hashids: encode/decode round-trip works'
     ELSE 'FAIL pg_hashids: encode/decode round-trip works'
+END;
+
+-- Test: arrays of IDs round-trip using the same salt
+SELECT CASE
+    WHEN id_decode(id_encode(ARRAY[1, 42, 123456]::bigint[], 'salt'), 'salt')
+         = ARRAY[1, 42, 123456]::bigint[]
+    THEN 'PASS pg_hashids: multiple IDs round-trip'
+    ELSE 'FAIL pg_hashids: multiple IDs round-trip'
 END;
 
 -- Test: encode produces non-empty string

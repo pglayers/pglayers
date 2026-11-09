@@ -1,18 +1,15 @@
--- wal2json integration tests (requires wal_level=logical)
--- Note: This test only verifies the plugin is loadable.
--- Full CDC testing requires wal_level=logical which may not be set.
+-- wal2json is an output plugin, not a CREATE EXTENSION module.
+-- LOAD checks the actual binary and ABI through dynamic_library_path in both
+-- the classic and isolated layouts, without hardcoded PostgreSQL paths.
+LOAD 'wal2json';
+SELECT 'PASS wal2json: output plugin loads';
 
+-- Full CDC testing requires wal_level=logical; this check also works on the
+-- bare postgres image's default wal_level=replica.
 SELECT CASE
-    WHEN (SELECT count(*) FROM pg_available_extensions WHERE name = 'wal2json') = 0
-    AND (SELECT count(*) FROM pg_proc WHERE proname = 'pg_create_logical_replication_slot') > 0
+    WHEN EXISTS (SELECT 1 FROM pg_proc
+                 WHERE pronamespace = 'pg_catalog'::regnamespace
+                   AND proname = 'pg_create_logical_replication_slot')
     THEN 'PASS wal2json: logical replication infrastructure available'
-    ELSE 'PASS wal2json: logical replication infrastructure available'
-END;
-
--- Test: plugin file exists (check via output plugin list)
-SELECT CASE
-    WHEN EXISTS (SELECT 1 FROM pg_ls_dir('/usr/lib/postgresql/17/lib') WHERE pg_ls_dir = 'wal2json.so')
-         OR EXISTS (SELECT 1 FROM pg_ls_dir('/usr/lib/postgresql/18/lib') WHERE pg_ls_dir = 'wal2json.so')
-    THEN 'PASS wal2json: shared library installed'
-    ELSE 'FAIL wal2json: shared library installed'
+    ELSE 'FAIL wal2json: logical replication infrastructure unavailable'
 END;

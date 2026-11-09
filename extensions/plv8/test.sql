@@ -14,8 +14,8 @@ END;
 
 -- Test: JSON manipulation
 CREATE OR REPLACE FUNCTION test_plv8_json(data jsonb) RETURNS text AS $$
-    var obj = JSON.parse(data);
-    return obj.name.toUpperCase();
+    // PL/v8 converts jsonb arguments to JavaScript objects automatically.
+    return data.name.toUpperCase();
 $$ LANGUAGE plv8;
 
 SELECT CASE

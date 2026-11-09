@@ -366,6 +366,21 @@ blocked roles.
 > comes up clean without the "extension not yet created" retries. Set
 > `PGLAYERS_CREATE_EXTENSIONS=none` to opt out.
 
+### pg_duckdb and pg_show_plans
+
+DuckDB queries fail if `pg_show_plans` captures their custom plans from an
+executor-start hook ([upstream issue #1042](https://github.com/duckdb/pg_duckdb/issues/1042)).
+Combined images containing **both** layers therefore default
+`pg_show_plans.is_enabled = off`. Images without `pg_duckdb` retain normal
+plan capture. You can enable capture per session for PostgreSQL-only queries,
+but disable it again before executing DuckDB queries:
+
+```sql
+SET pg_show_plans.is_enabled = on;
+-- PostgreSQL-only queries here
+SET pg_show_plans.is_enabled = off;
+```
+
 ### pg_lake
 
 pg_lake provides Iceberg table support and data lake file access
@@ -445,6 +460,28 @@ SELECT * FROM pg_stat_kcache_detail;
 `pg_stat_kcache_detail` joins per-query CPU time, filesystem I/O, and other
 kernel counters to query text; `pg_stat_kcache` aggregates them by database.
 The full profile configures both preload libraries automatically.
+
+### pgsodium
+
+The pgsodium layers temporarily backport [upstream #128](https://github.com/michelp/pgsodium/pull/128)
+to keep the `pgsodium.getkey_script` default alive after backend startup.
+Without the fix, querying `pg_settings` can read freed memory and crash,
+including during another extension's installation. No additional user
+configuration is needed. Remove the patch once a stable release includes it.
+
+### TimescaleDB and pg_duckdb
+
+Both extensions install `time_bucket` functions by default. If `pg_duckdb`
+is already installed in `public`, install TimescaleDB in a separate schema:
+
+```sql
+CREATE SCHEMA timescale;
+CREATE EXTENSION timescaledb WITH SCHEMA timescale;
+SELECT timescale.time_bucket(INTERVAL '1 hour', now());
+```
+
+Do not force DuckDB execution on TimescaleDB hypertables
+([upstream issue #963](https://github.com/duckdb/pg_duckdb/issues/963)).
 
 ### Profile images (auto-configuration)
 

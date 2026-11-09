@@ -426,11 +426,12 @@ clean-all: ## Remove all built extension images
 	done
 	@echo "Done. Run 'docker image prune' to reclaim disk space."
 
-test-harness: ## Run SQL test-runner regression tests without Docker
+test-harness: ## Run test-runner and composition regression tests without Docker
 	@bash tests/test-sql-test-lib.sh
+	@bash tests/test-combined-config.sh
 
 test: test-harness ## Run layer collision and functional tests
-	@PGLAYERS_EXTENSIONS="$(EXTENSIONS)" ./tests/test-layers.sh $(REGISTRY) $(PG)
+	@PGLAYERS_EXTENSIONS="$(EXTENSIONS)" PG_TAG="$(PG_TAG)" ./tests/test-layers.sh $(REGISTRY) $(PG)
 
 test-image: test-harness ## Run integration tests against the combined image
 	@./tests/test-image.sh $(IMAGE_NAME):$(PG)
