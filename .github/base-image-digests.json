@@ -1,5 +1,5 @@
 {
-  "postgres:17": "sha256:ff87138949ad9a46f32ff23bd6852b52ce024a13dffe9b4087be98292cdd3b4f",
-  "postgres:18": "sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42",
-  "postgres:19": "sha256:4b3e4b2edcf554492dd1c5e008237208c1d6e6faf2f15c24bf5fc5c4bcf0a21d"
+  "postgres:17": "sha256:846a7ddaa67a4b354ae1d21087b683901aa6113a4ed626d3787cfbf6c85e3e07",
+  "postgres:18": "sha256:b9f6b8ff03b62f3cfd9d9ba3fe56226a9991c79d3fb46fd46536263bf02be553",
+  "postgres:19": "sha256:7cecb6d5690b43ebb8d957c61e0de3c39d893a02e73a054de593c7a6dd489fb7"
 }
