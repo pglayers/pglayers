@@ -179,7 +179,7 @@ promoted to stable.
 | [pg_squeeze](https://github.com/cybertec-postgresql/pg_squeeze) | 1.9.3 | 17, 18, 19 | Remove unused space from tables without heavy locks |
 | [pg_stat_kcache](https://github.com/powa-team/pg_stat_kcache) | 2.3.2 | 17, 18, 19 | Per-query kernel statistics (CPU time, filesystem I/O, page faults) |
 | [pg_stat_monitor](https://github.com/percona/pg_stat_monitor) | 2.4.0 | 17, 18, 19 | Enhanced query statistics with histograms and buckets |
-| [pg_textsearch](https://github.com/timescale/pg_textsearch) | 1.3.1 | 17, 18 | BM25 relevance-ranked full-text search |
+| [pg_textsearch](https://github.com/timescale/pg_textsearch) | 1.5.1 | 17, 18, 19 | BM25 relevance-ranked full-text search |
 | [pg_uuidv7](https://github.com/fboulnois/pg_uuidv7) | 1.7.0 | 17, 18, 19 | UUIDv7 generation (time-sortable unique identifiers) |
 | [pg_wait_sampling](https://github.com/postgrespro/pg_wait_sampling) | 1.1.11 | 17, 18, 19 | Sampling-based statistics of wait events |
 | [pgfincore](https://github.com/klando/pgfincore) | 1.4.0 | 17, 18, 19 | Inspect and manage OS page cache for data files |

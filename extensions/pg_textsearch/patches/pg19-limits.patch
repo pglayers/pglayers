@@ -1,0 +1,7 @@
+diff --git a/src/planner/hooks.c b/src/planner/hooks.c
+--- a/src/planner/hooks.c
++++ b/src/planner/hooks.c
+@@ -11,2 +11,3 @@
+ #include <postgres.h>
++#include <limits.h>
+ 
