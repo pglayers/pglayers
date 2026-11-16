@@ -2,7 +2,7 @@
 ARG PG_MAJOR=17
 ARG PG_TAG=${PG_MAJOR}
 ARG LAYOUT=classic
-ARG EXT_VERSION=0.10.0
+ARG EXT_VERSION=0.11.1
 
 # Use ClickHouse's official pre-built pg_clickhouse image (avoids compiling the
 # extension + the RE2/abseil dependency stack). Same approach as pg_duckdb.
