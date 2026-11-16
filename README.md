@@ -120,12 +120,15 @@ The `$system` and `$libdir` suffixes ensure built-in contrib extensions
 |---------|--------|
 | PostgreSQL 17 | Stable |
 | PostgreSQL 18 | Stable |
-| PostgreSQL 19 | Experimental (release candidate 1 -- supported until officially released) |
+| PostgreSQL 19 | Experimental (release candidate 2 -- supported until officially released) |
 
 All extensions are built and tested against PG 17 and 18. Support for
 PG 19 is best-effort while it remains a prerelease; some extensions may not
 yet have upstream compatibility. Once PG 19 reaches GA, it will be
 promoted to stable.
+
+See the [PG19 extension evaluation](docs/pg19-evaluation.md) for compatibility
+results and remaining blockers.
 
 ## Available extensions
 
