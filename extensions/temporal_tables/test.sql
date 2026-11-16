@@ -29,5 +29,17 @@ SELECT CASE
     ELSE 'FAIL temporal_tables: history row created on update'
 END;
 
+-- A second transaction reuses the versioning hash entry and archives a delete.
+DELETE FROM test_temporal WHERE id = 1;
+SELECT CASE
+    WHEN (SELECT count(*) FROM test_temporal_history) = 2
+      AND EXISTS (SELECT 1 FROM test_temporal_history WHERE name = 'original')
+      AND EXISTS (SELECT 1 FROM test_temporal_history WHERE name = 'modified')
+      AND NOT EXISTS (SELECT 1 FROM test_temporal_history WHERE isempty(sys_period))
+      AND NOT EXISTS (SELECT 1 FROM test_temporal)
+    THEN 'PASS temporal_tables: cached versioning preserves update and delete history'
+    ELSE 'FAIL temporal_tables: cached versioning preserves update and delete history'
+END;
+
 DROP TABLE test_temporal_history;
 DROP TABLE test_temporal;

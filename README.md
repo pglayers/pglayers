@@ -209,7 +209,7 @@ promoted to stable.
 | [set_user](https://github.com/pgaudit/set_user) | 4.2.0 | 17, 18, 19 | Auditable privilege escalation control (set_user/reset_user) |
 | [tdigest](https://github.com/tvondra/tdigest) | 1.4.4 | 17, 18, 19 | T-digest for quantile and percentile estimation |
 | [tds_fdw](https://github.com/tds-fdw/tds_fdw) | 2.0.5 | 17, 18 | Foreign data wrapper for SQL Server and Sybase |
-| [temporal_tables](https://github.com/arkhipov/temporal_tables) | 1.2.2 | 17, 18 | System-period temporal tables |
+| [temporal_tables](https://github.com/arkhipov/temporal_tables) | 1.2.2 | 17, 18, 19 | System-period temporal tables |
 | [timescaledb](https://github.com/timescale/timescaledb) | 2.28.2 | 17, 18 | Time-series hypertables, compression, continuous aggregates |
 | [timestamp9](https://github.com/optiver/timestamp9) | 1.4.0 | 17, 18, 19 | Nanosecond-precision timestamp type |
 | [toastinfo](https://github.com/df7cb/toastinfo) | 1.7 | 17, 18, 19 | Inspect the TOAST storage details of a value |

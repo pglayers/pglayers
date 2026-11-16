@@ -18,6 +18,10 @@ RUN git clone --branch ${EXT_VERSION} --depth 1 \
 
 WORKDIR /tmp/ext
 
+COPY patches /tmp/patches
+# PG19 makes the hash-table include and allocator argument explicit.
+RUN if [ "${PG_MAJOR}" -ge 19 ]; then git apply /tmp/patches/pg19-hash-allocator.patch; fi
+
 RUN make -j"$(nproc)" && make install DESTDIR=/output \
     && find /output -name '*.so' -exec strip --strip-unneeded {} \; \
     && rm -rf /output/usr/share/doc
