@@ -5,7 +5,7 @@ ARG LAYOUT=classic
 
 FROM postgres:${PG_TAG} AS builder
 ARG PG_MAJOR
-ARG EXT_VERSION=v1.3.1
+ARG EXT_VERSION=v1.5.1
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
@@ -17,6 +17,10 @@ RUN git clone --branch ${EXT_VERSION} --depth 1 \
     https://github.com/timescale/pg_textsearch.git /tmp/ext
 
 WORKDIR /tmp/ext
+
+COPY patches /tmp/patches
+# PG19 no longer supplies INT_MAX through the planner's transitive includes.
+RUN if [ "${PG_MAJOR}" -ge 19 ]; then git apply /tmp/patches/pg19-limits.patch; fi
 
 RUN make -j"$(nproc)" && make install DESTDIR=/output \
     && find /output -name '*.so' -exec strip --strip-unneeded {} \;
