@@ -1,0 +1,40 @@
+diff --git a/versioning.c b/versioning.c
+--- a/versioning.c
++++ b/versioning.c
+@@ -25,6 +25,7 @@
+ #include "executor/spi.h"
+ #include "utils/builtins.h"
+ #include "utils/guc.h"
++#include "utils/hsearch.h"
+ #include "utils/lsyscache.h"
+ #include "utils/memutils.h"
+ #include "utils/rangetypes.h"
+@@ -165,7 +166,11 @@
+ 							   const char *adjust_argument);
+ 
+ static void init_versioning_hash_table();
++#if PG_VERSION_NUM >= 190000
++static void *hash_entry_alloc(Size size, void *context);
++#else
+ static void *hash_entry_alloc(Size size);
++#endif
+ 
+ static VersioningHashEntry *lookup_versioning_hash_entry(Oid relid,
+ 														 bool *found);
+@@ -1071,8 +1076,16 @@
+ }
+ 
+ static void *
++#if PG_VERSION_NUM >= 190000
++hash_entry_alloc(Size size, void *context)
++#else
+ hash_entry_alloc(Size size)
++#endif
+ {
++#if PG_VERSION_NUM >= 190000
++	/* Entries must outlive the transaction, regardless of the hash context. */
++	(void) context;
++#endif
+ 	return MemoryContextAllocZero(TopMemoryContext, size);
+ }
+ 
