@@ -7,6 +7,9 @@
 -- never contacts the remote). The re2 functions themselves are covered by
 -- extensions/pg_re2/test.sql.
 
+CREATE EXTENSION IF NOT EXISTS re2;
+CREATE EXTENSION IF NOT EXISTS pg_clickhouse;
+
 -- 1. Load / sanity: the clickhouse_fdw foreign data wrapper is registered.
 --    (Doubles as the smoke test.)
 SELECT CASE
@@ -45,8 +48,6 @@ DROP SERVER IF EXISTS pgclickhouse_test_srv CASCADE;
 --    builds the remote query WITHOUT contacting ClickHouse, so this is safe in
 --    CI. This check proves the re2 companion is correctly connected; if re2
 --    were absent, the '@~' operator wouldn't exist and pushdown wouldn't occur.
-CREATE EXTENSION IF NOT EXISTS re2;
-
 CREATE SERVER pgclickhouse_re2_srv
     FOREIGN DATA WRAPPER clickhouse_fdw
     OPTIONS (host 'localhost', port '9000');
@@ -80,5 +81,4 @@ END;
 
 DROP FOREIGN TABLE IF EXISTS pgclickhouse_re2_ft;
 DROP SERVER IF EXISTS pgclickhouse_re2_srv CASCADE;
-
 
