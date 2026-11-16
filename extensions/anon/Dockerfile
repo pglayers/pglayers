@@ -2,17 +2,23 @@
 ARG PG_MAJOR=17
 ARG PG_TAG=${PG_MAJOR}
 ARG LAYOUT=classic
-ARG EXT_VERSION=3.2.2
+ARG EXT_VERSION=3.3.2
 
 # Stage 1: Install cargo-pgrx (PG-independent, cached across PG versions)
 FROM rustlang/rust:nightly-bookworm AS pgrx-builder
 ARG EXT_VERSION
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    cargo install cargo-pgrx --version 0.19.1 --locked
+    cargo install cargo-pgrx --version 0.19.4 --locked
 
 RUN git clone --branch ${EXT_VERSION} --depth 1 \
     https://gitlab.com/dalibo/postgresql_anonymizer.git /tmp/ext
+
+# 3.3.2's lockfile uses pgrx 0.19.3. The final 0.19 patch release adds RC2
+# bindings and the matching composite-datum security fix (CVE-2026-6460).
+WORKDIR /tmp/ext
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    cargo update -p pgrx -p pgrx-tests
 
 # Stage 2: Build extension (PG-specific)
 FROM rustlang/rust:nightly-bookworm AS builder
@@ -20,14 +26,19 @@ ARG PG_MAJOR
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+    curl --http1.1 -fsSL --retry 3 --connect-timeout 20 \
+        https://apt.postgresql.org/pub/repos/apt/ACCC4CF8.asc \
         | gpg --dearmor -o /usr/share/keyrings/postgresql-keyring.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/postgresql-keyring.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
         > /etc/apt/sources.list.d/pgdg.list \
+    && if [ "${PG_MAJOR}" -ge 19 ]; then \
+         echo "deb [signed-by=/usr/share/keyrings/postgresql-keyring.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg ${PG_MAJOR}" \
+           >> /etc/apt/sources.list.d/pgdg.list; \
+       fi \
     && apt-get update && apt-get install -y --no-install-recommends \
         postgresql-${PG_MAJOR} \
         postgresql-server-dev-${PG_MAJOR} \
-        pkg-config libssl-dev libclang-dev clang
+        pkg-config libssl-dev libclang-dev clang libicu-dev
 
 COPY --from=pgrx-builder /usr/local/cargo/bin/cargo-pgrx /usr/local/cargo/bin/cargo-pgrx
 COPY --from=pgrx-builder /tmp/ext /tmp/ext
