@@ -198,7 +198,7 @@ promoted to stable.
 | [pljs](https://github.com/plv8/pljs) | 1.0.5 | 17, 18 | JavaScript (QuickJS) procedural language |
 | [plpgsql_check](https://github.com/okbob/plpgsql_check) | 2.10.1 | 17, 18, 19 | PL/pgSQL linter and validator |
 | [plprofiler](https://github.com/bigsql/plprofiler) | 4.2.5 | 17, 18 | Performance profiler for PL/pgSQL functions |
-| [plv8](https://github.com/plv8/plv8) | 3.2.4 | 17, 18 | JavaScript (V8) procedural language |
+| [plv8](https://github.com/plv8/plv8) | 3.2.5 | 17, 18, 19 | JavaScript (V8) procedural language |
 | [PostGIS](https://github.com/postgis/postgis) | 3.7.0 | 17, 18, 19 | Geospatial extensions (geometry, geography, raster, MVT) |
 | [postgres_protobuf](https://github.com/mpartel/postgres-protobuf) | 0.3.2 | 17, 18, 19 | Protocol Buffer support (query, convert to/from JSON) |
 | [prefix](https://github.com/dimitri/prefix) | 1.2.11 | 17, 18, 19 | Prefix range data type for phone routing lookups |
