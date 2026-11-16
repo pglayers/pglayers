@@ -1,0 +1,81 @@
+diff --git a/bigm_gin.c b/bigm_gin.c
+--- a/bigm_gin.c
++++ b/bigm_gin.c
+@@ -424,15 +424,19 @@ pg_gin_pending_stats(PG_FUNCTION_ARGS)
+ 	 * Obtain statistic information from the meta page
+ 	 */
+ 	metabuffer = ReadBuffer(indexRel, GIN_METAPAGE_BLKNO);
++#if PG_VERSION_NUM >= 190000
++	LockBufferInternal(metabuffer, GIN_SHARE);
++#else
+ 	LockBuffer(metabuffer, GIN_SHARE);
++#endif
+ 	metapage = BufferGetPage(metabuffer);
+ 	metadata = GinPageGetMeta(metapage);
+ 
+ 	/*
+ 	 * Construct a tuple descriptor for the result row. This must match this
+ 	 * function's pg_bigm--x.x.sql entry.
+ 	 */
+- #if PG_VERSION_NUM >= 120000
++#if PG_VERSION_NUM >= 120000
+ 	tupdesc = CreateTemplateTupleDesc(2);
+ #else
+ 	tupdesc = CreateTemplateTupleDesc(2, false);
+@@ -441,6 +445,9 @@ pg_gin_pending_stats(PG_FUNCTION_ARGS)
+ 					   "pages", INT4OID, -1, 0);
+ 	TupleDescInitEntry(tupdesc, (AttrNumber) 2,
+ 					   "tuples", INT8OID, -1, 0);
++#if PG_VERSION_NUM >= 190000
++	TupleDescFinalize(tupdesc);
++#endif
+ 	tupdesc = BlessTupleDesc(tupdesc);
+ 
+ 	/* pages */
+diff --git a/bigm_op.c b/bigm_op.c
+--- a/bigm_op.c
++++ b/bigm_op.c
+@@ -159,27 +159,37 @@ unique_array(bigm *a, int len)
+ /*
+  * This function is equivalent to isspace() but supports multibyte
+  * characters and encoding. It was part of PostgreSQL 17 and earlier
+- * but was removed in commit d3aad4ac57c. This version is copied
+- * from PostgreSQL 17.
++ * but was removed in commit d3aad4ac57c.
+  */
+ int
+ t_isspace(const char *ptr)
+ {
++#if PG_VERSION_NUM >= 190000
++#define WC_BUF_LEN  2
++	int			clen = pg_mblen(ptr);
++	pg_wchar	character[WC_BUF_LEN];
++	int			wlen pg_attribute_unused();
++
++	wlen = pg_mb2wchar_with_len(ptr, character, clen);
++	Assert(wlen <= 1);
++
++	return pg_iswspace(character[0], pg_database_locale());
++#else
++	/*
++	 * This version is copied from PostgreSQL 17.
++	 */
+ #define WC_BUF_LEN  3
+ 	int			clen = pg_mblen(ptr);
+ 	wchar_t		character[WC_BUF_LEN];
+-#if PG_VERSION_NUM >= 190000
+-	locale_t mylocale = 0;	/* TODO */
+-#else
+ 	pg_locale_t mylocale = 0;	/* TODO */
+-#endif	/* PG_VERSION_NUM >= 190000 */
+ 
+ 	if (clen == 1 || database_ctype_is_c)
+ 		return isspace(TOUCHAR(ptr));
+ 
+ 	char2wchar(character, WC_BUF_LEN, ptr, clen, mylocale);
+ 
+ 	return iswspace((wint_t) character[0]);
++#endif	/* PG_VERSION_NUM >= 190000 */
+ }
+ #endif	/* PG_VERSION_NUM >= 180000 */
+ 
