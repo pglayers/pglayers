@@ -2,7 +2,7 @@
 ARG PG_MAJOR=17
 ARG PG_TAG=${PG_MAJOR}
 ARG LAYOUT=classic
-ARG EXT_VERSION=v3.2.4
+ARG EXT_VERSION=v3.2.5
 
 # Stage 1: V8 engine (PG-independent, ~10 min natively)
 #

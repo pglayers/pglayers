@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'plv8 version tag (e.g., v3.2.4)'
+        description: 'plv8 version tag (e.g., v3.2.5)'
         required: true
-        default: 'v3.2.4'
+        default: 'v3.2.5'
 
 env:
   REGISTRY: ghcr.io
