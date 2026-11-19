@@ -4,8 +4,13 @@ set -euo pipefail
 
 for pg in 17 18 19; do
     # A default make variable is not automatically exported to shell recipes.
-    # Keep local pre-release tests on the same base tag as builds and CI.
+    # Keep local tests on the same base tag as builds and CI.
     tag="$(./scripts/pg-tag.sh "$pg")"
+    if [ "$tag" != "$pg" ]; then
+        echo "FAIL PG $pg: stable majors must use their GA image tags" >&2
+        exit 1
+    fi
+    echo "PASS PG $pg: stable major resolves to its GA image tag"
     output="$(
         # Do not inherit the parent make invocation's PG_TAG override.
         unset PG_TAG MAKEFLAGS MAKEOVERRIDES MFLAGS

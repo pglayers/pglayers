@@ -84,17 +84,10 @@ published:
 Do not pin to old versions unless the latest has a known incompatibility
 or license change. Stale versions are a bug.
 
-### PostgreSQL base image tags (pre-release majors)
+### PostgreSQL base image tags
 
-Supported PG majors are **17, 18, 19**. The Docker tag for a GA major is
-just the major (`postgres:17`), but a **pre-release major has no bare tag** --
-Docker Hub publishes only pre-release tags (`postgres:19beta4`, later
-`19rc1`, and finally the GA `postgres:19`). So the build maps each
-PG major to the **actual published Docker tag**. Today that mapping is:
-
-```
-19 -> 19beta4     # 17, 18 map to themselves
-```
+Supported PG majors are **17, 18, 19**. All use GA Docker tags:
+`postgres:17`, `postgres:18`, and `postgres:19`.
 
 **`scripts/pg-tag.sh` is the single source of truth for this mapping.** It
 takes a PG major and echoes the Docker tag. Everything resolves the tag through
@@ -105,33 +98,20 @@ it, so there is exactly one place to edit:
 - `scripts/apt-support.sh` and `scripts/detect-license.sh` -- call
   `pg-tag.sh` (via `$(dirname "$0")/pg-tag.sh`).
 - `.github/workflows/ci.yml` -- the `matrix` job builds a `pg_tags`
-  (`{"17":"17","18":"18","19":"19beta4"}`) output from `pg-tag.sh`; every
+  (`{"17":"17","18":"18","19":"19"}`) output from `pg-tag.sh`; every
   build/test/profile job reads `fromJson(needs.matrix.outputs.pg_tags)[matrix.pg]`.
-- `.github/workflows/monitor-base-image.yml` -- detects newer PG 19 beta/RC/GA
-  tags, updates `pg-tag.sh`, and tracks the resolved image digest.
+- `.github/workflows/monitor-base-image.yml` -- tracks the resolved image
+  digest. PG19 prerelease rollover automation is no longer needed.
 
-Never hardcode `19beta4` (or any pre-release tag) anywhere else. A stray literal
-is the "PG 19 drift" bug: e.g. if `ci.yml` built on `19beta2` while the monitor
-tracked `19beta4`, PG 19 would look *perpetually changed*, the monitor would
-open endless PRs, and the shipped images would never match the tracked base.
+Never hardcode a prerelease tag in a consumer. If a future supported major
+needs a beta or RC tag, add its mapping only in `pg-tag.sh`. Remove that
+mapping once the official GA image is published, update the tracked digest,
+and run the layer suites for all supported majors before merging. A PostgreSQL
+release announcement alone does not mean Docker Hub has published its image.
 
-The base-image monitor normally advances the mapping automatically when a new
-beta, RC, or GA tag appears. To roll it manually (`19beta4` -> `19rc1`):
-
-1. Edit the single `19)` case line in `scripts/pg-tag.sh`.
-2. Verify no stray literal was reintroduced (the tag must appear only in
-   `pg-tag.sh`):
-   ```bash
-   grep -rn '19beta\|19rc' Makefile scripts/ .github/ \
-     | grep -v -e base-image-digests.json -e scripts/pg-tag.sh
-   ```
-   This must print nothing.
-3. `make test REGISTRY=local PG=19` (the base monitor records the new digest on
-   its next run).
-
-**When the major goes GA** (`postgres:19` is published): **delete** the `19)`
-case line in `scripts/pg-tag.sh` so PG 19 maps to itself, then run the grep
-above (it must print nothing) and `make test ... PG=19`.
+`make test-harness` verifies that all current stable majors resolve to their
+GA tags and that `make test` forwards those tags to the layer harness. Update
+that regression check deliberately if adding a prerelease major in the future.
 
 ## Testing Requirements
 

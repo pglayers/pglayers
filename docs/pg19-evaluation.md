@@ -1,5 +1,39 @@
 # PostgreSQL 19 extension evaluation
 
+## GA transition: pending validation
+
+PostgreSQL [19.0 was released on November 19, 2026](https://www.postgresql.org/about/news/postgresql-19-released-3449/).
+The evaluation results below are from RC2, not the GA release.
+
+The prepared GA changes select `postgres:19`, remove prerelease retagging and
+rollover automation, and make PG19 build, test, promotion, and profile failures
+blocking, like PG17 and PG18. They do not enable additional extensions.
+
+At preparation time, the official `postgres:19` image is not published.
+PGDG already serves PostgreSQL 19.0, so the existing RC2 base fails the
+prerelease compatibility check in `scripts/apt-support.sh`. Keep that guard:
+combining an RC server with GA extension packages is not a safe workaround.
+
+Before merging the GA transition:
+
+- Confirm `postgres:19` is published for both `linux/amd64` and `linux/arm64`.
+- Replace the `postgres:19` entry in `.github/base-image-digests.json` with the
+  GA manifest digest using the same raw-manifest hashing as the base-image
+  monitor. The current entry still records RC2; it is not a verified GA digest.
+- Rebuild available PG19 layers against GA. Run the complete layer suites for
+  PG17, PG18, and PG19, plus PG19 `full` and `azure` profile startup and
+  functional tests. Require successful native amd64 and arm64 builds in CI.
+- Update branch protection to require `Test PG 18` and `Test PG 19` alongside
+  `Test PG 17`, plus the profile checks. Currently only `Test PG 17` is required;
+  a failed PG19 test can otherwise leave auto-merge eligible even though the
+  workflow fails. Repository settings are not changed by this patch.
+- Record the GA results separately from the historical RC2 results below.
+
+PR #178 uses the monitor-managed `auto/base-image-update` branch. Scheduled
+monitor runs recreate that branch from `main`, so they can overwrite manual
+GA additions. Keep the prepared changes on a separate local branch until the
+image is available, then reapply them to the latest PR head before validation.
+
 ## Outcome
 
 Enabled nine additional extensions for PG19, increasing project availability

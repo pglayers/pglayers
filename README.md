@@ -120,12 +120,12 @@ The `$system` and `$libdir` suffixes ensure built-in contrib extensions
 |---------|--------|
 | PostgreSQL 17 | Stable |
 | PostgreSQL 18 | Stable |
-| PostgreSQL 19 | Experimental (release candidate 2 -- supported until officially released) |
+| PostgreSQL 19 | Stable |
 
-All extensions are built and tested against PG 17 and 18. Support for
-PG 19 is best-effort while it remains a prerelease; some extensions may not
-yet have upstream compatibility. Once PG 19 reaches GA, it will be
-promoted to stable.
+Supported extensions are built and tested against PG 17, 18, and 19.
+Extension availability varies by major version: some extensions still need
+upstream PG 19 compatibility or PGDG packages. See each extension's PG versions
+in the table below.
 
 See the [PG19 extension evaluation](docs/pg19-evaluation.md) for compatibility
 results and remaining blockers.
@@ -776,7 +776,7 @@ make build EXT=pgvector PG=17
 # Build all extensions for a PG version
 make build-all PG=17
 
-# Build for PG 19 (the current prerelease tag is resolved automatically)
+# Build for PG 19 (uses the official postgres:19 GA image)
 make build EXT=pgvector PG=19
 make build-all PG=19
 
@@ -1194,8 +1194,8 @@ Extension availability per PostgreSQL version depends on upstream
 support:
 
 - **APT-based extensions** -- Available when the PGDG repository
-  publishes a package for that PG version. New major PG versions
-  (e.g., PG 19 during beta) may not have all packages yet.
+  publishes a package for that PG version. Newly released major PG versions
+  may not have all packages yet, even after general availability.
 
 - **Source-built extensions** -- Available when the extension compiles
   cleanly against that PG version's headers.

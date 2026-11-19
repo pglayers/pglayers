@@ -266,8 +266,8 @@ git add extensions/<name>/ tests/test-layers.sh profiles/ README.md
 git commit -m "feat(extensions): add <name>"
 ```
 
-Open a PR against `main`. CI runs the full test suite for PG 17, 18 and 19
-(19 is beta and non-blocking).
+Open a PR against `main`. CI runs the full test suite for PG 17, 18, and 19.
+Build and test failures block CI for every supported major.
 
 ## Ordering convention
 
