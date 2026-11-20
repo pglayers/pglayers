@@ -1,6 +1,6 @@
 # PostgreSQL 19 extension evaluation
 
-## GA transition: local validation passed, CI pending
+## GA transition: validation passed, publication recovery required
 
 PostgreSQL [19.0 was released on November 19, 2026](https://www.postgresql.org/about/news/postgresql-19-released-3449/).
 The evaluation results below are from RC2, not the GA release.
@@ -44,7 +44,27 @@ identity gate also passes against a real `postgres:19` container and rejects
 an incorrect expected major. All 62 available PG19 layers have rebuilt
 successfully against GA, and complete local layer suites pass on PG17/18/19.
 Both PG19 profiles and the PG18/19 integration suites below also pass.
-Native arm64 and final GitHub CI validation remain required before merging.
+Native amd64/arm64 builds and final GitHub validation subsequently passed for
+the merged PR; publication needs the separate correction described next.
+
+### Post-merge publication correction
+
+[PR #179](https://github.com/pglayers/pglayers/pull/179) passed all GitHub
+validation checks, including native amd64/arm64 builds, in
+[run 44683134156](https://github.com/pglayers/pglayers/actions/runs/44683134156).
+However, its multi-commit rebase merge exposed a publication-planning bug:
+post-merge CI diffed only `HEAD~1`. The final commit changed documentation,
+so the earlier layer/base-image changes were missed and promotion was skipped.
+Profile composition still ran from public layer tags; a green profile build
+in that run does not establish that the PR's tested GA layers were published.
+
+The follow-up planner uses the complete push `before..after` range and the PR
+merge-base/head range, with complete checkout history. Its regressions cover
+earlier layer edits, APT snapshot changes, plumbing/base-image rebuild triggers,
+and docs-only final commits. Replaying #179's exact range selects a full
+rebuild/promotion. A full workflow dispatch on `main` can recover publication
+without relying on last-commit change detection: build and test all supported
+layers, promote them, then rebuild the profile images from those public tags.
 
 The initial PG19 Kubernetes ImageVolume run passed all 18 checks. It exposed
 a separate CNPG harness bug: the operand was hardcoded to PG18, producing an
