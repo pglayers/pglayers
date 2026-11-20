@@ -49,8 +49,11 @@ a separate CNPG harness bug: the operand was hardcoded to PG18, producing an
 undefined-symbol error when it loaded PG19's pg_cron. The follow-up uses the
 official resolved GA image with its actual PostgreSQL UID/GID, and asserts
 the operand and running cluster major. This avoids depending on the not-yet-
-published `ghcr.io/cloudnative-pg/postgresql:19-minimal-trixie` image. The fixed
-integration suites are being rerun before accepting that change.
+published `ghcr.io/cloudnative-pg/postgresql:19-minimal-trixie` image. A second
+harness fix normalizes Docker shorthand image names to canonical CRI references
+before verifying k3d imports, and retains import diagnostics on failure.
+The fixed CNPG suites pass on both PG18 and PG19, and the PG19 Kubernetes
+ImageVolume suite passes with the running-major assertion enabled.
 
 ### Completed GA profile results
 
@@ -62,6 +65,21 @@ The Azure result is from a fresh GA layer rebuild followed by a complete-
 manifest assertion and `make test-image`. All included extension SQL tests
 pass, startup logs contain no warnings/errors, the running server reports
 PG19 GA, and the server-crash gate passes.
+
+### Completed GA integration results
+
+| Integration | PostgreSQL | Passed | Failed |
+|-------------|------------|-------:|-------:|
+| CloudNativePG | 18 GA | 19 | 0 |
+| CloudNativePG | 19 GA | 19 | 0 |
+| Kubernetes ImageVolume | 19 GA | 19 | 0 |
+
+These local runs use the official GA images and native amd64 layers. CNPG
+bootstraps successfully with the operand's actual PostgreSQL UID/GID. Both
+integration harnesses verify the running server major, load pgvector,
+pg_cron and PostGIS, exercise their functions, and check contrib discovery.
+Docker-free regression tests cover canonical CRI names and preserve failure
+gating when an imported image is absent.
 
 Before merging the GA transition:
 
@@ -229,6 +247,28 @@ shellcheck -x scripts/pg-tag.sh tests/test-layers.sh tests/test-image.sh
 ```
 
 ## Deferred extensions
+
+### Azure profile: seven missing extensions rechecked on November 20
+
+The Azure profile has 31 members available on PG17/18 and 24 available on
+PG19. Fresh amd64 and arm64 PGDG probes still have no PG19 package for any
+of the six package-dependent missing extensions below. Upstream source
+compatibility is not the same as an available, validated pglayers layer.
+
+| Extension | Latest relevant version | PG19 evidence / remaining blocker |
+|-----------|-------------------------|-----------------------------------|
+| age | `PG19/v1.8.0-rc0` | The tag exists, but its [RELEASE](https://github.com/apache/age/blob/PG19/v1.8.0-rc0/RELEASE) explicitly calls it a beta based on PG19beta1. No PG19 release is published in Apache's stable download directory, and there is no PGDG package. Not a verified GA-compatible stable release. |
+| documentdb | `v1.2-0` | [Release packages](https://github.com/documentdb/documentdb/releases/tag/v1.2-0) cover PG17/18; the gateway's Cargo features stop at PG18 and use pgrx 0.16.0. No PG19 package; needs an upstream gateway port as well. |
+| pg_duckdb | `v1.2.0` | The [release](https://github.com/duckdb/pg_duckdb/releases/tag/v1.2.0) includes PG19 compatibility fixes, but is explicitly experimental. Its binary assets stop at PG18 and `pgduckdb/pgduckdb:19-v1.2.0` remains absent. The existing pinned version has PG19 source work; a new source-build path still needs validation. |
+| pg_failover_slots | `v1.2.1` tag (`v1.2.0` latest GitHub release) | The tagged source still has the pre-PG19 slot/database APIs. [PG19 fixes, PR #68](https://github.com/EnterpriseDB/pg_failover_slots/pull/68), remain open. No compatible release/package found. |
+| rum | `1.3.15` | The [latest release](https://github.com/postgrespro/rum/releases/tag/1.3.15) supports PG18. PG19 changes exist on master (including TupleDesc finalization), but are absent from the tag; no newer release or PG19 package. Do not mistake closed-but-unmerged PR #180 for a merged release fix. |
+| tds_fdw | `v2.0.5`; `2.0.6` pending | [PG19 signal-handler fixes](https://github.com/tds-fdw/tds_fdw/pull/422) are merged, but [the 2.0.6 release PR](https://github.com/tds-fdw/tds_fdw/pull/447) is still open and no 2.0.6 tag or PG19 package exists. |
+| timescaledb | `2.32.1` | The November 19 [release](https://github.com/timescale/timescaledb/releases/tag/2.32.1) fixes issues on supported PG16/17/18 minors. Its CMake compatibility guard still rejects PG19 unless experimental checks are bypassed; no supported PG19 release/package. |
+
+No extension is enabled by this audit. The existing APT monitor will discover
+packages when PGDG publishes them. RUM/tds_fdw source backports and pg_duckdb's
+source-build path would be separate build/runtime validation work, not simple
+version-field additions.
 
 The audit found no PG19 Cargo feature in the current stable releases of
 `pg_durable`, `pg_graphql`, `pg_jsonschema`, `pgvectorscale`, or `wrappers`.
