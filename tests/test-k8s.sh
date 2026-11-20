@@ -208,6 +208,15 @@ if [ "$pod_ready" = false ]; then
 fi
 pass "PostgreSQL pod running with ImageVolume extensions"
 
+result="$(kubectl exec "$POD_NAME" -- psql -X -U postgres -tAc \
+    "SELECT current_setting('server_version_num')::integer / 10000 = $PG AND current_setting('server_version') !~ '(alpha|beta|rc)';")"
+if [ "$result" = t ]; then
+    pass "ImageVolume pod runs PostgreSQL $PG GA"
+else
+    fail "ImageVolume pod must run PostgreSQL $PG GA"
+    exit 1
+fi
+
 # ============================================================
 # Validate GUC configuration
 # ============================================================

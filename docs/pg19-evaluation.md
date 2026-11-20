@@ -44,6 +44,25 @@ identity gate also passes against a real `postgres:19` container and rejects
 an incorrect expected major. GA layer/profile results will be recorded below
 after the full Docker validation finishes.
 
+The initial PG19 Kubernetes ImageVolume run passed all 18 checks. It exposed
+a separate CNPG harness bug: the operand was hardcoded to PG18, producing an
+undefined-symbol error when it loaded PG19's pg_cron. The follow-up uses the
+official resolved GA image with its actual PostgreSQL UID/GID, and asserts
+the operand and running cluster major. This avoids depending on the not-yet-
+published `ghcr.io/cloudnative-pg/postgresql:19-minimal-trixie` image. The fixed
+integration suites are being rerun before accepting that change.
+
+### Completed GA profile results
+
+| Profile | Included extensions | Passed | Failed |
+|---------|--------------------:|-------:|-------:|
+| Azure, PostgreSQL 19.0 | 24/24 | 27 | 0 |
+
+The Azure result is from a fresh GA layer rebuild followed by a complete-
+manifest assertion and `make test-image`. All included extension SQL tests
+pass, startup logs contain no warnings/errors, the running server reports
+PG19 GA, and the server-crash gate passes.
+
 Before merging the GA transition:
 
 - Rebuild available PG19 layers against GA. Run the complete layer suites for
