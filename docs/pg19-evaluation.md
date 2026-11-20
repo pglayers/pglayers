@@ -1,6 +1,6 @@
 # PostgreSQL 19 extension evaluation
 
-## GA transition: image verified, validation in progress
+## GA transition: local validation passed, CI pending
 
 PostgreSQL [19.0 was released on November 19, 2026](https://www.postgresql.org/about/news/postgresql-19-released-3449/).
 The evaluation results below are from RC2, not the GA release.
@@ -41,8 +41,10 @@ Completed local checks: `make test-harness`, `make check-profiles`,
 actionlint for `ci.yml`, and parsing of all workflow YAML. The profile matrix
 was checked for both all-major and single-major dispatches. The new server
 identity gate also passes against a real `postgres:19` container and rejects
-an incorrect expected major. GA layer/profile results will be recorded below
-after the full Docker validation finishes.
+an incorrect expected major. All 62 available PG19 layers have rebuilt
+successfully against GA, and complete local layer suites pass on PG17/18/19.
+Both PG19 profiles and the PG18/19 integration suites below also pass.
+Native arm64 and final GitHub CI validation remain required before merging.
 
 The initial PG19 Kubernetes ImageVolume run passed all 18 checks. It exposed
 a separate CNPG harness bug: the operand was hardcoded to PG18, producing an
@@ -60,11 +62,13 @@ ImageVolume suite passes with the running-major assertion enabled.
 | Profile | Included extensions | Passed | Failed |
 |---------|--------------------:|-------:|-------:|
 | Azure, PostgreSQL 19.0 | 24/24 | 27 | 0 |
+| Full, PostgreSQL 19.0 | 62/62 | 66 | 0 |
 
-The Azure result is from a fresh GA layer rebuild followed by a complete-
-manifest assertion and `make test-image`. All included extension SQL tests
-pass, startup logs contain no warnings/errors, the running server reports
-PG19 GA, and the server-crash gate passes.
+Both profile results follow fresh GA layer rebuilds, complete-manifest
+assertions and `make test-image`. All included extension SQL tests pass,
+startup logs contain no warnings/errors, the running server reports PG19 GA,
+and the server-crash gate passes. The full profile additionally verifies that
+the pg_lake companion executes a DuckDB query.
 
 ### Completed GA integration results
 
@@ -80,6 +84,23 @@ integration harnesses verify the running server major, load pgvector,
 pg_cron and PostGIS, exercise their functions, and check contrib discovery.
 Docker-free regression tests cover canonical CRI names and preserve failure
 gating when an imported image is absent.
+
+### Final-harness layer results
+
+| PostgreSQL | Passed | Failed | Warnings |
+|------------|-------:|-------:|---------:|
+| 17 GA | 3825 | 0 | 0 |
+| 18 GA | 255 | 0 | 2 |
+| 19 GA | 192 | 0 | 0 |
+
+These runs use the final version-check/build-failure gates and refreshed
+pgAudit 17.2/18.1 layers. PG18's two warnings are the unchanged `pgnodemx`
+SQL-level `fips_mode()` collision and its skipped combined integration test,
+not an ABI failure or server crash. The PG19 suite tests all 62 available GA
+layers, including standalone dependency resolution, cross-layer isolation,
+extension loading, functional SQL, the running GA major, and crash detection.
+The local layer suites ran sequentially to avoid shared Docker container-name
+collisions; GitHub's PG-version jobs run on separate runners.
 
 Before merging the GA transition:
 
