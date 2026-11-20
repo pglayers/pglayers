@@ -24,7 +24,17 @@
 #   a plain save.
 k3d_import() {
     local cluster="$1" image="$2"
-    local platform tmpdir tar
+    local platform tmpdir tar import_output inspect_output cri_image registry
+
+    # Docker's OCI export records canonical registry names. CRI inspecti does
+    # not reliably expand shorthand names, even though pod image pulls do.
+    cri_image="$image"
+    registry="${image%%/*}"
+    if [[ "$image" != */* ]]; then
+        cri_image="docker.io/library/$image"
+    elif [[ "$registry" != *.* && "$registry" != *:* && "$registry" != localhost ]]; then
+        cri_image="docker.io/$image"
+    fi
 
     platform="$(docker version -f '{{.Server.Os}}/{{.Server.Arch}}')"
     tmpdir="$(mktemp -d)"
@@ -34,17 +44,21 @@ k3d_import() {
         docker save -o "$tar" "$image"
     fi
 
-    k3d image import "$tar" -c "$cluster" >/dev/null
+    if ! import_output="$(k3d image import "$tar" -c "$cluster" 2>&1)"; then
+        printf '%s\n' "$import_output" >&2
+        rm -rf "$tmpdir"
+        return 1
+    fi
     rm -rf "$tmpdir"
 
     # k3d exits 0 even when the in-node `ctr import` fails, so verify on every
-    # node through the CRI (the same view the kubelet uses; it normalizes short
-    # refs such as postgres:18 -> docker.io/library/postgres:18).
+    # node through the CRI, using the same canonical reference the kubelet uses.
     local node role ok=true
     while read -r node role; do
         case "$role" in server|agent) ;; *) continue ;; esac
-        if ! docker exec "$node" crictl inspecti "$image" >/dev/null 2>&1; then
+        if ! inspect_output="$(docker exec "$node" crictl inspecti "$cri_image" 2>&1)"; then
             echo "Error: image ${image} is not present in node ${node} after k3d import" >&2
+            printf '%s\n' "$inspect_output" "$import_output" >&2
             ok=false
         fi
     done < <(docker ps --filter "label=k3d.cluster=${cluster}" \

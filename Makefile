@@ -431,6 +431,7 @@ test-harness: ## Run test-runner and composition regression tests without Docker
 	@bash tests/test-combined-config.sh
 	@bash tests/test-layer-builds.sh
 	@bash tests/test-cnpg-preflight.sh
+	@bash tests/test-k3d-import.sh
 
 test: test-harness ## Run layer collision and functional tests
 	@PGLAYERS_EXTENSIONS="$(EXTENSIONS)" PG_TAG="$(PG_TAG)" ./tests/test-layers.sh $(REGISTRY) $(PG)
