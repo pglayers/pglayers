@@ -429,12 +429,13 @@ clean-all: ## Remove all built extension images
 test-harness: ## Run test-runner and composition regression tests without Docker
 	@bash tests/test-sql-test-lib.sh
 	@bash tests/test-combined-config.sh
+	@bash tests/test-layer-builds.sh
 
 test: test-harness ## Run layer collision and functional tests
 	@PGLAYERS_EXTENSIONS="$(EXTENSIONS)" PG_TAG="$(PG_TAG)" ./tests/test-layers.sh $(REGISTRY) $(PG)
 
 test-image: test-harness ## Run integration tests against the combined image
-	@./tests/test-image.sh $(IMAGE_NAME):$(PG)
+	@PGLAYERS_PG_MAJOR="$(PG)" ./tests/test-image.sh $(IMAGE_NAME):$(PG)
 
 # PLATFORM defaults to amd64+arm64; override to check a different set.
 verify-multiarch: ## Assert a pushed image is a multi-arch manifest (IMAGE_TAG=..., PLATFORM=...)

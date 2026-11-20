@@ -486,8 +486,8 @@ jobs:
         run: make test REGISTRY=local PG=${{ matrix.pg }} PG_TAG="$PG_TAG"
 
   # ---------------------------------------------------------------------------
-  # Compose the azure profile image from the assembled layers and run its
-  # functional test.sql suite.
+  # Compose the azure profiles and the full PG19 GA image from the assembled
+  # layers; test their shipped entrypoints, startup logs and functional SQL.
   # ---------------------------------------------------------------------------
   test-profile:
     needs: [matrix, build-native, build-apt]
@@ -504,7 +504,13 @@ jobs:
       fail-fast: false
       matrix:
         pg: ${{ fromJson(needs.matrix.outputs.test_pgs) }}
-    name: Test profile azure (PG ${{ matrix.pg }})
+        profile: [azure, full]
+        exclude:
+          - pg: '17'
+            profile: full
+          - pg: '18'
+            profile: full
+    name: Test profile ${{ matrix.profile }} (PG ${{ matrix.pg }})
     steps:
       - uses: actions/checkout@v7
         with:
@@ -518,7 +524,7 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Prepare azure profile images (pull staging/published, build fork changes)
+      - name: Prepare profile images (pull staging/published, build fork changes)
         env:
           SOURCE_REGISTRY: ${{ env.REGISTRY }}/${{ github.repository_owner }}
           PREFIX: ${{ env.PREFIX }}
@@ -526,16 +532,22 @@ jobs:
           CHANGED: ${{ needs.matrix.outputs.changed }}
           DOCKER_BUILDKIT: '1'
         run: |
-          exts=$(grep -v '^#' profiles/azure.txt | grep -v '^$' | tr '\n' ' ')
+          exts=$(grep -v '^#' profiles/${{ matrix.profile }}.txt | grep -v '^$' | tr '\n' ' ')
           # shellcheck disable=SC2086 # intentional word-split: one arg per ext
           ./scripts/ci-prepare-images.sh ${{ matrix.pg }} $exts
-      - name: Build and test azure profile image
+      - name: Build and test profile image
         run: |
-          make image PG=${{ matrix.pg }} PROFILE=azure REGISTRY=local
-          make test-image PG=${{ matrix.pg }} PROFILE=azure
+          make image PG=${{ matrix.pg }} PROFILE=${{ matrix.profile }} REGISTRY=local \
+            PG_TAG=${{ fromJson(needs.matrix.outputs.pg_tags)[matrix.pg] }}
+          # GA full-profile coverage must not pass on a partial layer set.
+          if [ '${{ matrix.profile }}' = full ]; then
+            docker run --rm --entrypoint cat pglayers-full:${{ matrix.pg }} /etc/pglayers/manifest.json \
+              | jq -e '.missing == [] and .count == .total and .count > 0'
+          fi
+          make test-image PG=${{ matrix.pg }} PROFILE=${{ matrix.profile }}
 
   # ---------------------------------------------------------------------------
-  # Kubernetes (ImageVolume) + CloudNativePG integration tests, PG 18 only.
+  # Kubernetes (ImageVolume) + CloudNativePG tests for both isolated GA majors.
   # ---------------------------------------------------------------------------
   integration:
     needs: [matrix, build-native, build-apt]
@@ -552,7 +564,8 @@ jobs:
       fail-fast: false
       matrix:
         target: [k8s, cnpg]
-    name: Integration ${{ matrix.target }} (PG 18)
+        pg: [18, 19]
+    name: Integration ${{ matrix.target }} (PG ${{ matrix.pg }})
     steps:
       - uses: actions/checkout@v7
         with:
@@ -568,13 +581,14 @@ jobs:
         env:
           SOURCE_REGISTRY: ${{ env.REGISTRY }}/${{ github.repository_owner }}
           PREFIX: ${{ env.PREFIX }}
+          PG_TAG: ${{ fromJson(needs.matrix.outputs.pg_tags)[matrix.pg] }}
           CHANGED: ${{ needs.matrix.outputs.changed }}
           DOCKER_BUILDKIT: '1'
-        run: ./scripts/ci-prepare-images.sh 18 pgvector pg_cron postgis
+        run: ./scripts/ci-prepare-images.sh ${{ matrix.pg }} pgvector pg_cron postgis
       - name: Install k3d
         run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
       - name: Run ${{ matrix.target }} integration test
-        run: make test-${{ matrix.target }} REGISTRY=local PG=18
+        run: make test-${{ matrix.target }} REGISTRY=local PG=${{ matrix.pg }}
 
   # ---------------------------------------------------------------------------
   # Promote (publish) -- push-to-main / schedule / dispatch only. Retags the

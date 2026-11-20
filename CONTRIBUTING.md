@@ -268,6 +268,9 @@ git commit -m "feat(extensions): add <name>"
 
 Open a PR against `main`. CI runs the full test suite for PG 17, 18, and 19.
 Build and test failures block CI for every supported major.
+The suite checks the running server's GA major; a supported extension that
+fails to build is a failure, not a skipped test. CI also tests every Azure
+profile, the complete PG19 full profile, and Kubernetes/CNPG on PG18 and PG19.
 
 ## Ordering convention
 
