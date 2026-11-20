@@ -107,60 +107,39 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 2  # need parent commit for the diff
+          # A rebase merge can push many commits; both event endpoints and the
+          # PR merge base must be available, not only the final commit's parent.
+          fetch-depth: 0
 
       - name: Plan build/test matrices
         id: set
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHANGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          CHANGE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           pg_filter="${{ github.event.inputs.pg_version }}"
           ext_filter="${{ github.event.inputs.extension }}"
           event="${{ github.event_name }}"
 
-          # --- ext-level changes: which layers must be rebuilt from source ---
-          # (Never emptied by infra changes: Makefile/scripts/tests edits change
-          # the test/compose logic, not the layers, so pulling unchanged layers
-          # and running the new logic is a valid test.)
+          # Use the WHOLE push / PR range. HEAD~1 loses every earlier layer or
+          # digest change when a multi-commit rebase merge ends with docs.
           test_changed=""
+          build_all=false
           if [ "$event" = "pull_request" ] || [ "$event" = "push" ]; then
-            test_changed=$(git diff --name-only HEAD~1 -- extensions/ \
-              | grep -oP 'extensions/\K[^/]+' | sort -u | tr '\n' ' ')
-            # Shared APT template changed -> rebuild every APT extension.
-            if git diff --name-only HEAD~1 | grep -qxF 'Dockerfile.apt'; then
-              for d in extensions/*/; do
-                e=$(basename "$d")
-                [ -f "$d/Dockerfile" ] || test_changed="$test_changed $e"
-              done
-            fi
-            # apt-versions lockfile changed -> rebuild the version-bumped exts.
-            if git diff --name-only HEAD~1 | grep -qxF '.github/apt-versions.json'; then
-              git show HEAD~1:.github/apt-versions.json > /tmp/old-apt.json 2>/dev/null \
-                || echo '{}' > /tmp/old-apt.json
-              vc=$(jq -r --slurpfile old /tmp/old-apt.json \
-                'to_entries[] | select(.value != ($old[0][.key] // {})) | .key' \
-                .github/apt-versions.json | tr '\n' ' ')
-              test_changed="$test_changed $vc"
-            fi
-            test_changed=$(echo "$test_changed" | tr ' ' '\n' | sed '/^$/d' | sort -u | tr '\n' ' ')
+            scope="$(bash ./scripts/ci-change-scope.sh "$event" "$CHANGE_BASE" "$CHANGE_HEAD")"
+            test_changed="$(jq -r '.changed | join(" ")' <<<"$scope")"
+            build_all="$(jq -r '.build_all' <<<"$scope")"
           fi
 
           # --- full-rebuild triggers ---
-          build_all=false
           case "$event" in
             schedule) build_all=true ;;
             workflow_dispatch) [ -z "$ext_filter" ] && build_all=true ;;
           esac
-          # A change to the build/compose plumbing -- or to the tracked base
-          # image digests -- can affect every layer, so a PR (or merge) that
-          # touches it exercises a full rebuild. base-image-digests.json is the
-          # base-image monitor's signal: its digest PR builds+tests all layers
-          # on the fresh base, and the merge promotes them (no separate dispatch).
-          if { [ "$event" = "push" ] || [ "$event" = "pull_request" ]; } && \
-             git diff --name-only HEAD~1 \
-               | grep -qE '^(\.github/workflows/ci\.yml|\.github/base-image-digests\.json|Makefile|scripts/)'; then
-            build_all=true
-          fi
+          # ci-change-scope.sh also expands shared APT-template changes and
+          # requests a full rebuild for plumbing/base-digest changes anywhere
+          # in that range. On merge, the same scope selects public promotion.
 
           # --- merge that must rebuild before promoting ---
           # On push-to-main we normally only PROMOTE (retag) the staging images

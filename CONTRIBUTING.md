@@ -272,6 +272,13 @@ The suite checks the running server's GA major; a supported extension that
 fails to build is a failure, not a skipped test. CI also tests every Azure
 profile, the complete PG19 full profile, and Kubernetes/CNPG on PG18 and PG19.
 
+CI plans layer changes over the entire event range: `before..after` for a
+push (including every commit in a rebase merge), and the merge base through
+the PR head for a pull request. `scripts/ci-change-scope.sh` is the shared
+planner; its Git-history regression tests run under `make test-harness`.
+Never reduce this to `HEAD~1`: a documentation-only final commit must not
+hide earlier extension, APT-version, or base-image changes from publication.
+
 ## Ordering convention
 
 All extension lists must be sorted **alphabetically** wherever they
