@@ -27,6 +27,11 @@ source "$(dirname "$0")/k3d-import.sh"
 
 REGISTRY="${1:-local}"
 PG="${2:-18}"
+PG_TAG="${PG_TAG:-$(./scripts/pg-tag.sh "$PG")}"
+# Use the same official GA server the layers are built against. A fixed CNPG
+# operand major can silently mount PG19 extensions into a PG18 server, and the
+# upstream PG19 operand image may lag the official PostgreSQL image release.
+CNPG_PG_IMAGE="${CNPG_PG_IMAGE:-postgres:${PG_TAG}}"
 PREFIX="pgx"
 CLUSTER_NAME="pglayers-cnpg-test"
 K3S_IMAGE="rancher/k3s:v1.33.13-k3s1"
@@ -81,6 +86,20 @@ for ext in "${TEST_EXTENSIONS[@]}"; do
 done
 pass "All extension images available locally"
 
+# The operator supports custom postgres UID/GID; match the actual image rather
+# than assuming CNPG's default 26 (official Debian images use 999). Reject an
+# incorrect operand before creating a cluster, not after a bootstrap timeout.
+docker pull "$CNPG_PG_IMAGE" >/dev/null
+pg_uid="$(docker run --rm --entrypoint id "$CNPG_PG_IMAGE" -u postgres)"
+pg_gid="$(docker run --rm --entrypoint id "$CNPG_PG_IMAGE" -g postgres)"
+server_version="$(docker run --rm --entrypoint postgres "$CNPG_PG_IMAGE" --version)"
+if [[ "$server_version" != "postgres (PostgreSQL) $PG."* ]] \
+    || [[ "$server_version" =~ (alpha|beta|rc) ]]; then
+    fail "CNPG operand must run PostgreSQL $PG GA: $server_version"
+    exit 1
+fi
+pass "CNPG operand runs PostgreSQL $PG GA"
+
 # ============================================================
 # Create k3d cluster
 # ============================================================
@@ -124,12 +143,9 @@ for ext in "${TEST_EXTENSIONS[@]}"; do
     k3d_import "$CLUSTER_NAME" "${REGISTRY}/${PREFIX}-${ext}:${PG}"
 done
 
-# CNPG operand image must match our extension build distro (Trixie/glibc 2.38+)
-CNPG_PG_IMAGE="ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie"
-docker pull "$CNPG_PG_IMAGE" >/dev/null 2>&1 || true
 k3d_import "$CLUSTER_NAME" "$CNPG_PG_IMAGE"
 
-pass "Images imported: CNPG PG 18 + ${TEST_EXTENSIONS[*]}"
+pass "Images imported: CNPG PG $PG + ${TEST_EXTENSIONS[*]}"
 
 # ============================================================
 # Create CNPG Cluster with extensions
@@ -145,6 +161,8 @@ metadata:
 spec:
   instances: 1
   imageName: ${CNPG_PG_IMAGE}
+  postgresUID: ${pg_uid}
+  postgresGID: ${pg_gid}
 
   postgresql:
     shared_preload_libraries:
@@ -212,6 +230,15 @@ info "Validating extension configuration..."
 
 # Get the primary pod name
 PRIMARY_POD="$(kubectl get pods -l cnpg.io/cluster="$PG_CLUSTER_NAME",role=primary -o jsonpath='{.items[0].metadata.name}')"
+
+result="$(kubectl exec "$PRIMARY_POD" -- psql -X -U postgres -tAc \
+    "SELECT current_setting('server_version_num')::integer / 10000 = $PG AND current_setting('server_version') !~ '(alpha|beta|rc)';")"
+if [ "$result" = t ]; then
+    pass "CNPG cluster runs PostgreSQL $PG GA"
+else
+    fail "CNPG cluster must run PostgreSQL $PG GA"
+    exit 1
+fi
 
 # Check extension_control_path
 ecp="$(kubectl exec "$PRIMARY_POD" -- psql -U postgres -tAc "SHOW extension_control_path;" 2>&1)"
