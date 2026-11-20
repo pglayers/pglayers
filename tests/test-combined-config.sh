@@ -22,6 +22,13 @@ for pg in 17 18 19; do
     fi
     echo "PASS PG $pg: make test forwards its resolved base tag"
 
+    output="$(make --no-print-directory -s -n test-image PG="$pg" REGISTRY=local)"
+    if [[ "$output" != *"PGLAYERS_PG_MAJOR=\"$pg\""* ]]; then
+        echo "FAIL PG $pg: make test-image must forward the expected server major" >&2
+        exit 1
+    fi
+    echo "PASS PG $pg: make test-image forwards the expected server major"
+
     output="$(./scripts/combined-config.sh "$pg" pg_duckdb pg_show_plans)"
     if ! grep -q 'pg_show_plans.is_enabled = off' <<< "$output"; then
         echo "FAIL PG $pg: mixed DuckDB/pg_show_plans image must disable automatic capture" >&2

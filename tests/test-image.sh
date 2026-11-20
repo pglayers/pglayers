@@ -117,6 +117,13 @@ echo
 
 # Run each extension's test.sql
 manifest="$(docker exec "$CONTAINER" cat /etc/pglayers/manifest.json 2>/dev/null || true)"
+expected_pg="${PGLAYERS_PG_MAJOR:-}"
+if [ -z "$expected_pg" ] && [ -n "$manifest" ]; then
+    expected_pg="$(jq -er '.pg_version' <<<"$manifest")"
+fi
+if [ -n "$expected_pg" ]; then
+    check_sql_pg_version "$CONTAINER" "$expected_pg" || true
+fi
 if grep -q '"documentdb"' <<<"$manifest"; then
     autocreated="$(docker exec "$CONTAINER" psql -U postgres -tAc \
         "SELECT count(*) FROM pg_extension WHERE extname IN ('documentdb_core', 'documentdb', 'documentdb_extended_rum')")"

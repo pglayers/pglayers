@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Integration test: validate pglayers isolated images work as Kubernetes
-# ImageVolumes with the official postgres:18 image (no CNPG operator).
+# ImageVolumes with official postgres:18/19 GA images (no CNPG operator).
 #
 # Requirements:
 #   - Docker
@@ -14,7 +14,7 @@
 # The test:
 #   1. Creates a k3d cluster with k3s 1.33+ (ImageVolume GA)
 #   2. Imports pglayers extension images into the cluster
-#   3. Deploys a Pod with postgres:18 + extensions as ImageVolumes
+#   3. Deploys a Pod with postgres:<major> + extensions as ImageVolumes
 #   4. Configures extension_control_path via postgres args
 #   5. Runs CREATE EXTENSION and functional tests
 #   6. Tears down the cluster

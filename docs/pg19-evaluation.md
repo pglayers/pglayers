@@ -1,6 +1,6 @@
 # PostgreSQL 19 extension evaluation
 
-## GA transition: pending validation
+## GA transition: image verified, validation in progress
 
 PostgreSQL [19.0 was released on November 19, 2026](https://www.postgresql.org/about/news/postgresql-19-released-3449/).
 The evaluation results below are from RC2, not the GA release.
@@ -9,30 +9,78 @@ The prepared GA changes select `postgres:19`, remove prerelease retagging and
 rollover automation, and make PG19 build, test, promotion, and profile failures
 blocking, like PG17 and PG18. They do not enable additional extensions.
 
-At preparation time, the official `postgres:19` image is not published.
-PGDG already serves PostgreSQL 19.0, so the existing RC2 base fails the
-prerelease compatibility check in `scripts/apt-support.sh`. Keep that guard:
-combining an RC server with GA extension packages is not a safe workaround.
+On November 20, 2026, Docker Hub published the official `postgres:19` GA
+image. Both `linux/amd64` and `linux/arm64/v8` manifests are present. A local
+pull reports `postgres (PostgreSQL) 19.0 (Debian 19.0-1.pgdg13+1)`.
+
+The verified multi-architecture manifest digest is
+`sha256:bb6e70add742cd868fb62cb3b2f67d1dd2bdd2b65a521e778420748753687c60`.
+It is recorded in `.github/base-image-digests.json`, using the monitor's
+exact raw-manifest hashing. Fresh PGDG discovery still resolves 62 of 84
+extensions on amd64; the APT snapshot now records pgAudit 19.0 (and 17.2/18.1).
+All 46 configured PG19 APT packages were also found in the arm64 package
+index. This verifies package availability, not native arm64 build/runtime
+correctness; those builds still need the existing CI matrix.
+Keep the prerelease compatibility guard in `scripts/apt-support.sh`: mixing
+an RC server with GA extension packages is not a safe workaround.
+
+The GA follow-up adds running-server major/release checks to the layer and
+profile suites, makes supported-layer build failures fatal rather than
+silently skipping them, and adds Docker-free regressions for both gates.
+CI tests the PG19 full profile (including a complete-manifest assertion),
+alongside all Azure profiles, and expands Kubernetes/CNPG integration to PG19.
+Extensions that still lack upstream support remain disabled; the required
+`pgduckdb/pgduckdb:19-v1.2.0` image was rechecked and is still absent.
+The recent `pg_bigm` v1.2-20261118 release already includes the PG19 backport,
+so its obsolete local patch is removed. Its Dockerfile default, pgmq's default,
+and the README now match the recent stable pins. README PG19 availability
+also matches the current APT package discovery.
+
+Completed local checks: `make test-harness`, `make check-profiles`,
+`make check-licenses` (84 accepted), shellcheck for all changed shell files,
+actionlint for `ci.yml`, and parsing of all workflow YAML. The profile matrix
+was checked for both all-major and single-major dispatches. The new server
+identity gate also passes against a real `postgres:19` container and rejects
+an incorrect expected major. GA layer/profile results will be recorded below
+after the full Docker validation finishes.
 
 Before merging the GA transition:
 
-- Confirm `postgres:19` is published for both `linux/amd64` and `linux/arm64`.
-- Replace the `postgres:19` entry in `.github/base-image-digests.json` with the
-  GA manifest digest using the same raw-manifest hashing as the base-image
-  monitor. The current entry still records RC2; it is not a verified GA digest.
 - Rebuild available PG19 layers against GA. Run the complete layer suites for
   PG17, PG18, and PG19, plus PG19 `full` and `azure` profile startup and
   functional tests. Require successful native amd64 and arm64 builds in CI.
 - Update branch protection to require `Test PG 18` and `Test PG 19` alongside
-  `Test PG 17`, plus the profile checks. Currently only `Test PG 17` is required;
+  `Test PG 17`, plus the profile and integration checks (including
+  `Test profile full (PG 19)`). On November 20, only `Test PG 17` is required;
   a failed PG19 test can otherwise leave auto-merge eligible even though the
   workflow fails. Repository settings are not changed by this patch.
 - Record the GA results separately from the historical RC2 results below.
 
-PR #178 uses the monitor-managed `auto/base-image-update` branch. Scheduled
-monitor runs recreate that branch from `main`, so they can overwrite manual
-GA additions. Keep the prepared changes on a separate local branch until the
-image is available, then reapply them to the latest PR head before validation.
+Keep the GA work on the dedicated `pg19-ga` branch, not the monitor-managed
+`auto/base-image-update` branch. Scheduled monitor runs recreate the latter
+from `main` and can overwrite manual additions.
+
+### Reproduce the GA validation
+
+```bash
+docker pull postgres:19
+make build-all REGISTRY=local PG=19
+for pg in 17 18 19; do
+    make test REGISTRY=local PG="$pg" || exit 1
+done
+
+for profile in full azure; do
+    make image REGISTRY=local PG=19 PROFILE="$profile" || exit 1
+    docker run --rm --entrypoint cat "pglayers-${profile}:19" \
+        /etc/pglayers/manifest.json \
+        | jq -e '.missing == [] and .count == .total and .count > 0' || exit 1
+    make test-image REGISTRY=local PG=19 PROFILE="$profile" || exit 1
+done
+
+# Requires k3d and kubectl; validates mounted isolated GA layers.
+make test-k8s REGISTRY=local PG=19
+make test-cnpg REGISTRY=local PG=19
+```
 
 ## Outcome
 

@@ -13,6 +13,10 @@ fail() { printf 'FAIL %s\n' "$1"; }
 docker() {
     case "$1" in
         exec)
+            if [[ "$*" == "exec test-container psql -X -U postgres -tAc SELECT current_setting('server_version_num')::integer / 10000 = "* ]]; then
+                printf '%s\n' "$MOCK_OUTPUT"
+                return "$MOCK_STATUS"
+            fi
             if [ "$*" != 'exec -i test-container psql -X -U postgres -tA -v ON_ERROR_STOP=1 -f -' ]; then
                 echo "unexpected docker command: $*" >&2
                 return 99
@@ -110,3 +114,15 @@ expect_result 1 'server crash detected' check_sql_test_logs test-container
 MOCK_STATUS=1
 MOCK_OUTPUT='Error response from daemon: No such container'
 expect_result 1 'could not read server logs' check_sql_test_logs test-container
+
+for pg in 17 18 19; do
+    MOCK_STATUS=0
+    MOCK_OUTPUT=t
+    expect_result 0 "server runs PostgreSQL $pg GA" check_sql_pg_version test-container "$pg"
+    MOCK_OUTPUT=f
+    expect_result 1 "server must run PostgreSQL $pg GA" check_sql_pg_version test-container "$pg"
+done
+MOCK_STATUS=125
+MOCK_OUTPUT=t
+expect_result 1 'could not query PostgreSQL server version' check_sql_pg_version test-container 19
+expect_result 1 'invalid expected PostgreSQL major' check_sql_pg_version test-container '19rc2'

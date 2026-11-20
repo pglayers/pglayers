@@ -76,13 +76,20 @@ for ext in "${EXTENSIONS[@]}"; do
     elif make build EXT="$ext" PG="$PG" REGISTRY="$REGISTRY" >/dev/null 2>&1; then
         BUILT_EXTENSIONS+=("$ext")
     else
-        warn "Failed to build ${ext} for PG ${PG} (skipping)"
+        fail "Failed to build ${ext} for PG ${PG}"
     fi
 done
 
 if [ "${#BUILT_EXTENSIONS[@]}" -lt "${#EXTENSIONS[@]}" ]; then
     skipped=$((${#EXTENSIONS[@]} - ${#BUILT_EXTENSIONS[@]}))
-    info "Built ${#BUILT_EXTENSIONS[@]}/${#EXTENSIONS[@]} extensions (${skipped} skipped)"
+    info "Built ${#BUILT_EXTENSIONS[@]}/${#EXTENSIONS[@]} extensions (${skipped} failed)"
+    # A supported extension that cannot build must never turn the suite green
+    # by disappearing from every subsequent check.
+    exit 1
+fi
+if [ "${#BUILT_EXTENSIONS[@]}" -eq 0 ]; then
+    fail "No supported extensions selected for PG ${PG}"
+    exit 1
 fi
 EXTENSIONS=("${BUILT_EXTENSIONS[@]}")
 echo
@@ -452,6 +459,8 @@ if [ "$pg_ready" = false ]; then
     echo "========================================"
     exit 1
 fi
+
+check_sql_pg_version pgx-func-test "$PG" || true
 
 # Test CREATE EXTENSION for each
 # Map directory names to SQL extension names where they differ.
