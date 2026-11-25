@@ -5,7 +5,7 @@ ARG LAYOUT=classic
 
 FROM postgres:${PG_TAG} AS builder
 ARG PG_MAJOR
-ARG EXT_VERSION=2.4.0
+ARG EXT_VERSION=2.4.1
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
@@ -17,10 +17,6 @@ RUN git clone --branch ${EXT_VERSION} --depth 1 \
     https://github.com/percona/pg_stat_monitor.git /tmp/ext
 
 WORKDIR /tmp/ext
-
-COPY patches /tmp/patches
-# Upstream 293096b42894a7e3196470c10ccd8171375adc3a: PG19 reverted graphs.
-RUN if [ "${PG_MAJOR}" -ge 19 ]; then git apply /tmp/patches/pg19-no-property-graphs.patch; fi
 
 RUN make -j"$(nproc)" USE_PGXS=1 && make install USE_PGXS=1 DESTDIR=/output \
     && find /output -name '*.so' -exec strip --strip-unneeded {} \;
